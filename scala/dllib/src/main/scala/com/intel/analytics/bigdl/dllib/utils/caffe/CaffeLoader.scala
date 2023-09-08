@@ -26,8 +26,8 @@ import com.intel.analytics.bigdl.dllib.nn.Graph.ModuleNode
 import com.intel.analytics.bigdl.dllib.nn._
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.{FileReader, Table}
-import org.apache.log4j.Logger
+import com.intel.analytics.bigdl.dllib.utils.{FileReader, Log4Error, Table}
+import org.apache.logging.log4j.LogManager
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -59,7 +59,7 @@ class CaffeLoader[T: ClassTag](prototxtPath: String, modelPath: String,
   customizedConverters: mutable.HashMap[String, Customizable[T]] = null
 )(implicit ev: TensorNumeric[T]) {
 
-  private val logger = Logger.getLogger(getClass)
+  private val logger = LogManager.getLogger(getClass)
 
   private var netparam: Caffe.NetParameter = _
   private var name2LayerV1: Map[String, V1LayerParameter] = Map[String, V1LayerParameter]()
@@ -209,10 +209,10 @@ class CaffeLoader[T: ClassTag](prototxtPath: String, modelPath: String,
     val caffeWeight = getBlob(name, index)
     if (caffeWeight.isDefined && params.contains("weight")) {
       index += 1
-      require(params.contains("weight"), s"$name should contain weight")
+      Log4Error.invalidInputError(params.contains("weight"), s"$name should contain weight")
       val caffeWeightData = caffeWeight.get.getDataList
       val weight = params[Tensor[T]]("weight")
-      require(params != null && weight.nElement() == caffeWeightData.size(),
+      Log4Error.invalidInputError(params != null && weight.nElement() == caffeWeightData.size(),
         s"weight element number is not equal between caffe layer and bigdl module $name, " +
           s"data shape in caffe is ${ caffeWeight.get.getShape() }," +
           s" while data shape in bigdl is ${ weight.size().mkString(",") }")
@@ -228,10 +228,10 @@ class CaffeLoader[T: ClassTag](prototxtPath: String, modelPath: String,
 
     val caffeBias = getBlob(name, index)
     if (caffeBias.isDefined) {
-      require(params.contains("bias"), s"$name should contain bias")
+      Log4Error.invalidInputError(params.contains("bias"), s"$name should contain bias")
       val caffeBiasList = caffeBias.get.getDataList
       val bias = params[Tensor[T]]("bias")
-      require(bias.nElement() == caffeBiasList.size(),
+      Log4Error.invalidInputError(bias.nElement() == caffeBiasList.size(),
         s"bias element number is not equal between caffe layer and bigdl module $name, " +
           s"data shape in caffe is ${ caffeBias.get.getShape() }," +
           s" while data shape in bigdl is ${ bias.size().mkString(",") }")
@@ -260,7 +260,7 @@ class CaffeLoader[T: ClassTag](prototxtPath: String, modelPath: String,
       case (name: String, params: Table) =>
         copyParameter(name, params)
       case _ =>
-        throw new UnsupportedOperationException("unsupported $name and $params")
+        Log4Error.invalidOperationError(false, "unsupported $name and $params")
     }
     model
   }
@@ -268,8 +268,10 @@ class CaffeLoader[T: ClassTag](prototxtPath: String, modelPath: String,
   private def copyParameter(name: String, params: Table): Unit = {
     if (params == null || (!params.contains("weight") && !params.contains("bias"))) return
     if (!name2LayerV2.contains(name) && !name2LayerV1.contains(name)) {
-      if (matchAll) throw new CaffeConversionException(s"module $name " +
-        s"cannot map a layer in caffe model")
+      if (matchAll) {
+        Log4Error.invalidOperationError(false, s"module $name " +
+          s"cannot map a layer in caffe model")
+      }
       logger.info(s"$name uses initialized parameters")
       return
     }
@@ -395,7 +397,7 @@ class CaffeLoader[T: ClassTag](prototxtPath: String, modelPath: String,
       val layerType = getLayerType(name).get.toUpperCase
       if ("SPLIT" == layerType) {
         // eliminate split layer in graph module, cache dependency only
-        require(bottomList.size == 1, s"split dependency should only be one!")
+        Log4Error.invalidInputError(bottomList.size == 1, s"split dependency should only be one!")
         topList.foreach(top => {
           if (top2LayerMap.contains(bottomList(0))) {
             splitLayerMap(top) = layersMap(top2LayerMap(bottomList(0)))
@@ -569,11 +571,13 @@ object CaffeLoader {
       caffeLoader.createCaffeModel(outputNames)
     } catch {
       case parseException : ParseException =>
-        throw new CaffeConversionException("Parsing caffe model error," +
+        Log4Error.invalidOperationError(false, "Parsing caffe model error," +
           "only standard Caffe format is supported"
-          , parseException)
-      case conversionExcepion : CaffeConversionException =>
-        throw  conversionExcepion
+          , cause = parseException)
+        null
+      case e =>
+        Log4Error.unKnowExceptionError(false, e.getMessage, cause = e)
+        null
     }
   }
 }

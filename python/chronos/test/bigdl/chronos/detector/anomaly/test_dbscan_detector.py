@@ -16,17 +16,20 @@
 
 import pytest
 import numpy as np
-from bigdl.orca.test_zoo_utils import ZooTestCase
+from unittest import TestCase
 
 from bigdl.chronos.detector.anomaly.dbscan_detector import DBScanDetector
+from ... import op_torch, op_tf2
 
 
-class TestDBScanDetector(ZooTestCase):
+@op_torch
+@op_tf2
+class TestDBScanDetector(TestCase):
 
-    def setup_method(self, method):
+    def setUp(self):
         pass
 
-    def teardown_method(self, method):
+    def tearDown(self):
         pass
 
     def create_data(self):
@@ -58,5 +61,5 @@ class TestDBScanDetector(ZooTestCase):
             ad.anomaly_indexes()
         y = self.create_data()
         y = y[:-1].reshape(2, -1)
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             ad.fit(y)

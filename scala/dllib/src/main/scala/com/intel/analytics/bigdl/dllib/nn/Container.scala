@@ -19,7 +19,7 @@ package com.intel.analytics.bigdl.dllib.nn
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.{T, Table}
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, T, Table}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -176,7 +176,8 @@ abstract class Container[A <: Activity : ClassTag,
       names.foreach(name => {
         this (name) match {
           case Some(x) => x.freeze()
-          case _ => throw new Exception(s"cannot match module named $name")
+          case _ =>
+            Log4Error.unKnowExceptionError(false, s"cannot match module named $name")
         }
       })
     }
@@ -190,7 +191,8 @@ abstract class Container[A <: Activity : ClassTag,
       names.foreach(name => {
         this (name) match {
           case Some(x) => x.unFreeze()
-          case _ => throw new Exception(s"cannot match module named $name")
+          case _ =>
+            Log4Error.unKnowExceptionError(false, s"cannot match module named $name")
         }
       })
     }
@@ -209,7 +211,7 @@ abstract class Container[A <: Activity : ClassTag,
           None
         }
       }).filter(_.isDefined)
-      require(find.length <= 1, "find multiple modules with same name")
+      Log4Error.invalidInputError(find.length <= 1, "find multiple modules with same name")
       if (find.length == 1) {
         find(0)
       } else {

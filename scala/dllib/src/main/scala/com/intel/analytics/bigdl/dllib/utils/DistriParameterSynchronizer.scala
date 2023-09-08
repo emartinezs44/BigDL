@@ -25,7 +25,7 @@ import com.intel.analytics.bigdl.dllib.optim.parameters.{CompressedTensor, FP16C
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import org.apache.commons.lang.exception.ExceptionUtils
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{LogManager, Logger}
 import org.apache.spark.sparkExtension.SparkExtension
 import org.apache.spark.storage.{BlockId, BlockManagerWrapper, StorageLevel}
 
@@ -257,8 +257,8 @@ class BlockManagerParameterSynchronizer[T: ClassTag](val partitionID: Int, val t
                     pid
                   } catch {
                     case t: Throwable =>
-                      logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-                      throw t
+                      Log4Error.unKnowExceptionError(false, ExceptionUtils.getStackTrace(t))
+                      0
                   }
                 }
               }
@@ -283,9 +283,8 @@ class BlockManagerParameterSynchronizer[T: ClassTag](val partitionID: Int, val t
                       pid
                     } catch {
                       case t: Throwable =>
-                        logger.error("Error in processing fetching request: "
-                          + ExceptionUtils.getStackTrace(t))
-                        throw t
+                        Log4Error.unKnowExceptionError(false, ExceptionUtils.getStackTrace(t))
+                        0
                     }
                   }
                 }
@@ -343,9 +342,8 @@ class BlockManagerParameterSynchronizer[T: ClassTag](val partitionID: Int, val t
                     pid
                   } catch {
                     case t: Throwable =>
-                      logger.error("Error in processing request: "
-                        + ExceptionUtils.getStackTrace(t))
-                      throw t
+                      Log4Error.unKnowExceptionError(false, ExceptionUtils.getStackTrace(t))
+                      0
                   }
                 }
               }
@@ -388,7 +386,8 @@ class BlockManagerParameterSynchronizer[T: ClassTag](val partitionID: Int, val t
     if (syncMeta.counter == 0) {
       return (null, null)
     }
-    require(syncResults.contains(name), "put must be done before get")
+    Log4Error.unKnowExceptionError(syncResults.contains(name),
+      "put must be done before get")
     val res = syncResults.get(name).get.get()
     (syncMeta.weights, res)
   }
@@ -454,7 +453,7 @@ class BlockManagerParameterSynchronizer[T: ClassTag](val partitionID: Int, val t
 }
 
 object BlockManagerParameterSynchronizer {
-  val logger: Logger = Logger.getLogger(getClass)
+  val logger: Logger = LogManager.getLogger(getClass)
   def apply[T: ClassTag](partitionID: Int, totalPartition: Int)
     (implicit ev: TensorNumeric[T]): BlockManagerParameterSynchronizer[T]
     = new BlockManagerParameterSynchronizer[T](partitionID, totalPartition)

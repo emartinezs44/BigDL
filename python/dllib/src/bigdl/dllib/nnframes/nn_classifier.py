@@ -24,6 +24,8 @@ from bigdl.dllib.utils.file_utils import callZooFunc, put_local_file_to_remote
 from bigdl.dllib.utils.common import *
 from bigdl.dllib.feature.common import *
 from bigdl.dllib.nncontext import init_nncontext
+from bigdl.dllib.utils.log4Error import *
+
 
 if sys.version >= '3':
     long = int
@@ -152,7 +154,7 @@ class NNEstimator(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, 
     Using the Preprocessing allows NNEstimator to cache only the raw data and decrease the
     memory consumption during feature conversion and training.
 
-    More concrete examples are available in package com.intel.analytics.zoo.examples.nnframes
+    More concrete examples are available in package com.intel.analytics.bigdl.dllib.example.nnframes
     """
 
     def __init__(self, model, criterion,
@@ -201,7 +203,8 @@ class NNEstimator(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, 
                 feature_preprocessing = SeqToTensor(feature_preprocessing)
 
         if type(label_preprocessing) is list:
-            assert (all(isinstance(x, int) for x in label_preprocessing))
+            invalidInputError((all(isinstance(x, int) for x in label_preprocessing)),
+                              "some elements in label_preprocessing is not integer")
             label_preprocessing = SeqToTensor(label_preprocessing)
 
         sample_preprocessing = FeatureLabelPreprocessing(feature_preprocessing, label_preprocessing)
@@ -519,7 +522,7 @@ class NNModel(JavaTransformer, MLWritable, MLReadable, HasFeaturesCol, HasPredic
     NNModel extends Spark ML Transformer and supports BigDL model with Spark DataFrame.
 
     NNModel supports different feature data type through Preprocessing. Some common
-    Preprocessing have been defined in com.intel.analytics.zoo.feature.
+    Preprocessing have been defined in com.intel.analytics.bigdl.dllib.feature.
 
     After transform, the prediction column contains the output of the model as Array[T], where
     T (Double or Float) is decided by the model type.
@@ -539,7 +542,8 @@ class NNModel(JavaTransformer, MLWritable, MLReadable, HasFeaturesCol, HasPredic
         super(NNModel, self).__init__()
         # initialize with Java NNModel
         if jvalue:
-            assert feature_preprocessing is None
+            invalidInputError(feature_preprocessing is None,
+                              "feature_preprocessing cannot be None")
             self.value = jvalue
         # initialize with Python Model and preprocessing
         else:
@@ -581,6 +585,9 @@ class NNModel(JavaTransformer, MLWritable, MLReadable, HasFeaturesCol, HasPredic
         Sets the value of :py:attr:`predictionCol`.
         """
         return self._set(predictionCol=value)
+
+    def getModel(self):
+        return self.model
 
 
 class NNModelWriter(JavaMLWriter):
@@ -679,105 +686,3 @@ class NNClassifierModel(NNModel, HasThreshold):
     def load(path):
         jvalue = callZooFunc("float", "loadNNClassifierModel", path)
         return NNClassifierModel(model=None, feature_preprocessing=None, jvalue=jvalue)
-
-
-class XGBClassifier():
-    def __init__(self):
-        super(XGBClassifier, self).__init__()
-        bigdl_type = "float"
-        self.value = callZooFunc("float", "getXGBClassifier")
-
-    def setNthread(self, value: int):
-        callZooFunc("float", "setXGBClassifierNthread", self.value, value)
-
-    def setNumRound(self, value: int):
-        callZooFunc("float", "setXGBClassifierNumRound", self.value, value)
-
-    def setNumWorkers(self, value: int):
-        callZooFunc("float", "setXGBClassifierNumWorkers", self.value, value)
-
-    def fit(self, df):
-        return callZooFunc("float", "fitXGBClassifier", self.value, df)
-
-    def setMissing(self, value: int):
-        return callZooFunc("float", "setXGBClassifierMissing", self.value, value)
-
-
-class XGBClassifierModel:
-    '''
-    XGBClassifierModel is a trained XGBoost classification model. The prediction column
-    will have the prediction results.
-    '''
-
-    def __init__(self, jvalue):
-        super(XGBClassifierModel, self).__init__()
-        assert jvalue is not None
-        self.value = jvalue
-
-    def setFeaturesCol(self, features):
-        callZooFunc("float", "setFeaturesXGBClassifierModel", self.value, features)
-
-    def setPredictionCol(self, prediction):
-        callZooFunc("float", "setPredictionXGBClassifierModel", self.value, prediction)
-
-    def transform(self, dataset):
-        df = callZooFunc("float", "transformXGBClassifierModel", self.value, dataset)
-        return df
-
-    @staticmethod
-    def loadModel(path, numClasses):
-        """
-        load a pretrained XGBoostClassificationModel
-        :param path: pretrained model path
-        :param numClasses: number of classes for classification
-        """
-        jvalue = callZooFunc("float", "loadXGBClassifierModel", path, numClasses)
-        return XGBClassifierModel(jvalue=jvalue)
-
-
-class XGBRegressor():
-    def __init__(self):
-        super(XGBRegressor, self).__init__()
-        bigdl_type = "float"
-        self.value = callZooFunc("float", "getXGBRegressor")
-
-    def setNthread(self, value: int):
-        callZooFunc("float", "setXGBRegressorNthread", self.value, value)
-
-    def setNumRound(self, value: int):
-        callZooFunc("float", "setXGBRegressorNumRound", self.value, value)
-
-    def setNumWorkers(self, value: int):
-        callZooFunc("float", "setXGBRegressorNumWorkers", self.value, value)
-
-    def fit(self, df):
-        return callZooFunc("float", "fitXGBRegressor", self.value, df)
-
-
-class XGBRegressorModel:
-    def __init__(self, jvalue):
-        super(XGBRegressorModel, self).__init__()
-        assert jvalue is not None
-        self.value = jvalue
-
-    def setFeaturesCol(self, features):
-        callZooFunc("float", "setFeaturesXGBRegressorModel", self.value, features)
-
-    def setPredictionCol(self, prediction):
-        callZooFunc("float", "setPredictionXGBRegressorModel", self.value, prediction)
-
-    def setInferBatchSize(self, value: int):
-        callZooFunc("float", "setInferBatchSizeXGBRegressorModel", self.value, value)
-
-    def transform(self, dataset):
-        df = callZooFunc("float", "transformXGBRegressorModel", self.value, dataset)
-        return df
-
-    def save(self, path):
-        print("start saving in python side")
-        callZooFunc("float", "saveXGBRegressorModel", self.value, path)
-
-    @staticmethod
-    def load(path):
-        jvalue = callZooFunc("float", "loadXGBRegressorModel", path)
-        return XGBRegressorModel(jvalue=jvalue)

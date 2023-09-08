@@ -19,6 +19,7 @@
 #
 
 from __future__ import print_function
+import os
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
@@ -32,34 +33,35 @@ import torch.optim as optim
 
 from torch.utils.tensorboard import SummaryWriter
 
+from bigdl.dllib.utils.log4Error import invalidInputError
 from bigdl.orca import init_orca_context, stop_orca_context
 from bigdl.orca.learn.pytorch import Estimator
 from bigdl.orca.learn.metrics import Accuracy
 from bigdl.orca.learn.trigger import EveryEpoch
 
 
-def train_data_creator(config, batch_size):
+def train_data_creator(config={}, batch_size=4, download=True, data_dir='./data'):
     transform = transforms.Compose(
         [transforms.ToTensor(),
          transforms.Normalize((0.5,), (0.5,))])
 
-    trainset = torchvision.datasets.FashionMNIST('./data',
-                                                 download=True,
+    trainset = torchvision.datasets.FashionMNIST(root=data_dir,
+                                                 download=download,
                                                  train=True,
                                                  transform=transform)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size,
-                                              shuffle=True, num_workers=2)
+                                              shuffle=True, num_workers=0)
     return trainloader
 
 
-def validation_data_creator(config, batch_size):
+def validation_data_creator(config={}, batch_size=4, download=True, data_dir='./data'):
     transform = transforms.Compose(
         [transforms.ToTensor(),
          transforms.Normalize((0.5,), (0.5,))])
-    testset = torchvision.datasets.FashionMNIST(root='./data', train=False,
-                                                download=True, transform=transform)
+    testset = torchvision.datasets.FashionMNIST(root=data_dir, train=False,
+                                                download=download, transform=transform)
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                             shuffle=False, num_workers=2)
+                                             shuffle=False, num_workers=0)
     return testloader
 
 
@@ -109,28 +111,39 @@ def main():
     parser = argparse.ArgumentParser(description='PyTorch Tensorboard Example')
     parser.add_argument('--cluster_mode', type=str, default="local",
                         help='The cluster mode, such as local, yarn, spark-submit or k8s.')
-    parser.add_argument('--backend', type=str, default="bigdl",
+    parser.add_argument('--runtime', type=str, default="spark",
+                        help='The runtime backend, one of spark or ray.')
+    parser.add_argument('--address', type=str, default="",
+                        help='The cluster address if the driver connects to an existing '
+                             'ray cluster. If it is empty, a new Ray cluster will be created.')
+    parser.add_argument('--backend', type=str, default="spark",
                         help='The backend of PyTorch Estimator; '
-                             'bigdl, torch_distributed and spark are supported.')
-    parser.add_argument('--batch_size', type=int, default=64, help='The training batch size')
+                             'spark, ray and bigdl are supported.')
+    parser.add_argument('--batch_size', type=int, default=4, help='The training batch size')
     parser.add_argument('--epochs', type=int, default=2, help='The number of epochs to train for')
+    parser.add_argument('--data_dir', type=str, default="./data", help='The path of dataset')
+    parser.add_argument('--download', type=bool, default=True, help='Download dataset or not')
     args = parser.parse_args()
 
-    if args.cluster_mode == "local":
-        init_orca_context()
-    elif args.cluster_mode == "yarn":
-        init_orca_context(cluster_mode=args.cluster_mode, cores=4, num_nodes=2)
-    elif args.cluster_mode == "spark-submit":
-        init_orca_context(cluster_mode=args.cluster_mode)
+    if args.runtime == "ray":
+        init_orca_context(runtime=args.runtime, address=args.address)
+    else:
+        if args.cluster_mode == "local":
+            init_orca_context()
+        elif args.cluster_mode.startswith("yarn"):
+            init_orca_context(cluster_mode=args.cluster_mode, cores=4, num_nodes=2)
+        elif args.cluster_mode == "spark-submit":
+            init_orca_context(cluster_mode=args.cluster_mode)
 
-    tensorboard_dir = "runs"
+    tensorboard_dir = args.data_dir+"runs"
     writer = SummaryWriter(tensorboard_dir + '/fashion_mnist_experiment_1')
     # constant for classes
     classes = ('T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat',
                'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle Boot')
 
     # plot some random training images
-    dataiter = iter(train_data_creator(config={}, batch_size=4))
+    dataiter = iter(train_data_creator(config={}, batch_size=4,
+                                       download=args.download, data_dir=args.data_dir))
     images, labels = dataiter.next()
 
     # create grid of images
@@ -151,8 +164,10 @@ def main():
     batch_size = args.batch_size
     epochs = args.epochs
     if args.backend == "bigdl":
-        train_loader = train_data_creator(config={}, batch_size=batch_size)
-        test_loader = validation_data_creator(config={}, batch_size=batch_size)
+        train_loader = train_data_creator(config={}, batch_size=4,
+                                          download=args.download, data_dir=args.data_dir)
+        test_loader = validation_data_creator(config={}, batch_size=4,
+                                              download=args.download, data_dir=args.data_dir)
 
         net = model_creator(config={})
         optimizer = optimizer_creator(model=net, config={"lr": 0.001})
@@ -169,11 +184,13 @@ def main():
 
         res = orca_estimator.evaluate(data=test_loader)
         print("Accuracy of the network on the test images: %s" % res)
-    elif args.backend in ["torch_distributed", "spark"]:
+    elif args.backend in ["ray", "spark"]:
         orca_estimator = Estimator.from_torch(model=model_creator,
                                               optimizer=optimizer_creator,
                                               loss=criterion,
                                               metrics=[Accuracy()],
+                                              model_dir=os.getcwd(),
+                                              use_tqdm=True,
                                               backend=args.backend)
         stats = orca_estimator.fit(train_data_creator, epochs=epochs, batch_size=batch_size)
 
@@ -184,12 +201,11 @@ def main():
         print("Validation stats: {}".format(val_stats))
         orca_estimator.shutdown()
     else:
-        raise NotImplementedError("Only bigdl and torch_distributed are supported "
-                                  "as the backend, but got {}".format(args.backend))
+        invalidInputError(False, "Only bigdl, ray, and spark are supported "
+                          "as the backend, but got {}".format(args.backend))
 
     stop_orca_context()
 
 
 if __name__ == '__main__':
     main()
-

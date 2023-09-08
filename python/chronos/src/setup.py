@@ -17,10 +17,16 @@
 #
 
 import os
-import sys
-from shutil import copyfile, copytree, rmtree
 import fnmatch
 from setuptools import setup
+
+long_description = '''
+BigDL Chronos is an application framework for building a fast, accurate
+ and scalable time series analysis application.
+
+See [here](https://bigdl.readthedocs.io/en/latest/doc/Chronos/Overview/chronos.html)
+ for more information.
+'''
 
 bigdl_home = os.path.abspath(__file__ + "/../../../..")
 exclude_patterns = ["*__pycache__*", "*ipynb_checkpoints*"]
@@ -33,7 +39,7 @@ def get_bigdl_packages():
     bigdl_packages = []
     source_dir = os.path.join(bigdl_python_home, "bigdl")
     for dirpath, dirs, files in os.walk(source_dir):
-        package = dirpath.split(bigdl_python_home)[1].replace('/', '.')
+        package = dirpath.split(bigdl_python_home)[1].replace(os.sep, '.')
         if any(fnmatch.fnmatchcase(package, pat=pattern)
                 for pattern in exclude_patterns):
             print("excluding", package)
@@ -48,25 +54,45 @@ def setup_package():
         name='bigdl-chronos',
         version=VERSION,
         description='Scalable time series analysis using AutoML',
+        long_description=long_description,
+        long_description_content_type="text/markdown",
         author='BigDL Authors',
         author_email='bigdl-user-group@googlegroups.com',
         license='Apache License, Version 2.0',
         url='https://github.com/intel-analytics/BigDL',
         packages=get_bigdl_packages(),
-        install_requires=['bigdl-orca=='+VERSION, 'torch>=1.7.1', 'pandas==1.0.3', 'scikit-learn'],
-        extras_require={'all': ['tensorflow>=1.15.0,<2.0.0', 'h5py==2.10.0',
-                                'aiohttp==3.7.4', 'aioredis==1.3.1',
-                                'ray[tune]==1.2.0', 'tensorboard', 'scipy==1.5',
-                                'protobuf==3.12.0', 'tsfresh==0.17.0']},
+        install_requires=['pandas>=1.0.5, <=1.3.5', 'scikit-learn>=0.22.0, <=1.0.2',
+                          'bigdl-nano==' + VERSION, 'numpy<=1.23.5'],
+        extras_require={'pytorch': ['bigdl-nano[pytorch]==' + VERSION],
+                        'tensorflow': ['bigdl-nano[tensorflow_27]=='+VERSION],
+                        'automl': ['optuna<=2.10.1', 'configspace<=0.5.0', 'SQLAlchemy<=1.4.27'],
+                        'distributed:platform_system!="Windows"': ['bigdl-orca[automl]=='+VERSION,
+                                                                   'grpcio<=1.51.1'],
+                        'inference': ['bigdl-nano[inference]==' + VERSION],
+                        'all': ['bigdl-nano[pytorch]==' + VERSION,
+                                'bigdl-nano[tensorflow_27]=='+VERSION,
+                                'optuna<=2.10.1', 'configspace<=0.5.0', 'SQLAlchemy<=1.4.27',
+                                'bigdl-orca[automl]==' + VERSION + ';platform_system!="Windows"',
+                                'grpcio<=1.51.1',
+                                'pmdarima==1.8.5',
+                                'prophet==1.1.0',
+                                'tsfresh==0.17.0',
+                                'pyarrow==6.0.1',
+                                'matplotlib',
+                                'bigdl-nano[inference]==' + VERSION]},
         dependency_links=['https://d3kbcqa49mib13.cloudfront.net/spark-2.0.0-bin-hadoop2.7.tgz'],
         include_package_data=True,
+        entry_points={
+            "console_scripts": [
+                "benchmark-chronos=bigdl.chronos.benchmark.benchmark_chronos:main",
+            ]
+        },
         classifiers=[
             'License :: OSI Approved :: Apache Software License',
             'Programming Language :: Python :: 3',
-            'Programming Language :: Python :: 3.6',
             'Programming Language :: Python :: 3.7',
             'Programming Language :: Python :: Implementation :: CPython'],
-        platforms=['mac', 'linux']
+        platforms=['mac', 'linux', 'windows']
     )
 
     setup(**metadata)

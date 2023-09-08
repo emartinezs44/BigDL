@@ -29,7 +29,7 @@ import com.intel.analytics.bigdl.dllib.optim
 import com.intel.analytics.bigdl.dllib._
 import com.intel.analytics.bigdl.dllib.nn.Graph._
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
-import com.intel.analytics.bigdl.dllib.nn.keras.{KerasLayer, KerasLayerSerializable}
+import com.intel.analytics.bigdl.dllib.nn.internal.{KerasLayer, KerasLayerSerializable}
 import com.intel.analytics.bigdl.dllib.nn.mkldnn.MklDnnModule
 import com.intel.analytics.bigdl.dllib.nn.{Container, Graph, Module, StaticGraph, Sequential => TSequential}
 import com.intel.analytics.bigdl.dllib.optim.DistriOptimizer.{Cache, CacheV1}
@@ -55,13 +55,10 @@ import com.intel.analytics.bigdl.dllib.keras.layers.utils._
 import com.intel.analytics.bigdl.dllib.keras.models._
 import com.intel.analytics.bigdl.dllib.net.NetUtils
 // import com.intel.analytics.bigdl.dllib.Net.TorchModel
-import com.intel.analytics.bigdl.dllib.estimator.{AbstractEstimator, ConstantClipping, GradientClipping, L2NormClipping}
 // import com.intel.analytics.zoo.tfpark.{TFTrainingHelper, TFTrainingHelperV2}
-import org.apache.commons.lang.exception.ExceptionUtils
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.log4j.Logger
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.rdd.{RDD, ZippedPartitionsWithLocalityRDD}
 
@@ -84,9 +81,10 @@ class Sequential[T: ClassTag] private ()
 
     if (!this.isBuilt()) {
       if (module.getInputShape() == null) {
-        throw new RuntimeException("The first layer should explicitly declare inputshape")
+        Log4Error.invalidOperationError(false,
+          "first layer inputshape is null",
+          "The first layer should explicitly declare inputshape")
       } else {
-
         val outputShape = absModuleRef.build(module.getInputShape())
         // The inputShape of Sequential should only be init here.
         kerasLayerRef.setInputShape(module.getInputShape())
@@ -102,7 +100,9 @@ class Sequential[T: ClassTag] private ()
   AbstractModule[_ <: Activity, _ <: Activity, T] = {
     val inputShape = if (!this.isBuilt()) {
       if (lambda.getInputShape() == null) {
-        throw new RuntimeException("The first layer should explicitly declare inputshape")
+        Log4Error.invalidOperationError(false,
+          "first layer inputshape is null",
+          "The first layer should explicitly declare inputshape")
       }
       lambda.getInputShape()
     } else {
@@ -124,7 +124,7 @@ class Sequential[T: ClassTag] private ()
    */
   def add(module: AbstractModule[_ <: Activity, _ <: Activity, T]): this.type = {
     if (frozen) {
-      throw new RuntimeException(
+      Log4Error.invalidOperationError(false,
         "This Sequential has been frozen, as it has been added into other container")
     }
 
@@ -176,9 +176,10 @@ class Sequential[T: ClassTag] private ()
 
   override def summary(
                         lineLength: Int = 120,
-                        positions: Array[Double] = Array(.33, .55, .67, 1)): Unit = {
+                        positions: Array[Double] = Array(.33, .55, .67, 1),
+                        needPrint: Boolean = true): String = {
     val graph = this.toModel()
-    graph.summary(lineLength, positions)
+    return graph.summary(lineLength, positions, needPrint)
   }
 
   override private[bigdl] def getKerasWeights(): Array[Tensor[Float]] = {

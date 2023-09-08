@@ -32,11 +32,12 @@ import com.intel.analytics.bigdl.{Module, _}
 import java.io.{File, FilenameFilter}
 import java.text.SimpleDateFormat
 import java.util.Calendar
-import org.apache.commons.lang.exception.ExceptionUtils
-import org.apache.log4j.Logger
+
+import org.apache.logging.log4j.{LogManager, Logger}
 import org.apache.spark.TaskContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.AccumulatorV2
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
@@ -46,7 +47,7 @@ object DistriOptimizer extends AbstractOptimizer {
 
   import Optimizer._
 
-  val logger: Logger = Logger.getLogger(getClass)
+  val logger: Logger = LogManager.getLogger(getClass)
 
   /**
    * Optimizer cache some metadata on each executor
@@ -229,7 +230,7 @@ object DistriOptimizer extends AbstractOptimizer {
           val batch = data.next()
           val stackSize = batch.size() / _subModelNumber
           tasks += Engine.default.invoke(() => {
-            require((batch.size() >= _subModelNumber) &&
+            Log4Error.invalidOperationError((batch.size() >= _subModelNumber) &&
               (batch.size() % _subModelNumber == 0), "total batch size: " +
               s"${batch.size()} should be divided by total core number: ${_subModelNumber}")
             if (batch.size() < _subModelNumber * 2) {
@@ -243,7 +244,7 @@ object DistriOptimizer extends AbstractOptimizer {
               b += 1
             }
           })
-          Engine.default.sync(tasks)
+          Engine.default.sync(tasks.toSeq)
           weightsResults.waitResult()
           val weightSyncTime = System.nanoTime() - syWStart
           driverMetrics.add("get weights average", weightSyncTime)
@@ -578,10 +579,13 @@ object DistriOptimizer extends AbstractOptimizer {
     val _subModelNumber = Engine.getEngineType match {
       case MklBlas => coresPerNode
       case MklDnn => 1
-      case _ => throw new IllegalArgumentException
+      case _ =>
+        Log4Error.invalidInputError(false, s"unexpected engine type ${Engine.getEngineType}",
+          "only support MklBlas and MklDnn")
+        0
     }
 
-    require(dataset.originRDD().partitions.length == nodeNumber,
+    Log4Error.invalidOperationError(dataset.originRDD().partitions.length == nodeNumber,
       s"Passed in rdd partition number ${dataset.originRDD().partitions.length}" +
         s" is not equal to configured node number ${nodeNumber}")
 
@@ -596,7 +600,8 @@ object DistriOptimizer extends AbstractOptimizer {
       broadcastOptim) = broadcast.value
       if (!Engine.checkSingleton()) {
         if (checkSingleton) {
-          require(Engine.checkSingleton(), "Partitions of the training data are not evenly" +
+          Log4Error.invalidOperationError(Engine.checkSingleton(),
+            "Partitions of the training data are not evenly" +
             "distributed across the executors in the Spark cluster; are there sufficient " +
             "training" +
             "data to be distributed? Set property \"bigdl.check.singleton\" to false to skip " +
@@ -701,7 +706,8 @@ object DistriOptimizer extends AbstractOptimizer {
     }).reduce((a, b) => (a._1 ++ b._1, a._2 ++ b._2))
 
     val taskSize = parameters.size / partitionNum
-    require(taskSize != 0, "parameter length should not less than partition number")
+    Log4Error.invalidOperationError(taskSize != 0,
+      "parameter length should not less than partition number")
     val extraSize = parameters.size % partitionNum
 
     (0 until partitionNum).map(pid => {
@@ -860,13 +866,14 @@ class DistriOptimizer[T: ClassTag](
     val parameterSplits = if (optimMethods.size != 1) {
       val p = optimMethods.map { case (subModuleName, optimMethod) =>
         val subModule = trainingModel(subModuleName)
-        require(subModule.isDefined, s"Optimizer couldn't find $subModuleName in $model")
+        Log4Error.invalidOperationError(subModule.isDefined,
+          s"Optimizer couldn't find $subModuleName in $model")
         val subModuleWeights = subModule.get.getParameters()._1
         (subModuleName, subModuleWeights)
       }
       val sortedWeights = p.values.toArray.sortWith((a, b) => a.storageOffset() < b.storageOffset())
       val compactWeights = Module.isCompact(sortedWeights)
-      require(modelParameters._1 == compactWeights,
+      Log4Error.invalidOperationError(modelParameters._1 == compactWeights,
         s"DistriOptimizer: All subModules should have an OptimMethod.")
       p.map { case (subModuleName, weights) =>
         (subModuleName, (weights.storageOffset(), weights.nElement()))
@@ -874,8 +881,10 @@ class DistriOptimizer[T: ClassTag](
     } else if (optimMethods.contains(trainingModel.getName())) {
       Map(trainingModel.getName() -> (1, modelParameters._1.nElement()))
     } else {
-      throw new IllegalArgumentException(s"${trainingModel.getName()} doesn't " +
+      Log4Error.invalidOperationError(false,
+        s"${trainingModel.getName()} doesn't " +
         s"have corresponding OptimMethod")
+      null
     }
 
     LarsSGD.containsLarsSGD(optimMethods).foreach(weightDecay =>
@@ -935,9 +944,9 @@ class DistriOptimizer[T: ClassTag](
         retryNum = Int.MaxValue
       } catch {
         case e: IllegalArgumentException =>
-          throw e
+          Log4Error.invalidOperationError(false, e.getMessage, cause = e)
         case t: Throwable =>
-          DistriOptimizer.logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+//          DistriOptimizer.logger.error("Error: " + ExceptionUtils.getStackTrace(t))
           if (checkpointPath.isDefined) {
             /* To avoid retry number is used up by first few exceptions, we count time here.
              * If exception exceeds maxRetry times in maxRetry*retryTimeInterval seconds,
@@ -946,7 +955,7 @@ class DistriOptimizer[T: ClassTag](
             if (System.nanoTime() - lastFailureTimestamp < maxRetry * retryTimeInterval * 1e9) {
               retryNum += 1
               if (retryNum == maxRetry) {
-                throw t
+                Log4Error.invalidOperationError(false, t.getMessage, cause = t)
               }
             } else {
               retryNum = 1
@@ -983,7 +992,7 @@ class DistriOptimizer[T: ClassTag](
             models = modelsAndBroadcast._1
             modelBroadcast = modelsAndBroadcast._2
           } else {
-            throw t
+            Log4Error.invalidOperationError(false, t.getMessage, cause = t)
           }
       }
     }

@@ -21,7 +21,7 @@ import java.util.concurrent._
 import com.intel.analytics.bigdl.mkl.hardware.Affinity
 import com.intel.analytics.bigdl.mkl.{MKL, MklDnn => BackendMklDnn}
 import org.apache.commons.lang.exception.ExceptionUtils
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -87,7 +87,7 @@ class ThreadPool(private var poolSize: Int) {
    * @return
    */
   def setMKLThread(size: Int): this.type = this.synchronized {
-    require(MKL.isMKLLoaded)
+    Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
     mklPoolSize = Some(size)
     (1 to poolSize).map(i => Future {
       MKL.setNumThreads(size)
@@ -106,8 +106,8 @@ class ThreadPool(private var poolSize: Int) {
         BackendMklDnn.setFlushDenormalState()
       }
 
-      require(MKL.isMKLLoaded)
-      require(BackendMklDnn.isLoaded)
+      Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
+      Log4Error.invalidInputError(BackendMklDnn.isLoaded, "BackendMklDnn isn't loaded")
 
       MKL.setNumThreads(size)
       BackendMklDnn.setNumThreads(size)
@@ -133,8 +133,9 @@ class ThreadPool(private var poolSize: Int) {
         task()
       } catch {
         case t : Throwable =>
-          logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-          throw t
+//          logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+          Log4Error.unKnowExceptionError(false, t.getMessage, cause = t)
+          null.asInstanceOf[T]
       }
     }(context)).map(future => {
       Await.result(future, timeout)
@@ -170,8 +171,8 @@ class ThreadPool(private var poolSize: Int) {
       try {
         resultFutures.get(i).get()
       } catch {
-        case t: ExecutionException => throw t.getCause
-        case i: InterruptedException => throw i.getCause
+        case t: Exception =>
+          Log4Error.unKnowExceptionError(false, t.getMessage, cause = t)
       }
       i += 1
     }
@@ -186,8 +187,9 @@ class ThreadPool(private var poolSize: Int) {
           task()
         } catch {
           case t : Throwable =>
-            logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-            throw t
+//            logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+            Log4Error.unKnowExceptionError(false, t.getMessage, cause = t)
+            null.asInstanceOf[T]
         }
       }
     }).map(threadPool.submit(_))
@@ -204,8 +206,9 @@ class ThreadPool(private var poolSize: Int) {
         task()
       } catch {
         case t : Throwable =>
-          logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-          throw t
+//          logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+          Log4Error.unKnowExceptionError(false, t.getMessage, cause = t)
+          null.asInstanceOf[T]
       }
     }(context))
   }
@@ -221,8 +224,9 @@ class ThreadPool(private var poolSize: Int) {
         task()
       } catch {
         case t : Throwable =>
-          logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-          throw t
+//          logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+          Log4Error.unKnowExceptionError(false, t.getMessage, cause = t)
+          null.asInstanceOf[T]
       }
     }(context)
   }
@@ -265,6 +269,6 @@ object ThreadPool {
     def reportFailure(t: Throwable) {}
   }
 
-  private val logger = Logger.getLogger(getClass)
+  private val logger = LogManager.getLogger(getClass)
 }
 

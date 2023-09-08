@@ -1,4 +1,4 @@
- /*
+/*
  * Copyright 2016 The BigDL Authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
  package com.intel.analytics.bigdl.dllib.estimator
 
  import com.intel.analytics.bigdl.dllib.feature.dataset.MiniBatch
@@ -21,7 +22,7 @@
  import com.intel.analytics.bigdl.{Criterion, Module}
  import com.intel.analytics.bigdl.dllib.optim.{OptimMethod, ValidationMethod, ValidationResult}
  import com.intel.analytics.bigdl.dllib.tensor.{Storage, Tensor}
- import com.intel.analytics.bigdl.dllib.utils.{RandomGenerator, ThreadPool}
+ import com.intel.analytics.bigdl.dllib.utils.{Log4Error, RandomGenerator, ThreadPool}
  import org.slf4j.LoggerFactory
 
  import scala.reflect.ClassTag
@@ -44,7 +45,8 @@
 
   val logger = LoggerFactory.getLogger(getClass)
 
-  require(threadNum >= 1, "the number of threads should >= 1")
+  Log4Error.invalidInputError(threadNum >= 1, s"the number of threads should >= 1," +
+    s"actural is $threadNum", "Please set threadNum > 1")
   @volatile private var defaultThreadPool: ThreadPool = new ThreadPool(threadNum)
 
   model.training()
@@ -262,10 +264,11 @@
 
   private def retrieveParameters(model: Module[Float]) = {
     val (weightParameters, gradParameters) = model.parameters()
-    require(weightParameters != null && weightParameters.length > 0,
+    Log4Error.invalidInputError(weightParameters != null && weightParameters.length > 0,
       s"model ${model.getName()} doesn't have any trainable parameters.")
-    require(weightParameters.size == gradParameters.size,
+    Log4Error.invalidInputError(weightParameters.size == gradParameters.size,
       "weights and gradient number are not match")
+
     weightParameters.zip(gradParameters).foreach { case (w, g) => g.resizeAs(w) }
     (Module.flatten[Float](weightParameters), Module.flatten[Float](gradParameters))
   }

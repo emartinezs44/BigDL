@@ -17,21 +17,23 @@ package com.intel.analytics.bigdl.dllib.optim.parameters
 
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.Engine
+import com.intel.analytics.bigdl.dllib.utils.{Engine, Log4Error}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicLong
+
 import org.apache.commons.lang.exception.ExceptionUtils
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{LogManager, Logger}
 import org.apache.spark.TaskContext
 import org.apache.spark.sparkExtension.SparkExtension
 import org.apache.spark.storage.{BlockId, BlockManagerWrapper, StorageLevel}
+
 import scala.collection.JavaConverters._
 import scala.reflect._
 
 object AllReduceParameter {
   private val syncPoolSize: Int = System.getProperty("bigdl.Parameter.syncPoolSize", "4").toInt
 
-  val logger: Logger = Logger.getLogger(getClass)
+  val logger: Logger = LogManager.getLogger(getClass)
   val syncPool: ExecutorService = Executors.newFixedThreadPool(syncPoolSize, new ThreadFactory {
     override def newThread(r: Runnable): Thread = {
       val t = Executors.defaultThreadFactory().newThread(r)
@@ -118,7 +120,11 @@ class AllReduceParameter[T: ClassTag](
     val blockId = getWeightPartitionId()
     BlockManagerWrapper.getLocal(blockId)
       .map(_.data.next().asInstanceOf[Tensor[T]])
-      .getOrElse(throw new IllegalStateException("Please initialize AllReduceParameter first!"))
+      .getOrElse {
+        Log4Error.invalidOperationError(false, "AllReduceParameter is not initialized",
+          "Please initialize AllReduceParameter first!")
+        null
+      }
   }
 
   /**
@@ -131,7 +137,11 @@ class AllReduceParameter[T: ClassTag](
     val blockId = getGradientPartitionId()
     BlockManagerWrapper.getLocal(blockId)
       .map(_.data.next().asInstanceOf[Tensor[T]])
-      .getOrElse(throw new IllegalStateException("Please initialize AllReduceParameter first!"))
+      .getOrElse {
+        Log4Error.invalidOperationError(false, "AllReduceParameter is not initialized",
+          "Please initialize AllReduceParameter first!")
+        null
+      }
   }
 
   /**
@@ -209,9 +219,11 @@ class AllReduceParameter[T: ClassTag](
             try {
               val blockId = getWeightBlockId(pid)
               val localBuffer = BlockManagerWrapper.getLocalOrRemoteBytes(blockId).getOrElse {
-                throw new RuntimeException(s"Didn't find weight block $blockId in the block " +
+                Log4Error.unKnowExceptionError(false,
+                  s"Didn't find weight block $blockId in the block " +
                   s"manager. This is usually because executor crashed. Please check your" +
                   s"executors' log see the error (usually an OutOfMemory error)")
+                null
               }
               val start = pid * taskSize + math.min(pid, extraSize)
               val length = taskSize + (if (pid < extraSize) 1 else 0)
@@ -221,8 +233,8 @@ class AllReduceParameter[T: ClassTag](
               pid
             } catch {
               case t: Throwable =>
-                logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-                throw t
+                Log4Error.unKnowExceptionError(false, ExceptionUtils.getStackTrace(t))
+                0
             }
           }
         }
@@ -238,7 +250,8 @@ class AllReduceParameter[T: ClassTag](
    * @param avgNumbers average numbers.
    */
   def aggregateGradientPartition(avgNumbers: Int): Unit = {
-    require(partitionId < partitionNum, s"This parameter was created with $partitionNum " +
+    Log4Error.unKnowExceptionError(partitionId < partitionNum,
+      s"This parameter was created with $partitionNum " +
       s"partitions. It cannot be used on RDDs with > $partitionNum partitions.")
     val params = new Array[CompressedTensor[T]](partitionNum)
     val sgThreads = (0 until partitionNum).map { pid =>
@@ -252,8 +265,8 @@ class AllReduceParameter[T: ClassTag](
             pid
           } catch {
             case t: Throwable =>
-              logger.error("Error: " + ExceptionUtils.getStackTrace(t))
-              throw t
+              Log4Error.unKnowExceptionError(false, ExceptionUtils.getStackTrace(t))
+              0
           }
         }
       }
@@ -319,15 +332,20 @@ class AllReduceParameter[T: ClassTag](
   def sendWeightPartition(): Unit = {
     val blockId = getWeightBlockId(partitionId)
     val localBuffer = BlockManagerWrapper.getLocalBytes(blockId).getOrElse {
-      throw new RuntimeException(s"Didn't find weight block $blockId in the block " +
+      Log4Error.unKnowExceptionError(false, s"Didn't find weight block $blockId in the block " +
         s"manager. Did you initialize this AllReduceParameter on every executor?")
+      null
     }
     SerializerInstance.create(localBuffer, compress).compress(weightPartition)
 
     val weightsId = getWeightPartitionId()
     val weights = BlockManagerWrapper.getLocal(weightsId)
       .map(_.data.next().asInstanceOf[Tensor[T]])
-      .getOrElse(throw new IllegalStateException("Please initialize AllReduceParameter first!"))
+      .getOrElse {
+        Log4Error.invalidOperationError(false, "AllReduceParameter is not initialized",
+          "Please initialize AllReduceParameter first!")
+        null
+      }
     weights.copy(weightPartition)
   }
 }

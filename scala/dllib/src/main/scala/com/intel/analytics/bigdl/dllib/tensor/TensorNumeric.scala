@@ -18,6 +18,7 @@ package com.intel.analytics.bigdl.dllib.tensor
 
 import java.util
 
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 import com.intel.analytics.bigdl.mkl.MKL
 import com.intel.analytics.bigdl.dllib.utils.RandomGenerator._
 
@@ -207,279 +208,386 @@ object TensorNumericMath {
    */
   abstract class UndefinedTensorNumeric[@specialized(Float, Double) T](typeName: String)
     extends TensorNumeric[T] {
-    def plus(x: T, y: T): T =
-      throw new UnsupportedOperationException(typeName
-        + " in tensor does not support plus operation")
+    def plus(x: T, y: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support plus operation")
+      0.asInstanceOf[T]
+    }
 
-    def minus(x: T, y: T): T =
-      throw new UnsupportedOperationException(typeName
-        + " in tensor does not support minus operation")
+    def minus(x: T, y: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support minus operation")
+      0.asInstanceOf[T]
+    }
 
-    def times(x: T, y: T): T =
-      throw new UnsupportedOperationException(typeName
-        + " in tensor does not support times operation")
+    def times(x: T, y: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support times operation")
+      0.asInstanceOf[T]
+    }
 
-    def divide(x: T, y: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support divide operation")
+    def divide(x: T, y: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support divide operation")
+      0.asInstanceOf[T]
+    }
 
-    def exp(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support exp operation")
+    def exp(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support exp operation")
+      0.asInstanceOf[T]
+    }
 
-    def prod(n: Int, a: Array[T], aOffset: Int, stride: Int): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support prod operation")
+    def prod(n: Int, a: Array[T], aOffset: Int, stride: Int): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support prod operation")
+      0.asInstanceOf[T]
+    }
 
-    def log(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support log operation")
+    def log(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support log operation")
+      0.asInstanceOf[T]
+    }
 
-    def max(x: T, y: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support max operation")
+    def max(x: T, y: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support max operation")
+      0.asInstanceOf[T]
+    }
 
-    def min(x: T, y: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support min operation")
+    def min(x: T, y: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support min operation")
+      0.asInstanceOf[T]
+    }
 
-    def sqrt(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support sqrt operation")
+    def sqrt(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support sqrt operation")
+      0.asInstanceOf[T]
+    }
 
-    def tanh(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support tanh operation")
+    def tanh(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support tanh operation")
+      0.asInstanceOf[T]
+    }
 
-    def abs(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support abs operation")
+    def abs(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support abs operation")
+      0.asInstanceOf[T]
+    }
 
-    def or(x: T, y: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support or operation")
+    def or(x: T, y: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support or operation")
+      0.asInstanceOf[T]
+    }
 
-    def and(x: T, y: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support and operation")
+    def and(x: T, y: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support and operation")
+      0.asInstanceOf[T]
+    }
 
-    def negative(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support negative operation")
+    def negative(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support negative operation")
+      0.asInstanceOf[T]
+    }
 
-    def pow(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support pow operation")
+    def pow(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support pow operation")
+      0.asInstanceOf[T]
+    }
 
-    def pow(x: T, y: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support pow operation")
+    def pow(x: T, y: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support pow operation")
+      0.asInstanceOf[T]
+    }
 
-    def log1p(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support log1p operation")
+    def log1p(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support log1p operation")
+      0.asInstanceOf[T]
+    }
 
-    def isGreater(x: T, y: T): Boolean =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support isGreater operation")
+    def isGreater(x: T, y: T): Boolean = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support isGreater operation")
+      false
+    }
 
-    def isGreaterEq(x: T, y: T): Boolean =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support isGreaterEq operation")
+    def isGreaterEq(x: T, y: T): Boolean = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support isGreaterEq operation")
+      false
+    }
 
-    def rand(): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support rand operation")
+    def rand(): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support rand operation")
+      0.asInstanceOf[T]
+    }
 
-    def randn(): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support randn operation")
+    def randn(): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support randn operation")
+      0.asInstanceOf[T]
+    }
 
     def gemm(transa: Char, transb: Char, m: Int, n: Int, k: Int, alpha: T, a: Array[T],
       aOffset: Int, lda: Int, b: Array[T], bOffset: Int, ldb: Int,
-      beta: T, c: Array[T], cOffset: Int, ldc: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support gemm operation")
+      beta: T, c: Array[T], cOffset: Int, ldc: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support gemm operation")
+    }
 
     def gemv(trans: Char, m: Int, n: Int, alpha: T, a: Array[T], aoffset: Int, lda: Int,
       x: Array[T], xOffset: Int, incx: Int, beta: T, y: Array[T], yOffset: Int, incy: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support gemv operation")
+    {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support gemv operation")
+    }
 
     def axpy(n: Int, da: T, dx: Array[T], _dx_offset: Int, incx: Int, dy: Array[T],
-      _dy_offset: Int, incy: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support axpy operation")
+      _dy_offset: Int, incy: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support axpy operation")
+    }
 
     def dot(n: Int, dx: Array[T], _dx_offset: Int, incx: Int, dy: Array[T], _dy_offset: Int,
-      incy: Int): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support dot operation")
+      incy: Int): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support dot operation")
+      0.asInstanceOf[T]
+    }
 
     def ger(m: Int, n: Int, alpha: T, x: Array[T], _x_offset: Int, incx: Int, y: Array[T],
       _y_offset: Int,
-      incy: Int, a: Array[T], _a_offset: Int, lda: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support ger operation")
+      incy: Int, a: Array[T], _a_offset: Int, lda: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support ger operation")
+    }
 
-    def fill(data: Array[T], fromIndex: Int, toIndex: Int, value: T): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support fill operation")
+    def fill(data: Array[T], fromIndex: Int, toIndex: Int, value: T): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support fill operation")
+    }
 
-    def fromType[K](k: K)(implicit c: ConvertableFrom[K]): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support fromType operation")
+    def fromType[K](k: K)(implicit c: ConvertableFrom[K]): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support fromType operation")
+      0.asInstanceOf[T]
+    }
 
-    def toType[K](t: T)(implicit c: ConvertableTo[K]): K =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support toType operation")
+    def toType[K](t: T)(implicit c: ConvertableTo[K]): K = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support toType operation")
+      0.asInstanceOf[K]
+    }
 
-    def vPowx(n: Int, a: Array[T], aOffset: Int, b: T, y: Array[T], yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vPowx operation")
+    def vPowx(n: Int, a: Array[T], aOffset: Int, b: T, y: Array[T], yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vPowx operation")
+    }
 
-    def vLn(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vLn operation")
+    def vLn(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vLn operation")
+    }
 
-    def vExp(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vLn operation")
+    def vExp(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vExp operation")
+    }
 
-    def vSqrt(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vSqrt operation")
+    def vSqrt(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vSqrt operation")
+    }
 
-    def vTanh(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vTanh operation")
+    def vTanh(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vTanh operation")
+    }
 
-    def vAbs(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vAbs operation")
+    def vAbs(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vAbs operation")
+    }
 
-    def vLog1p(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vLog1p operation")
+    def vLog1p(n: Int, a: Array[T], aOffset: Int, y: Array[T], yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vLog1p operation")
+    }
 
-    def scal(n: Int, sa: T, sx: Array[T], offset: Int, incx: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support scal operation")
+    def scal(n: Int, sa: T, sx: Array[T], offset: Int, incx: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support scal operation")
+    }
 
-    def inv(v: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support inv operation")
+    def inv(v: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support inv operation")
+      0.asInstanceOf[T]
+    }
 
-    def add(n: Int, a: Array[T], offset: Int, v: T, stride: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support add operation")
+    def add(n: Int, a: Array[T], offset: Int, v: T, stride: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support add operation")
+    }
 
-    def sub(n: Int, a: Array[T], offset: Int, v: T, stride: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support sub operation")
+    def sub(n: Int, a: Array[T], offset: Int, v: T, stride: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support sub operation")
+    }
 
     def vAdd(n: Int, a: Array[T], aOffset: Int, b: Array[T], bOffset: Int, y: Array[T],
-      yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vAdd operation")
+      yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vAdd operation")
+    }
 
     def vSub(n: Int, a: Array[T], aOffset: Int, b: Array[T], bOffset: Int, y: Array[T],
-      yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vSub operation")
+      yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vSub operation")
+    }
 
     def vMul(n: Int, a: Array[T], aOffset: Int, b: Array[T], bOffset: Int, y: Array[T],
-      yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vMul operation")
+      yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vMul operation")
+    }
 
     def vDiv(n: Int, a: Array[T], aOffset: Int, b: Array[T], bOffset: Int, y: Array[T],
-      yOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support vDiv operation")
+      yOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support vDiv operation")
+    }
 
-    def sum(n: Int, a: Array[T], aOffset: Int, stride: Int): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support sum operation")
+    def sum(n: Int, a: Array[T], aOffset: Int, stride: Int): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support sum operation")
+      0.asInstanceOf[T]
+    }
 
     def arraycopy(src: Array[T], srcPos: Int,
-      dest: Array[T], destPos: Int, length: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support arraycopy operation")
+      dest: Array[T], destPos: Int, length: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support arraycopy operation")
+    }
 
-    def getType(): TensorDataType =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support getType operation")
+    def getType(): TensorDataType = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support getType operation")
+      null
+    }
 
     def addcmul(value: T, n: Int,
       self: Array[T], selfOffset: Int,
       a: Array[T], aOffset: Int,
-      b: Array[T], bOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support addcmul operation")
+      b: Array[T], bOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support addcmul operation")
+    }
 
     def addcdiv(value: T, n: Int,
       self: Array[T], selfOffset: Int,
       a: Array[T], aOffset: Int,
-      b: Array[T], bOffset: Int): Unit =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support addcdiv operation")
+      b: Array[T], bOffset: Int): Unit = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support addcdiv operation")
+    }
 
-    def nearlyEqual(a: T, b: T, epsilon: Double): Boolean =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support nearlyEqual operation")
+    def nearlyEqual(a: T, b: T, epsilon: Double): Boolean = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support nearlyEqual operation")
+      false
+    }
 
-    override def floor(a: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support floor operation")
+    override def floor(a: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support floor operation")
+      0.asInstanceOf[T]
+    }
 
-    override def ceil(a: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support ceil operation")
+    override def ceil(a: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support ceil operation")
+      0.asInstanceOf[T]
+    }
 
-    override def isInf(a: T): Boolean =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support isInf operation")
+    override def isInf(a: T): Boolean = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support isInf operation")
+      false
+    }
 
-    override def isFinite(a: T): Boolean =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support isFinite operation")
+    override def isFinite(a: T): Boolean = {
+      Log4Error.invalidOperationError(false,
+      s"${typeName} in tensor does not support isFinite operation")
+      false
+    }
 
-    override def isNan(a: T): Boolean =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support isNan operation")
+    override def isNan(a: T): Boolean = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support isNan operation")
+      false
+    }
 
-    override def round(a: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support round operation")
+    override def round(a: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support round operation")
+      0.asInstanceOf[T]
+    }
 
-    override def truncate(a: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support truncate operation")
+    override def truncate(a: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support truncate operation")
+      0.asInstanceOf[T]
+    }
 
-    override def floorDiv(a: T, b: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support floorDiv operation")
+    override def floorDiv(a: T, b: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support floorDiv operation")
+      0.asInstanceOf[T]
+    }
 
-    def clip(a: T, lower: T, upper: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support clip operation")
+    def clip(a: T, lower: T, upper: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support clip operation")
+      0.asInstanceOf[T]
+    }
 
-    def erf(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support erf operation")
+    def erf(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support erf operation")
+      0.asInstanceOf[T]
+    }
 
-    def erfc(x: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support erf operation")
+    def erfc(x: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support erfc operation")
+      0.asInstanceOf[T]
+    }
 
-    def logGamma(v: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support erf operation")
+    def logGamma(v: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support logGamma operation")
+      0.asInstanceOf[T]
+    }
 
-    def digamma(v: T): T =
-      throw new UnsupportedOperationException(typeName +
-        " in tensor does not support erf operation")
+    def digamma(v: T): T = {
+      Log4Error.invalidOperationError(false,
+        s"${typeName} in tensor does not support digamma operation")
+      0.asInstanceOf[T]
+    }
   }
 
   /**
@@ -542,7 +650,7 @@ object TensorNumericMath {
       override def gemm(transa: Char, transb: Char, m: Int, n: Int, k: Int, alpha: Float,
         a: Array[Float], aOffset: Int, lda: Int, b: Array[Float], bOffset: Int, ldb: Int,
         beta: Float, c: Array[Float], cOffset: Int, ldc: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsgemm(transa, transb, m, n, k, alpha, a, aOffset, lda, b, bOffset,
           ldb, beta, c, cOffset, ldc)
       }
@@ -552,7 +660,7 @@ object TensorNumericMath {
         x: Array[Float], xOffset: Int, incx: Int, beta: Float,
         y: Array[Float], yOffset: Int,
         incy: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsgemv(trans, m, n, alpha, a, aoffset, lda, x, xOffset,
           incx, beta, y, yOffset, incy)
       }
@@ -560,18 +668,18 @@ object TensorNumericMath {
       override def axpy(n: Int, da: Float, dx: Array[Float], _dx_offset: Int,
         incx: Int, dy: Array[Float],
         _dy_offset: Int, incy: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsaxpy(n, da, dx, _dx_offset, incx, dy, _dy_offset, incy)      }
 
       override def dot(n: Int, dx: Array[Float], _dx_offset: Int, incx: Int, dy: Array[Float],
         _dy_offset: Int, incy: Int): Float = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsdot(n, dx, _dx_offset, incx, dy, _dy_offset, incy)      }
 
       override def ger(m: Int, n: Int, alpha: Float, x: Array[Float], _x_offset: Int, incx: Int,
         y: Array[Float], _y_offset: Int,
         incy: Int, a: Array[Float], _a_offset: Int, lda: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsger(m, n, alpha, x, _x_offset, incx, y, _y_offset,
           incy, a, _a_offset, lda)
       }
@@ -591,48 +699,48 @@ object TensorNumericMath {
 
       override def vPowx(n: Int, a: Array[Float], aOffset: Int, b: Float, y: Array[Float],
         yOffset: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsPowx(n, a, aOffset, b, y, yOffset)
       }
 
       override def vLn(n: Int, a: Array[Float], aOffset: Int, y: Array[Float], yOffset: Int)
       : Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsLn(n, a, aOffset, y, yOffset)
       }
 
       override def vExp(n: Int, a: Array[Float], aOffset: Int, y: Array[Float], yOffset: Int)
       : Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsExp(n, a, aOffset, y, yOffset)
       }
 
       override def vSqrt(n: Int, a: Array[Float], aOffset: Int, y: Array[Float], yOffset: Int)
       : Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsSqrt(n, a, aOffset, y, yOffset)
       }
 
       override def vTanh(n: Int, a: Array[Float], aOffset: Int, y: Array[Float], yOffset: Int)
       : Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsTanh(n, a, aOffset, y, yOffset)
       }
 
       override def vAbs(n: Int, a: Array[Float], aOffset: Int, y: Array[Float], yOffset: Int)
       : Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsAbs(n, a, aOffset, y, yOffset)
       }
 
       override def vLog1p(n: Int, a: Array[Float], aOffset: Int, y: Array[Float], yOffset: Int)
       : Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsLog1p(n, a, aOffset, y, yOffset)
       }
 
       override def scal(n: Int, sa: Float, sx: Array[Float], offset: Int, incx: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsscal(n, sa, sx, offset, incx)
       }
 
@@ -656,13 +764,13 @@ object TensorNumericMath {
 
       override def vAdd(n: Int, a: Array[Float], aOffset: Int, b: Array[Float], bOffset: Int,
         y: Array[Float], yOffset: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsAdd(n, a, aOffset, b, bOffset, y, yOffset)
       }
 
       override def vSub(n: Int, a: Array[Float], aOffset: Int, b: Array[Float], bOffset: Int,
         y: Array[Float], yOffset: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vsSub(n, a, aOffset, b, bOffset, y, yOffset)
       }
 
@@ -791,7 +899,8 @@ object TensorNumericMath {
       }
 
       override def clip(a: Float, lower: Float, upper: Float): Float = {
-        require(lower <= upper, "lower bound must be less or equal than upper bound")
+        Log4Error.invalidInputError(lower <= upper,
+          "lower bound must be less or equal than upper bound")
         math.min(math.max(a, lower), upper)
       }
 
@@ -848,7 +957,7 @@ object TensorNumericMath {
       override def gemm(transa: Char, transb: Char, m: Int, n: Int, k: Int, alpha: Double,
         a: Array[Double], aOffset: Int, lda: Int, b: Array[Double], bOffset: Int, ldb: Int,
         beta: Double, c: Array[Double], cOffset: Int, ldc: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
 
         MKL.vdgemm(transa, transb, m, n, k, alpha, a, aOffset, lda, b,
           bOffset, ldb, beta, c, cOffset, ldc)
@@ -857,27 +966,27 @@ object TensorNumericMath {
       override def gemv(trans: Char, m: Int, n: Int, alpha: Double, a: Array[Double], aoffset: Int,
         lda: Int, x: Array[Double], xOffset: Int, incx: Int, beta: Double, y: Array[Double],
         yOffset: Int, incy: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdgemv(trans, m, n, alpha, a, aoffset, lda, x, xOffset,
           incx, beta, y, yOffset, incy)
       }
 
       override def axpy(n: Int, da: Double, dx: Array[Double], _dx_offset: Int, incx: Int,
         dy: Array[Double], _dy_offset: Int, incy: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdaxpy(n, da, dx, _dx_offset, incx, dy, _dy_offset, incy)
       }
 
       override def dot(n: Int, dx: Array[Double], _dx_offset: Int, incx: Int, dy: Array[Double],
         _dy_offset: Int, incy: Int): Double = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vddot(n, dx, _dx_offset, incx, dy, _dy_offset, incy)
       }
 
       override def ger(m: Int, n: Int, alpha: Double, x: Array[Double], _x_offset: Int, incx: Int,
         y: Array[Double], _y_offset: Int,
         incy: Int, a: Array[Double], _a_offset: Int, lda: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdger(m, n, alpha, x, _x_offset, incx, y, _y_offset,
           incy, a, _a_offset, lda)
       }
@@ -897,48 +1006,48 @@ object TensorNumericMath {
 
       override def vPowx(n: Int, a: Array[Double], aOffset: Int, b: Double, y: Array[Double],
         yOffset: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdPowx(n, a, aOffset, b, y, yOffset)
       }
 
       override def vLn(n: Int, a: Array[Double], aOffset: Int, y: Array[Double],
                        yOffset: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdLn(n, a, aOffset, y, yOffset)
       }
 
       override def vExp(n: Int, a: Array[Double], aOffset: Int, y: Array[Double],
                         yOffset: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdExp(n, a, aOffset, y, yOffset)
       }
 
       override def vSqrt(n: Int, a: Array[Double], aOffset: Int, y: Array[Double],
                          yOffset: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdSqrt(n, a, aOffset, y, yOffset)
       }
 
       override def vTanh(n: Int, a: Array[Double], aOffset: Int, y: Array[Double], yOffset: Int)
       : Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdTanh(n, a, aOffset, y, yOffset)
       }
 
       override def vAbs(n: Int, a: Array[Double], aOffset: Int, y: Array[Double], yOffset: Int)
       : Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdAbs(n, a, aOffset, y, yOffset)
       }
 
       override def vLog1p(n: Int, a: Array[Double], aOffset: Int, y: Array[Double], yOffset: Int)
       : Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdLog1p(n, a, aOffset, y, yOffset)
       }
 
       override def scal(n: Int, sa: Double, sx: Array[Double], offset: Int, incx: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdscal(n, sa, sx, offset, incx)
       }
 
@@ -962,13 +1071,13 @@ object TensorNumericMath {
 
       override def vAdd(n: Int, a: Array[Double], aOffset: Int, b: Array[Double], bOffset: Int,
         y: Array[Double], yOffset: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdAdd(n, a, aOffset, b, bOffset, y, yOffset)
       }
 
       override def vSub(n: Int, a: Array[Double], aOffset: Int, b: Array[Double], bOffset: Int,
         y: Array[Double], yOffset: Int): Unit = {
-        require(MKL.isMKLLoaded, "mkl isn't loaded")
+        Log4Error.invalidInputError(MKL.isMKLLoaded, "mkl isn't loaded")
         MKL.vdSub(n, a, aOffset, b, bOffset, y, yOffset)
       }
 
@@ -1105,7 +1214,8 @@ object TensorNumericMath {
       }
 
       override def clip(a: Double, lower: Double, upper: Double): Double = {
-        require(lower <= upper, "lower bound must be less or equal than upper bound")
+        Log4Error.invalidInputError(lower <= upper,
+          "lower bound must be less or equal than upper bound")
         math.min(math.max(a, lower), upper)
       }
 

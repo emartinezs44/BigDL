@@ -18,6 +18,7 @@ package com.intel.analytics.bigdl.dllib.nn.mkldnn
 import com.intel.analytics.bigdl.mkl.{DataType, Memory, MklDnn}
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{Activity, TensorModule}
 import com.intel.analytics.bigdl.dllib.tensor.{DnnTensor, Tensor}
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 class ReorderMemory(inputFormat: MemoryData, outputFormat: MemoryData,
   gradInputFormat: MemoryData, gradOutputFormat: MemoryData,
@@ -43,7 +44,10 @@ class ReorderMemory(inputFormat: MemoryData, outputFormat: MemoryData,
     val ret = src match {
       case h: HeapData => Array(HeapData(shape, layout, src.dataType))
       case n: NativeData => Array(NativeData(shape, layout, src.dataType))
-      case _ => throw new UnsupportedOperationException("Not support such memory format")
+      case _ =>
+        Log4Error.invalidInputError(false, s"memory format $src is not supported",
+          "only support NativeData and HeapData")
+        null
     }
 
     ret(0).setMask(src.mask)
@@ -92,7 +96,8 @@ class ReorderMemory(inputFormat: MemoryData, outputFormat: MemoryData,
       _outputFormats(0).setScales(realOutput(0).scales)
     }
 
-    require(realOutput(0).scales.nonEmpty)
+    Log4Error.invalidInputError(realOutput(0).scales.nonEmpty,
+    "realOutput(0).scales cannot be empty")
     MklDnn.AttrSetOutputScales(attr, realOutput(0).scales.length, realOutput(0).mask,
       realOutput(0).scales)
 
@@ -104,12 +109,13 @@ class ReorderMemory(inputFormat: MemoryData, outputFormat: MemoryData,
 
   override private[mkldnn] def initFwdPrimitives(inputs: Array[MemoryData], phase: Phase) = {
     _inputFormats = if (inputFormat == null) inputs else Array(inputFormat)
-    require(_inputFormats.length == 1, "Only accept one tensor as input")
+    Log4Error.invalidInputError(_inputFormats.length == 1,
+      "Only accept one tensor as input")
 
     if (outputFormat == null) _outputFormats = _inputFormats
     shapeToString(_inputFormats(0).shape)
 
-    require(_inputFormats(0).shape.product == _outputFormats(0).shape.product,
+    Log4Error.invalidInputError(_inputFormats(0).shape.product == _outputFormats(0).shape.product,
       "input output memory not match, input shape " + shapeToString(_inputFormats(0).shape)
         + "output shape " + shapeToString(_outputFormats(0).shape))
 
@@ -173,8 +179,9 @@ class ReorderMemory(inputFormat: MemoryData, outputFormat: MemoryData,
     }
 
     _gradOutputFormats = if (gradOutputFormat == null) grads else Array(gradOutputFormat)
-    require(_gradOutputFormats.length == 1, "Only accept one tensor as input")
-    require(_gradOutputFormats(0).shape.product == _gradInputFormats(0).shape.product,
+    Log4Error.invalidInputError(_gradOutputFormats.length == 1, "Only accept one tensor as input")
+    Log4Error.invalidInputError(_gradOutputFormats(0).shape.product ==
+      _gradInputFormats(0).shape.product,
       "gradInput and gradOutput memory not match," +
         "gradInput shape " + shapeToString(_gradInputFormats(0).shape)
         + "gradOutput shape " + shapeToString(_gradOutputFormats(0).shape))

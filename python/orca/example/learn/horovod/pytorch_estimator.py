@@ -51,8 +51,8 @@ def optimizer_creator(model, config):
 
 def scheduler_creator(optimizer, config):
     """Returns a learning rate scheduler wrapping the optimizer.
-    You will need to set ``TorchTrainer(scheduler_step_freq="epoch")``
-    for the scheduler to be incremented correctly.
+    By default a scheduler will take effect automatically every epoch,
+    and you can update the scheduler at the right time through the hooks.
     If using a scheduler for validation loss, be sure to call
     ``trainer.update_scheduler(validation_loss)``.
     """
@@ -135,10 +135,10 @@ if __name__ == "__main__":
     elif args.cluster_mode.startswith("yarn"):
         if args.cluster_mode == "yarn-client":
             init_orca_context(cluster_mode="yarn-client", cores=args.cores,
-                            num_nodes=args.num_nodes, memory=args.memory)
+                              num_nodes=args.num_nodes, memory=args.memory)
         else:
             init_orca_context(cluster_mode="yarn-cluster", cores=args.cores,
-                            num_nodes=args.num_nodes, memory=args.memory)
+                              num_nodes=args.num_nodes, memory=args.memory)
     elif args.cluster_mode == "k8s":
         if not args.k8s_master or not args.container_image \
                 or not args.k8s_driver_host or not args.k8s_driver_port:
@@ -147,9 +147,7 @@ if __name__ == "__main__":
                          'k8s_driver_host/port are required not to be empty')
         init_orca_context(cluster_mode="k8s", master=args.k8s_master,
                           container_image=args.container_image,
-                          num_nodes=args.num_nodes, cores=args.cores,
-                          conf={"spark.driver.host": args.k8s_driver_host,
-                                "spark.driver.port": args.k8s_driver_port})
+                          num_nodes=args.num_nodes, cores=args.cores)
     elif args.cluster_mode == "spark-submit":
         init_orca_context(cluster_mode="spark-submit")
     train_example(workers_per_node=args.workers_per_node)

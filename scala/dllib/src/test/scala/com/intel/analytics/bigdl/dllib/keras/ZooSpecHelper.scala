@@ -23,16 +23,16 @@ import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.utils.{RandomGenerator, Table}
 import com.intel.analytics.bigdl.dllib.common.zooUtils
+import org.apache.logging.log4j.LogManager
 // import com.intel.analytics.zoo.models.common.ZooModel
 import org.apache.commons.io.FileUtils
-import org.apache.log4j.Logger
 import org.scalactic.TolerantNumerics
 import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
 
 import scala.collection.mutable.ArrayBuffer
 
 abstract class ZooSpecHelper extends FlatSpec with Matchers with BeforeAndAfter {
-  protected val logger = Logger.getLogger(getClass)
+  protected val logger = LogManager.getLogger(getClass)
 
   private val epsilon = 1e-4f
 
@@ -153,7 +153,7 @@ abstract class ZooSpecHelper extends FlatSpec with Matchers with BeforeAndAfter 
 //    model.saveModel(serFile.getAbsolutePath, overWrite = true)
 //    val loadedModel = loader(serFile.getAbsolutePath, null)
 //      .asInstanceOf[ZooModel[Tensor[Float], Tensor[Float], Float]]
-//    require(loadedModel.modules.length == 1)
+//    TestUtils.conditionFailTest(loadedModel.modules.length == 1)
 //    compareOutputAndGradInput(model, loadedModel, input, precision)
 //  }
 //
@@ -165,7 +165,7 @@ abstract class ZooSpecHelper extends FlatSpec with Matchers with BeforeAndAfter 
 //    model.saveModel(serFile.getAbsolutePath, overWrite = true)
 //    val loadedModel = loader(serFile.getAbsolutePath, null)
 //      .asInstanceOf[ZooModel[Table, Tensor[Float], Float]]
-//    require(loadedModel.modules.length == 1)
+//    TestUtils.conditionFailTest(loadedModel.modules.length == 1)
 //    compareOutputAndGradInputTable2Tensor(model, loadedModel, input, precision)
 //  }
 }

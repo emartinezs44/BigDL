@@ -18,19 +18,19 @@ package com.intel.analytics.bigdl.dllib.keras.layers
 
 import com.intel.analytics.bigdl.dllib.nn.{RandomNormal, StaticGraph}
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
-import com.intel.analytics.bigdl.dllib.nn.keras.{KerasLayer, KerasLayerSerializable}
+import com.intel.analytics.bigdl.dllib.nn.internal.{KerasLayer, KerasLayerSerializable}
 import com.intel.analytics.bigdl.serialization.Bigdl.{AttrValue, BigDLModule}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.utils.serializer._
 import com.intel.analytics.bigdl.dllib.utils.serializer.converters.DataConverter
-import com.intel.analytics.bigdl.dllib.utils.{MultiShape, Shape}
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, MultiShape, Shape}
 import com.intel.analytics.bigdl.dllib.keras.Net
 import com.intel.analytics.bigdl.dllib.keras.autograd.{AutoGrad, Variable}
 import com.intel.analytics.bigdl.dllib.keras.layers.utils.{GraphRef, KerasUtils}
 import com.intel.analytics.bigdl.dllib.keras.Model
 import com.intel.analytics.bigdl.dllib.keras.Model.{apply => _, _}
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -93,7 +93,7 @@ class BERT[T: ClassTag] private (
 
   override def buildInput(inputShape: Shape):
   (Variable[T], List[Variable[T]], List[Variable[T]]) = {
-    require(inputShape.isInstanceOf[MultiShape] &&
+    Log4Error.invalidInputError(inputShape.isInstanceOf[MultiShape] &&
       inputShape.asInstanceOf[MultiShape].value.size == 4, "BERT input must be" +
       " a list of 4 tensors (consisting of input sequence, sequence positions," +
       "segment id, attention mask)")
@@ -113,7 +113,7 @@ object BERT extends KerasLayerSerializable {
     "com.intel.analytics.bigdl.dllib.keras.layers.BERT",
     BERT)
 
-  private val logger = Logger.getLogger(getClass)
+  private val logger = LogManager.getLogger(getClass)
 
   /**
    * [[BERT]] A self attention keras like layer
@@ -143,7 +143,7 @@ object BERT extends KerasLayerSerializable {
     outputAllBlock: Boolean = true,
     inputSeqLen: Int = -1
     )(implicit ev: TensorNumeric[T]): BERT[T] = {
-    require(hiddenSize > 0, "hiddenSize must be great" +
+    Log4Error.invalidInputError(hiddenSize > 0, "hiddenSize must be great" +
       "than 0 with default embedding layer")
     val len = if (inputSeqLen > 0) inputSeqLen else maxPositionLen
     val wordInput = Variable(Shape(len))
@@ -375,7 +375,7 @@ object BERT extends KerasLayerSerializable {
 
     val embLabor = bert.embeddingLayer.labor.asInstanceOf[AbstractModule[Activity, Activity, T]]
     val subModule = ModuleSerializer.serialize(SerializeContext(ModuleData(embLabor,
-      new ArrayBuffer[String](), new ArrayBuffer[String]()), context.storages,
+      Seq[String](), Seq[String]()), context.storages,
       context.storageType, _copyWeightAndBias))
     bertBuilder.addSubModules(subModule.bigDLModule)
 
@@ -383,7 +383,7 @@ object BERT extends KerasLayerSerializable {
       asInstanceOf[KerasLayer[Activity, Activity, T]].labor
     val labor = model.asInstanceOf[KerasLayer[Activity, Activity, T]].labor
     val subModule2 = ModuleSerializer.serialize(SerializeContext(ModuleData(labor,
-      new ArrayBuffer[String](), new ArrayBuffer[String]()), context.storages,
+      Seq[String](), Seq[String]()), context.storages,
       context.storageType, _copyWeightAndBias))
     bertBuilder.addSubModules(subModule2.bigDLModule)
 

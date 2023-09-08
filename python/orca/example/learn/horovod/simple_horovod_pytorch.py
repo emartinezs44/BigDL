@@ -30,7 +30,7 @@ import torch.optim as optim
 import torch.utils.data.distributed
 from torchvision import datasets, transforms
 
-from bigdl.orca.ray import RayContext
+from bigdl.orca.ray import OrcaRayContext
 from bigdl.orca import init_orca_context, stop_orca_context
 from bigdl.orca.learn.horovod import HorovodRayRunner
 
@@ -67,12 +67,6 @@ def run_horovod():
 
     # Horovod: limit # of CPU threads to be used per worker.
     torch.set_num_threads(4)
-
-    new_mirror = 'http://10.239.45.10:8081/repository/raw/analytics-zoo-data/mnist'
-    datasets.MNIST.resources = [
-    ('/'.join([new_mirror, url.split('/')[-1]]), md5)
-    for url, md5 in datasets.MNIST.resources
-    ]
 
     kwargs = {}
     train_dataset = \
@@ -212,6 +206,6 @@ if __name__ == "__main__":
     init_orca_context(cluster_mode=args.cluster_mode, cores=args.cores, num_nodes=num_nodes,
                       memory=args.memory)
 
-    runner = HorovodRayRunner(RayContext.get())
+    runner = HorovodRayRunner(OrcaRayContext.get())
     runner.run(func=run_horovod)
     stop_orca_context()

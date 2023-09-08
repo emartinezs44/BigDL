@@ -24,8 +24,7 @@ import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.serialization.Bigdl.AttrValue.ArrayValue
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.{ReflectionUtils, Table}
-import com.intel.analytics.bigdl.dllib.utils.{Shape => BigDLShape}
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, ReflectionUtils, Table, Shape => BigDLShape}
 import com.intel.analytics.bigdl.dllib.utils.serializer.converters.{DataConverter, ShapeConverter, TensorConverter}
 import com.intel.analytics.bigdl.dllib.utils.serializer.ModuleSerializer._
 import com.intel.analytics.bigdl.serialization.Bigdl._
@@ -56,10 +55,10 @@ trait ModuleSerializable extends Loadable with Savable{
     val moduleVersion = module.getVersion
     val modelVersionSplits = moduleVersion.split(".")
     val bigdlVersionSplits = bigDLVersion.split(".")
-    require(modelVersionSplits.length == bigdlVersionSplits.length,
+    Log4Error.invalidInputError(modelVersionSplits.length == bigdlVersionSplits.length,
       s"model version ${moduleVersion} has different format as BigDL version ${bigDLVersion}")
     (0 until modelVersionSplits.length).foreach(idx => {
-      require(modelVersionSplits(idx).toInt <= bigdlVersionSplits(idx).toInt,
+      Log4Error.invalidInputError(modelVersionSplits(idx).toInt <= bigdlVersionSplits(idx).toInt,
         s"bigDL version mismatch," +
           s"module version $moduleVersion," +
           s"bigdl version $bigDLVersion, you cannot use low version bigdl" +
@@ -240,8 +239,8 @@ trait ModuleSerializable extends Loadable with Savable{
                                               (implicit ev: TensorNumeric[T])
   : ModuleData[T] = {
     val model = context.bigdlModule
-    val preModules = model.getPreModulesList.asScala
-    val nextModules = model.getNextModulesList.asScala
+    val preModules = model.getPreModulesList.asScala.toSeq
+    val nextModules = model.getNextModulesList.asScala.toSeq
     val bigDLModule = ModuleData(module, preModules, nextModules)
     if (model.getName != "") {
       module.setName(model.getName)
@@ -507,7 +506,7 @@ trait ContainerSerializable extends ModuleSerializable {
       asInstanceOf[Container[Activity, Activity, T]].modules
     subModulesData.foreach(module => {
       val subModule = ModuleSerializer.serialize(SerializeContext(ModuleData(module,
-        new ArrayBuffer[String](), new ArrayBuffer[String]()), context.storages,
+        Seq[String](), Seq[String]()), context.storages,
         context.storageType, _copyWeightAndBias))
       containerBuilder.addSubModules(subModule.bigDLModule)
     })

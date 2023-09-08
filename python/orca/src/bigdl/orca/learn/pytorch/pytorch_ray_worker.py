@@ -29,12 +29,15 @@
 # limitations under the License.
 
 import ray
+import copy
 from bigdl.orca.learn.pytorch.utils import find_free_port
 from bigdl.orca.learn.pytorch.torch_runner import TorchRunner
 import torch.nn as nn
+from torch.utils.data import IterableDataset
 
 
 import logging
+from bigdl.dllib.utils.log4Error import *
 
 try:
     from collections.abc import Iterable
@@ -51,14 +54,16 @@ class PytorchRayWorker(TorchRunner):
                  loss_creator=None,
                  metrics=None,
                  scheduler_creator=None,
-                 training_operator_cls=None,
                  config=None,
-                 use_tqdm=False,
-                 scheduler_step_freq=None,
                  sync_stats=True,
                  log_level=logging.INFO):
-        super().__init__(model_creator, optimizer_creator, loss_creator, metrics, scheduler_creator,
-                         training_operator_cls, config, use_tqdm, scheduler_step_freq, sync_stats,
+        super().__init__(model_creator=model_creator,
+                         optimizer_creator=optimizer_creator,
+                         loss_creator=loss_creator,
+                         metrics=metrics,
+                         scheduler_creator=scheduler_creator,
+                         config=config,
+                         sync_stats=sync_stats,
                          log_level=log_level)
 
         self.backend = "torch-local"
@@ -72,12 +77,13 @@ class PytorchRayWorker(TorchRunner):
         self.rank = hvd.rank()
         self.size = hvd.size()
         self.setup_components_horovod()
-        self.setup_operator(self.models)
+        self.training_models = self.models
+        self.setup_operator(self.training_models)
 
-    def setup_address(self):
+    def get_node_ip_port(self):
         ip = self.get_node_ip()
         port = find_free_port()
-        return f"tcp://{ip}:{port}"
+        return ip, port
 
     def get_node_ip(self):
         """Returns the IP address of the current node."""
@@ -91,10 +97,11 @@ class PytorchRayWorker(TorchRunner):
         if not isinstance(self.models, Iterable):
             self.models = [self.models]
         else:
-            raise ValueError("only support single model for now")
+            invalidInputError(False,
+                              "only support single model for now")
 
-        assert all(isinstance(model, nn.Module) for model in self.models), (
-            "All models must be PyTorch models: {}.".format(self.models))
+        invalidInputError(all(isinstance(model, nn.Module) for model in self.models),
+                          ("All models must be PyTorch models: {}.".format(self.models)))
 
         self.logger.debug("Creating optimizer.")
         self.optimizers = self.optimizer_creator(self.given_models,
@@ -107,19 +114,29 @@ class PytorchRayWorker(TorchRunner):
                                                        named_parameters=parameters)
             self.optimizers = [self.optimizers]
         else:
-            raise ValueError("only support one optimizer for now")
+            invalidInputError(False,
+                              "only support one optimizer for now")
 
         self._create_schedulers_if_available()
         self._create_loss()
 
     def predict(self, data_creator, batch_size=32, profile=False):
         """Evaluates the model on the validation data set."""
-        config = self.config.copy()
+        config = copy.copy(self.config)
         self._toggle_profiling(profile=profile)
 
         shards_ref = data_creator(config, batch_size)
-        if not isinstance(shards_ref, ray.ObjectID):
-            raise ValueError("Only xshards is supported for predict")
-
-        partition = ray.get(shards_ref)
-        return super().predict(partition=partition, batch_size=batch_size, profile=profile)
+        if isinstance(shards_ref, IterableDataset):
+            pred_stats = super().predict(partition=shards_ref, batch_size=batch_size,
+                                         profile=profile)
+            for pred_stat in pred_stats:
+                pred_stat.update(pred_stat)
+            worker_stats = pred_stat["prediction"]
+        else:
+            if not isinstance(shards_ref, ray.ObjectID):
+                invalidInputError(False,
+                                  "Only xshards and Ray Dataset is supported for predict")
+            partition = ray.get(shards_ref)
+            worker_stats = super().predict(partition=partition, batch_size=batch_size,
+                                           profile=profile)
+        return worker_stats

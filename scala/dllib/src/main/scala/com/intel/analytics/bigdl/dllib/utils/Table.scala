@@ -136,8 +136,8 @@ class Table private[bigdl](
     }
     this.state.keys.foreach(key => {
       if (this.state(key).isInstanceOf[Array[_]] && other.state(key).isInstanceOf[Array[_]]) {
-        return (this.state(key).asInstanceOf[Array[_]].deep ==
-          other.state(key).asInstanceOf[Array[_]].deep)
+        return this.state(key).asInstanceOf[Array[_]].sameElements(
+          other.state(key).asInstanceOf[Array[_]])
       } else if (this.state(key) != other.state(key)) {
         return false
       }
@@ -158,7 +158,7 @@ class Table private[bigdl](
   }
 
   def remove[T](index: Int): Option[T] = {
-    require(index > 0)
+    Log4Error.invalidInputError(index > 0, s"index should be positive, but is $index")
 
     if (topIndex >= index) {
       var i = index
@@ -195,7 +195,7 @@ class Table private[bigdl](
   def insert[T](obj: T): this.type = update(topIndex + 1, obj)
 
   def insert[T](index: Int, obj: T): this.type = {
-    require(index > 0)
+    Log4Error.invalidInputError(index > 0, s"index should be positive, but is $index")
 
     if (topIndex >= index) {
       var i = topIndex + 1
@@ -214,7 +214,8 @@ class Table private[bigdl](
 
   def add(other: Table): this.type = {
     for (s <- other.state.keys) {
-      require(s.isInstanceOf[String])
+      Log4Error.invalidInputError(s.isInstanceOf[String],
+        "key of the Table is expected to be String")
       this.state(s) = other(s)
     }
     this
@@ -306,16 +307,19 @@ class Table private[bigdl](
         this(i + 1).asInstanceOf[D]
       } catch {
         case e: NoSuchElementException =>
-          throw new UnsupportedOperationException("toSeq requires the key of this table are" +
-            " all the integers between 1 to this.length()", e)
+          Log4Error.unKnowExceptionError(false, s"toSeq requires the key of this table are" +
+            " all the integers between 1 to this.length()", cause = e)
+          0.asInstanceOf[D]
       }
 
     }
   }
 
   override def toTensor[D]
-  (implicit ev: TensorNumeric[D]): Tensor[D] =
-    throw new IllegalArgumentException("Table cannot be cast to Tensor")
+  (implicit ev: TensorNumeric[D]): Tensor[D] = {
+    Log4Error.invalidOperationError(false, "Table cannot be cast to Tensor")
+    null
+  }
 
   override def toTable: Table = this
 }

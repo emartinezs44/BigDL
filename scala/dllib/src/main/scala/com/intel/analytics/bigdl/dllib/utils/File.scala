@@ -16,12 +16,14 @@
 
 package com.intel.analytics.bigdl.dllib.utils
 
-import java.io._
-import java.net.URI
-
+import org.apache.commons.io.serialization.ValidatingObjectInputStream
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
+
+import java.io._
+import java.net.URI
+import scala.reflect.{ClassTag, classTag}
 
 object File {
   private[bigdl] val hdfsPrefix: String = "hdfs:"
@@ -99,7 +101,7 @@ object File {
   private[bigdl] def getFileSystem(fileName: String): org.apache.hadoop.fs.FileSystem = {
     val src = new Path(fileName)
     val fs = src.getFileSystem(File.getConfiguration(fileName))
-    require(fs.exists(src), src + " does not exists")
+    Log4Error.invalidInputError(fs.exists(src), src + " does not exists")
     fs
   }
 
@@ -118,7 +120,7 @@ object File {
    * @param overwrite
    */
   def saveToHdfs(obj: Serializable, fileName: String, overwrite: Boolean): Unit = {
-    require(fileName.startsWith(File.hdfsPrefix),
+    Log4Error.invalidInputError(fileName.startsWith(File.hdfsPrefix),
       s"hdfs path ${fileName} should have prefix 'hdfs:'")
     val dest = new Path(fileName)
     var fs: FileSystem = null
@@ -130,7 +132,7 @@ object File {
         if (overwrite) {
           fs.delete(dest, true)
         } else {
-          throw new RuntimeException(s"file $fileName already exists")
+          Log4Error.invalidInputError(false, s"file $fileName already exists")
         }
       }
       out = fs.create(dest)
@@ -150,11 +152,12 @@ object File {
    *
    * @param fileName
    */
-  def loadFromHdfs[T](fileName: String): T = {
+  def loadFromHdfs[T: ClassTag](fileName: String): T = {
     val byteArrayOut = readHdfsByte(fileName)
-    var objFile: ObjectInputStream = null
+    var objFile: ValidatingObjectInputStream = null
     try {
-      objFile = new ObjectInputStream(new ByteArrayInputStream(byteArrayOut))
+      objFile = new ValidatingObjectInputStream(new ByteArrayInputStream(byteArrayOut))
+      objFile.accept(classTag[T].runtimeClass)
       val result = objFile.readObject()
       objFile.close()
       result.asInstanceOf[T]
@@ -244,8 +247,8 @@ private[bigdl] class FileReader(fileName: String) {
    * @return
    */
   def open(): InputStream = {
-    require(inputStream == null, s"File $fileName has been opened already.")
-    require(fs.exists(path), s"$fileName is empty!")
+    Log4Error.invalidInputError(inputStream == null, s"File $fileName has been opened already.")
+    Log4Error.invalidInputError(fs.exists(path), s"$fileName is empty!")
     inputStream = fs.open(path)
     inputStream
   }
@@ -281,9 +284,9 @@ private[bigdl] class FileWriter(fileName: String) {
    * @return
    */
   def create(overwrite: Boolean = false): OutputStream = {
-    require(outputStream == null, s"File $fileName has been created already.")
+    Log4Error.invalidInputError(outputStream == null, s"File $fileName has been created already.")
     if (!overwrite) {
-      require(!fs.exists(path), s"$fileName already exists!")
+      Log4Error.invalidInputError(!fs.exists(path), s"$fileName already exists!")
     }
     outputStream = fs.create(path, overwrite)
     outputStream

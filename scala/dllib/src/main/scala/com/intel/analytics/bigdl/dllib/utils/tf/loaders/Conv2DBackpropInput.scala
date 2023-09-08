@@ -26,6 +26,7 @@ import org.tensorflow.framework.NodeDef
 import scala.reflect.ClassTag
 import Utils._
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 import com.intel.analytics.bigdl.dllib.utils.tf.Context
 
 class Conv2DBackpropInput extends TensorflowOpsLoader {
@@ -40,23 +41,23 @@ class Conv2DBackpropInput extends TensorflowOpsLoader {
         (0, 0)
       }
     val strideList = getIntList(attributes, "strides")
-    require(strideList.head == 1, s"not support strides on batch")
+    Log4Error.invalidInputError(strideList.head == 1, s"not support strides on batch")
 
     val format = getString(attributes, "data_format")
     val deconv = format match {
       case "NHWC" =>
-        require(strideList(3) == 1, s"not support strides on depth")
+        Log4Error.invalidInputError(strideList(3) == 1, s"not support strides on depth")
         val strideW = strideList(1)
         val strideH = strideList(2)
         Conv2DTranspose[T](strideW, strideH, pW, pH, DataFormat.NHWC)
 
       case "NCHW" =>
-        require(strideList(1) == 1, s"not support strides on depth")
+        Log4Error.invalidInputError(strideList(1) == 1, s"not support strides on depth")
         val strideW = strideList(2)
         val strideH = strideList(3)
         Conv2DTranspose[T](strideW, strideH, pW, pH, DataFormat.NCHW)
       case _ =>
-        throw new IllegalArgumentException(s"not supported data format: $format")
+        Log4Error.invalidOperationError(false, s"not supported data format: $format")
     }
     deconv.asInstanceOf[AbstractModule[Activity, Activity, T]]
   }

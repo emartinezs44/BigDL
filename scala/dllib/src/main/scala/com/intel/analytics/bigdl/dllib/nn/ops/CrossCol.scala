@@ -17,7 +17,7 @@ package com.intel.analytics.bigdl.dllib.nn.ops
 
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.Table
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Table}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -67,7 +67,8 @@ class CrossCol[T: ClassTag](
   override def updateOutput(input: Table): Tensor[Int] = {
 
     val tensorNum = input.length()
-    require(tensorNum>=2, "the input table must contain more than one tensor")
+    Log4Error.invalidInputError(tensorNum>=2,
+      "the input table must contain more than one tensor")
     val batchSize = input[Tensor[String]](1).size(dim = 1)
 
     val indices0 = new ArrayBuffer[Int]()
@@ -120,9 +121,9 @@ class CrossCol[T: ClassTag](
     val stack = mutable.Stack[Array[String]]()
     stack.pushAll(input(0).map(Array(_)))
 
-    val mkBuilder = (a: Array[String]) => mutable.ArrayBuilder.make[String]() ++= a
+    val mkBuilder = (a: Array[String]) => mutable.ArrayBuilder.make[String].++=(a)
 
-    val result = mutable.ArrayBuilder.make[Array[String]]()
+    val result = mutable.ArrayBuilder.make[Array[String]]
 
     while (stack.nonEmpty) {
       val current = stack.pop()
@@ -133,7 +134,7 @@ class CrossCol[T: ClassTag](
       if (current.length == input.length - 1) {
         result ++= children
       } else {
-        stack.pushAll(children)
+        stack.pushAll(children.toIterable)
       }
     }
 

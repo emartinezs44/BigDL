@@ -13,27 +13,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 from pyspark.sql import DataFrame
+import tensorflow as tf
 
 from bigdl.dllib.optim.optimizer import MaxEpoch
-
-from bigdl.orca.tfpark.tf_dataset import _standardize_keras_target_data
+from bigdl.dllib.utils import nest
+from bigdl.dllib.utils.log4Error import invalidInputError
 from bigdl.dllib.utils.file_utils import enable_multi_fs_load, enable_multi_fs_load_static, \
     enable_multi_fs_save
+from bigdl.dllib.utils.tf import save_tf_checkpoint, load_tf_checkpoint
 from bigdl.orca import OrcaContext
-from bigdl.orca.data.tf.data import Dataset, TFDataDataset2
-from bigdl.orca.data import SparkXShards
+from bigdl.orca.data.shard import SparkXShards
+from bigdl.orca.data.tf.data import Dataset
+from bigdl.orca.data.tf.tf1_data import TF1Dataset
+from bigdl.orca.learn.spark_estimator import Estimator as SparkEstimator
 from bigdl.orca.learn.tf.utils import *
 from bigdl.orca.learn.trigger import Trigger
 from bigdl.orca.learn.utils import find_latest_checkpoint, convert_predict_rdd_to_xshard, \
     convert_predict_rdd_to_dataframe, process_xshards_of_pandas_dataframe
-from bigdl.orca.tfpark import KerasModel
-from bigdl.orca.tfpark import TFOptimizer, TFNet, ZooOptimizer
+from bigdl.orca.tfpark import KerasModel, TFOptimizer, TFNet, ZooOptimizer
+from bigdl.orca.tfpark.tf_dataset import (
+    _standardize_keras_target_data,
+    DataFrameDataset,
+    TFDataDataset,
+    TFNdarrayDataset,
+)
 from bigdl.orca.tfpark.tf_optimizer import StatelessMetric
 from bigdl.orca.tfpark.utils import evaluate_metrics
-from bigdl.dllib.utils import nest
-from bigdl.dllib.utils.tf import save_tf_checkpoint, load_tf_checkpoint
-from bigdl.orca.learn.spark_estimator import Estimator as SparkEstimator
+
+from typing import TYPE_CHECKING, List, Optional, Union, Tuple, Any, Dict
+if TYPE_CHECKING:
+    from tensorflow import Tensor, Session, Variable
+    from tensorflow.core.protobuf.config_pb2 import ConfigProto
+    from tensorflow.python.keras.engine.training import Model
+    from bigdl.orca.learn.metrics import Metric
+    from bigdl.orca.learn.optimizers import Optimizer
 
 
 class Estimator(SparkEstimator):
@@ -64,7 +79,7 @@ class Estimator(SparkEstimator):
         :param auto_shard_files: whether to automatically detect if the dataset is file-based and
                and apply sharding on files, otherwise sharding on records. Default is False.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def predict(self, data, batch_size=4, feature_cols=None, auto_shard_files=False):
         """
@@ -86,7 +101,7 @@ class Estimator(SparkEstimator):
                  original columns plus 'prediction' column. The 'prediction' column can be
                  FloatType, VectorUDT or Array of VectorUDT depending on model outputs shape.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def evaluate(self, data, batch_size=32, feature_cols=None, label_cols=None,
                  auto_shard_files=False):
@@ -107,7 +122,7 @@ class Estimator(SparkEstimator):
                and apply sharding on files, otherwise sharding on records. Default is False.
         :return: evaluation result as a dictionary of {'metric name': metric value}
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def get_model(self):
         """
@@ -115,7 +130,7 @@ class Estimator(SparkEstimator):
 
         :return: Trained model
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def save(self, model_path):
         """
@@ -124,7 +139,7 @@ class Estimator(SparkEstimator):
         :param model_path: path to save the trained model.
         :return:
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def load(self, model_path):
         """
@@ -133,7 +148,7 @@ class Estimator(SparkEstimator):
         :param model_path: Path to the existing model.
         :return:
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def clear_gradient_clipping(self):
         """
@@ -142,7 +157,7 @@ class Estimator(SparkEstimator):
 
         :return:
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def set_constant_gradient_clipping(self, min, max):
         """
@@ -153,7 +168,7 @@ class Estimator(SparkEstimator):
         :param max: The maximum value to clip by.
         :return:
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def set_l2_norm_gradient_clipping(self, clip_norm):
         """
@@ -163,9 +178,9 @@ class Estimator(SparkEstimator):
         :param clip_norm: Gradient L2-Norm threshold.
         :return:
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
-    def get_train_summary(self, tag=None):
+    def get_train_summary(self, tag: Optional[str]=None) -> Optional[List[List[float]]]:
         """
         Get the scalar from model train summary.
 
@@ -174,12 +189,12 @@ class Estimator(SparkEstimator):
 
         :param tag: The string variable represents the scalar wanted
         """
-        if self.tf_optimizer:
+        if hasattr(self, "tf_optimizer") and self.tf_optimizer:
             return self.tf_optimizer.estimator.get_train_summary(tag)
 
         return None
 
-    def get_validation_summary(self, tag=None):
+    def get_validation_summary(self, tag: Optional[str]=None) -> Optional[List[List[float]]]:
         """
         Get the scalar from model validation summary.
 
@@ -208,7 +223,7 @@ class Estimator(SparkEstimator):
 
         :param tag: The string variable represents the scalar wanted
         """
-        if self.tf_optimizer:
+        if hasattr(self, "tf_optimizer") and self.tf_optimizer:
             for val_method in self.tf_optimizer.tf_model.val_methods:
                 if isinstance(val_method, StatelessMetric):
                     if tag == val_method.name:
@@ -226,7 +241,7 @@ class Estimator(SparkEstimator):
 
         :param path: tensorflow checkpoint path.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def load_tf_checkpoint(self, path):
         """
@@ -234,7 +249,7 @@ class Estimator(SparkEstimator):
 
         :param path: tensorflow checkpoint path.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def save_keras_model(self, path, overwrite=True):
         """
@@ -243,7 +258,7 @@ class Estimator(SparkEstimator):
         :param path: keras model save path.
         :param overwrite: Whether to silently overwrite any existing file at the target location.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def save_keras_weights(self, filepath, overwrite=True, save_format=None):
         """
@@ -255,7 +270,7 @@ class Estimator(SparkEstimator):
                '.keras' will default to HDF5 if `save_format` is `None`. Otherwise
                `None` defaults to 'tf'.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def load_keras_weights(self, filepath, by_name=False):
         """
@@ -266,9 +281,9 @@ class Estimator(SparkEstimator):
                order. Only topological loading is supported for weight files in
                TensorFlow format.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
-    def load_orca_checkpoint(self, path, version=None):
+    def load_orca_checkpoint(self, path: str, version: Optional[int]=None) -> None:
         """
         Load Orca checkpoint. To load a specific checkpoint, please provide a `version`.
         If `version` is None, then the latest checkpoint will be loaded.
@@ -281,18 +296,30 @@ class Estimator(SparkEstimator):
         if version is None:
             path, _, version = find_latest_checkpoint(path, model_type="tf")
             if path is None:
-                raise ValueError("Cannot find tf checkpoint, please check your checkpoint"
-                                 " path.")
+                invalidInputError(False,
+                                  "Cannot find tf checkpoint, please check your checkpoint"
+                                  " path.")
 
         self.load_checkpoint = True
         self.checkpoint_path = path
         self.checkpoint_version = version
 
     @staticmethod
-    def from_graph(*, inputs, outputs=None,
-                   labels=None, loss=None, optimizer=None,
-                   metrics=None, clip_norm=None, clip_value=None,
-                   updates=None, sess=None, model_dir=None, backend="bigdl"):
+    def from_graph(
+        *,
+        inputs: "Tensor",
+        outputs: Optional["Tensor"]=None,
+        labels: Optional["Tensor"]=None,
+        loss: Optional["Tensor"]=None,
+        optimizer: Optional["Optimizer"]=None,
+        metrics: Optional["Metric"]=None,
+        clip_norm: Optional[float]=None,
+        clip_value: Union[float, Tuple[float, float], None]=None,
+        updates: Optional[List["Variable"]]=None,
+        sess: Optional["Session"]=None,
+        model_dir: Optional[str]=None,
+        backend: str="bigdl"
+    ) -> SparkEstimator:
         """
         Create an Estimator for tesorflow graph.
 
@@ -318,7 +345,7 @@ class Estimator(SparkEstimator):
         :param backend: backend for estimator. Now it only can be "bigdl".
         :return: an Estimator object.
         """
-        assert backend == "bigdl", "only bigdl backend is supported for now"
+        invalidInputError(backend == "bigdl", "only bigdl backend is supported for now")
         return TensorFlowEstimator(inputs=inputs,
                                    outputs=outputs,
                                    labels=labels,
@@ -333,7 +360,13 @@ class Estimator(SparkEstimator):
                                    )
 
     @staticmethod
-    def from_keras(keras_model, metrics=None, model_dir=None, optimizer=None, backend="bigdl"):
+    def from_keras(
+        keras_model: "Model",
+        metrics: Optional["Metric"] = None,
+        model_dir: Optional[str] = None,
+        optimizer: Optional["Optimizer"] = None,
+        backend: str = "bigdl"
+    ) -> SparkEstimator:
         """
         Create an Estimator from a tensorflow.keras model. The model must be compiled.
 
@@ -345,12 +378,12 @@ class Estimator(SparkEstimator):
         :param backend: backend for estimator. Now it only can be "bigdl".
         :return: an Estimator object.
         """
-        assert backend == "bigdl", "only bigdl backend is supported for now"
+        invalidInputError(backend == "bigdl", "only bigdl backend is supported for now")
         return KerasEstimator(keras_model, metrics, model_dir, optimizer)
 
     @staticmethod
     @enable_multi_fs_load_static
-    def load_keras_model(path):
+    def load_keras_model(path: str) -> SparkEstimator:
         """
         Create Estimator by loading an existing keras model (with weights) from HDF5 file.
 
@@ -362,29 +395,40 @@ class Estimator(SparkEstimator):
         return Estimator.from_keras(keras_model=model)
 
 
-def is_tf_data_dataset(data):
+def is_tf_data_dataset(data: Any) -> bool:
     is_dataset = isinstance(data, tf.data.Dataset)
     is_dataset_v2 = isinstance(data, tf.python.data.ops.dataset_ops.DatasetV2)
     return is_dataset or is_dataset_v2
 
 
-def to_dataset(data, batch_size, batch_per_thread, validation_data,
-               feature_cols, label_cols, hard_code_batch_size,
-               sequential_order, shuffle, auto_shard_files, memory_type="DRAM"):
+def to_dataset(
+    data: Union["SparkXShards", "Dataset", "DataFrame", "tf.data.Dataset"],
+    batch_size: int,
+    batch_per_thread: int,
+    validation_data: Union["SparkXShards", "Dataset", "DataFrame", "tf.data.Dataset", None],
+    feature_cols: Optional[List[str]],
+    label_cols: Optional[List[str]],
+    hard_code_batch_size: bool,
+    sequential_order: bool,
+    shuffle: bool,
+    auto_shard_files: bool,
+    memory_type: str="DRAM"
+) -> Union["TFNdarrayDataset", "TF1Dataset", "DataFrameDataset", "TFDataDataset"]:
     # todo wrap argument into kwargs
     if validation_data:
         if isinstance(data, SparkXShards):
-            assert isinstance(validation_data, SparkXShards), \
-                "train data and validation data should be both SparkXShards"
+            invalidInputError(isinstance(validation_data, SparkXShards),
+                              "train data and validation data should be both SparkXShards")
         if isinstance(data, Dataset):
-            assert isinstance(validation_data, Dataset), \
-                "train data and validation data should be both orca.data.tf.Dataset"
+            invalidInputError(isinstance(validation_data, Dataset),
+                              "train data and validation data should be both"
+                              " orca.data.tf.Dataset")
         if isinstance(data, DataFrame):
-            assert isinstance(validation_data, DataFrame), \
-                "train data and validation data should be both Spark DataFrame"
+            invalidInputError(isinstance(validation_data, DataFrame),
+                              "train data and validation data should be both Spark DataFrame")
         if isinstance(data, tf.data.Dataset):
-            assert isinstance(validation_data, tf.data.Dataset), \
-                "train data and validation data should be both tf.data.Dataset"
+            invalidInputError(isinstance(validation_data, tf.data.Dataset),
+                              "train data and validation data should be both tf.data.Dataset")
 
     if isinstance(data, SparkXShards):
         dataset = xshards_to_tf_dataset(data,
@@ -396,9 +440,9 @@ def to_dataset(data, batch_size, batch_per_thread, validation_data,
                                         sequential_order=sequential_order,
                                         shuffle=shuffle)
     elif isinstance(data, Dataset):
-        dataset = TFDataDataset2(data, batch_size=batch_size,
-                                 batch_per_thread=batch_per_thread,
-                                 validation_dataset=validation_data)
+        dataset = TF1Dataset(data, batch_size=batch_size,
+                             batch_per_thread=batch_per_thread,
+                             validation_dataset=validation_data)
     elif isinstance(data, DataFrame):
         dataset = TFDataset.from_dataframe(data, feature_cols, label_cols,
                                            batch_size,
@@ -418,16 +462,35 @@ def to_dataset(data, batch_size, batch_per_thread, validation_data,
                                                  sequential_order,
                                                  shuffle, auto_shard_files=auto_shard_files)
     else:
-        raise ValueError("data must be SparkXShards or orca.data.tf.Dataset or "
-                         "Spark DataFrame or tf.data.Dataset")
+        invalidInputError(False,
+                          "data must be SparkXShards or orca.data.tf.Dataset or "
+                          "Spark DataFrame or tf.data.Dataset")
 
     return dataset
 
 
+def save_model_dir(model_dir: str) -> str:
+    if model_dir.startswith("dbfs:/"):
+        model_dir = "/dbfs/" + model_dir[len("dbfs:/"):]
+    return model_dir
+
+
 class TensorFlowEstimator(Estimator):
-    def __init__(self, *, inputs, outputs, labels, loss,
-                 optimizer, clip_norm, clip_value,
-                 metrics, updates, sess, model_dir):
+    def __init__(
+        self,
+        *,
+        inputs: "Tensor",
+        outputs: Optional["Tensor"],
+        labels: Optional["Tensor"],
+        loss: Optional["Tensor"],
+        optimizer: Optional["Optimizer"],
+        clip_norm: Optional[float],
+        clip_value: Union[float, Tuple[float, float], None],
+        metrics: Optional["Metric"],
+        updates: Optional[List["Variables"]],
+        sess: Optional["Session"],
+        model_dir: Optional[str]
+    ) -> None:
         self.inputs = inputs
         self.outputs = outputs
         self.labels = labels
@@ -442,9 +505,9 @@ class TensorFlowEstimator(Estimator):
                 self.optimizer = optimizer.get_optimizer()
                 self.use_bigdl_optim = True
             else:
-                assert isinstance(optimizer, tf.train.Optimizer), \
-                    "optimizer is of type {}, ".format(type(optimizer)) + \
-                    "it should be an instance of tf.train.Optimizer"
+                invalidInputError(isinstance(optimizer, tf.train.Optimizer),
+                                  f"optimizer is of type {str(type(optimizer))},"
+                                  f" it should be an instance of tf.train.Optimizer")
                 self.optimizer = ZooOptimizer(optimizer)
                 if clip_norm or clip_value:
                     gvs = self.optimizer.compute_gradients(self.loss)
@@ -452,16 +515,19 @@ class TensorFlowEstimator(Estimator):
                         gvs = [(tf.clip_by_norm(g_v[0], clip_norm), g_v[1]) for g_v in gvs]
                     if clip_value:
                         if isinstance(clip_value, tuple):
-                            assert len(clip_value) == 2 and clip_value[0] < clip_value[1], \
-                                "clip value should be (clip_min, clip_max)"
+                            invalidInputError(
+                                len(clip_value) == 2 and clip_value[0] < clip_value[1],
+                                "clip value should be (clip_min, clip_max)")
                             gvs = [(tf.clip_by_value(g_v[0], clip_value[0], clip_value[1]), g_v[1])
                                    for g_v in gvs]
                         if isinstance(clip_value, (int, float)):
-                            assert clip_value > 0, "clip value should be larger than 0"
+                            invalidInputError(clip_value > 0,
+                                              "clip value should be larger than 0")
                             gvs = [(tf.clip_by_value(g_v[0], -clip_value, clip_value), g_v[1])
                                    for g_v in gvs]
                         else:
-                            raise Exception("clip_value should be a tuple or one number")
+                            invalidInputError(False,
+                                              "clip_value should be a tuple or one number")
                     self.train_op = self.optimizer.apply_gradients(gvs)
                 else:
                     self.train_op = self.optimizer.minimize(self.loss)
@@ -481,17 +547,19 @@ class TensorFlowEstimator(Estimator):
         self.log_dir = None
         self.app_name = None
 
-    def fit(self, data,
-            epochs=1,
-            batch_size=32,
-            feature_cols=None,
-            label_cols=None,
-            validation_data=None,
-            session_config=None,
-            checkpoint_trigger=None,
-            auto_shard_files=False,
-            feed_dict=None
-            ):
+    def fit(
+        self,
+        data: Union["SparkXShards", "DataFrame", "tf.data.Dataset"],
+        epochs: int=1,
+        batch_size: int=32,
+        feature_cols: Optional[List[str]]=None,
+        label_cols: Optional[List[str]]=None,
+        validation_data: Optional[Any]=None,
+        session_config: Optional["ConfigProto"]=None,
+        checkpoint_trigger: Optional["Trigger"]=None,
+        auto_shard_files: bool=False,
+        feed_dict: Optional[Dict["Tensor", Tuple["Tensor", "Tensor"]]]=None
+    ) -> Estimator:
         """
         Train this graph model with train data.
 
@@ -521,25 +589,25 @@ class TensorFlowEstimator(Estimator):
                num_iterations),etc.
         """
 
-        assert self.labels is not None, \
-            "labels is None; it should not be None in training"
-        assert self.loss is not None, \
-            "loss is None; it should not be None in training"
-        assert self.optimizer is not None, \
-            "optimizer is None; it should not be None in training"
+        invalidInputError(self.labels is not None,
+                          "labels is None; it should not be None in training")
+        invalidInputError(self.loss is not None,
+                          "loss is None; it should not be None in training")
+        invalidInputError(self.optimizer is not None,
+                          "optimizer is None; it should not be None in training")
 
         if isinstance(data, DataFrame):
-            assert feature_cols is not None, \
-                "feature columns is None; it should not be None in training"
-            assert label_cols is not None, \
-                "label columns is None; it should not be None in training"
+            invalidInputError(feature_cols is not None,
+                              "feature columns is None; it should not be None in training")
+            invalidInputError(label_cols is not None,
+                              "label columns is None; it should not be None in training")
 
         if isinstance(data, SparkXShards):
             if data._get_class_name() == 'pandas.core.frame.DataFrame':
-                assert feature_cols is not None, \
-                    "feature columns is None; it should not be None in training"
-                assert label_cols is not None, \
-                    "label columns is None; it should not be None in training"
+                invalidInputError(feature_cols is not None,
+                                  "feature columns is None; it should not be None in training")
+                invalidInputError(label_cols is not None,
+                                  "label columns is None; it should not be None in training")
                 data, validation_data = process_xshards_of_pandas_dataframe(data, feature_cols,
                                                                             label_cols,
                                                                             validation_data, "fit")
@@ -593,10 +661,13 @@ class TensorFlowEstimator(Estimator):
                                    checkpoint_trigger=checkpoint_trigger)
         return self
 
-    def predict(self, data, batch_size=4,
-                feature_cols=None,
-                auto_shard_files=False,
-                ):
+    def predict(
+        self,
+        data: Union["SparkXShards", "DataFrame"],
+        batch_size: int=4,
+        feature_cols: Optional[List[str]]=None,
+        auto_shard_files: bool=False
+    ) -> Union["SparkXShards", "DataFrame"]:
         """
         Predict input data
 
@@ -617,19 +688,18 @@ class TensorFlowEstimator(Estimator):
                  FloatType, VectorUDT or Array of VectorUDT depending on model outputs shape.
         """
 
-        assert self.outputs is not None, \
-            "output is None, it should not be None in prediction"
+        invalidInputError(self.outputs is not None,
+                          "output is None, it should not be None in prediction")
         if isinstance(data, DataFrame):
-            assert feature_cols is not None, \
-                "feature columns is None; it should not be None in prediction"
+            invalidInputError(feature_cols is not None,
+                              "feature columns is None; it should not be None in prediction")
         if isinstance(data, SparkXShards):
             if data._get_class_name() == 'pandas.core.frame.DataFrame':
-                assert feature_cols is not None, \
-                    "feature columns is None; it should not be None in prediction"
+                invalidInputError(feature_cols is not None,
+                                  "feature columns is None; it should not be None in prediction")
                 data = process_xshards_of_pandas_dataframe(data, feature_cols)
-
-        assert not is_tf_data_dataset(data), "tf.data.Dataset currently cannot be used for" \
-                                             "estimator prediction"
+        invalidInputError(not is_tf_data_dataset(data),
+                          "tf.data.Dataset currently cannot be used for estimator prediction")
 
         dataset = to_dataset(data, batch_size=-1, batch_per_thread=batch_size,
                              validation_data=None,
@@ -651,11 +721,14 @@ class TensorFlowEstimator(Estimator):
         else:
             return predicted_rdd
 
-    def evaluate(self, data, batch_size=32,
-                 feature_cols=None,
-                 label_cols=None,
-                 auto_shard_files=False,
-                 ):
+    def evaluate(
+        self,
+        data: Union["SparkXShards", "DataFrame", "tf.data.Dataset"],
+        batch_size: int=32,
+        feature_cols: Optional[List[str]]=None,
+        label_cols: Optional[List[str]]=None,
+        auto_shard_files: bool=False
+    ) -> Dict[str, float]:
         """
         Evaluate model.
 
@@ -674,21 +747,21 @@ class TensorFlowEstimator(Estimator):
         :return: evaluation result as a dictionary of {'metric name': metric value}
         """
 
-        assert self.metrics is not None, \
-            "metrics is None, it should not be None in evaluate"
+        invalidInputError(self.metrics is not None,
+                          "metrics is None, it should not be None in evaluate")
 
         if isinstance(data, DataFrame):
-            assert feature_cols is not None, \
-                "feature columns is None; it should not be None in evaluation"
-            assert label_cols is not None, \
-                "label columns is None; it should not be None in evaluation"
+            invalidInputError(feature_cols is not None,
+                              "feature columns is None; it should not be None in evaluation")
+            invalidInputError(label_cols is not None,
+                              "label columns is None; it should not be None in evaluation")
 
         if isinstance(data, SparkXShards):
             if data._get_class_name() == 'pandas.core.frame.DataFrame':
-                assert feature_cols is not None, \
-                    "feature columns is None; it should not be None in evaluation"
-                assert label_cols is not None, \
-                    "label columns is None; it should not be None in evaluation"
+                invalidInputError(feature_cols is not None,
+                                  "feature columns is None; it should not be None in evaluation")
+                invalidInputError(label_cols is not None,
+                                  "label columns is None; it should not be None in evaluation")
                 data = process_xshards_of_pandas_dataframe(data, feature_cols, label_cols)
 
         dataset = to_dataset(data, batch_size=-1, batch_per_thread=batch_size,
@@ -707,7 +780,7 @@ class TensorFlowEstimator(Estimator):
                                 sess=self.sess,
                                 dataset=dataset, metrics=self.metrics)
 
-    def save_tf_checkpoint(self, path):
+    def save_tf_checkpoint(self, path: str) -> None:
         """
         Save tensorflow checkpoint in this estimator.
 
@@ -715,7 +788,7 @@ class TensorFlowEstimator(Estimator):
         """
         save_tf_checkpoint(self.sess, path)
 
-    def load_tf_checkpoint(self, path):
+    def load_tf_checkpoint(self, path: str) -> None:
         """
         Load tensorflow checkpoint to this estimator.
         :param path: tensorflow checkpoint path.
@@ -726,9 +799,9 @@ class TensorFlowEstimator(Estimator):
         """
         Get_model is not supported in tensorflow graph estimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
-    def save(self, model_path):
+    def save(self, model_path: str) -> None:
         """
         Save model (tensorflow checkpoint) to model_path
 
@@ -737,7 +810,7 @@ class TensorFlowEstimator(Estimator):
         """
         self.save_tf_checkpoint(model_path)
 
-    def load(self, model_path):
+    def load(self, model_path: str) -> None:
         """
         Load existing model (tensorflow checkpoint) from model_path
         :param model_path: Path to the existing tensorflow checkpoint.
@@ -749,23 +822,23 @@ class TensorFlowEstimator(Estimator):
         """
         Clear gradient clipping is not supported in TensorFlowEstimator.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def set_constant_gradient_clipping(self, min, max):
         """
         Set constant gradient clipping is not supported in TensorFlowEstimator. Please pass the
         clip_value to Estimator.from_graph.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def set_l2_norm_gradient_clipping(self, clip_norm):
         """
         Set l2 norm gradient clipping is not supported in TensorFlowEstimator. Please pass the
         clip_norm to Estimator.from_graph.
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """
         Close TensorFlow session and release resources.
         """
@@ -773,7 +846,15 @@ class TensorFlowEstimator(Estimator):
 
 
 class KerasEstimator(Estimator):
-    def __init__(self, keras_model, metrics, model_dir, optimizer):
+    def __init__(
+        self,
+        keras_model: "Model",
+        metrics: Optional["Metric"],
+        model_dir: Optional[str],
+        optimizer: Optional["Optimizer"]
+    ) -> None:
+        if model_dir and model_dir.startswith("dbfs:/"):
+            model_dir = save_model_dir(model_dir)
         self.model = KerasModel(keras_model, model_dir)
         self.load_checkpoint = False
         self.metrics = metrics
@@ -788,16 +869,18 @@ class KerasEstimator(Estimator):
         self.clip_min = None
         self.clip_max = None
 
-    def fit(self, data,
-            epochs=1,
-            batch_size=32,
-            feature_cols=None,
-            label_cols=None,
-            validation_data=None,
-            session_config=None,
-            checkpoint_trigger=None,
-            auto_shard_files=True
-            ):
+    def fit(
+        self,
+        data: Union["SparkXShards", "DataFrame", "tf.data.Dataset"],
+        epochs: int=1,
+        batch_size: int=32,
+        feature_cols: Optional[List[str]]=None,
+        label_cols: Optional[List[str]]=None,
+        validation_data: Optional[Union["SparkXShards", "DataFrame", "tf.data.Dataset"]]=None,
+        session_config: Optional["ConfigProto"]=None,
+        checkpoint_trigger: Optional[Trigger]=None,
+        auto_shard_files: bool=False
+    ) -> Estimator:
         """
         Train this keras model with train data.
 
@@ -825,30 +908,31 @@ class KerasEstimator(Estimator):
         """
 
         if isinstance(data, DataFrame):
-            assert feature_cols is not None, \
-                "feature columns is None; it should not be None in training"
-            assert label_cols is not None, \
-                "label columns is None; it should not be None in training"
+            invalidInputError(feature_cols is not None,
+                              "feature columns is None; it should not be None in training")
+            invalidInputError(label_cols is not None,
+                              "label columns is None; it should not be None in training")
 
         if isinstance(data, tf.data.Dataset):
-            assert isinstance(data.element_spec, tuple), \
-                "If data is tf.data.Dataset, each element should be " \
-                "(feature tensors, label tensor), where each feature/label tensor can be " \
-                "either a single tensor or a tuple of tensors"
+            invalidInputError(isinstance(data.element_spec, tuple),
+                              "If data is tf.data.Dataset, each element should be"
+                              " (feature tensors, label tensor), where each feature/label"
+                              " tensor can be either a single tensor or a tuple of tensors")
             if validation_data is not None:
-                assert isinstance(validation_data, tf.data.Dataset), \
-                    "train data and validation data should be both tf.data.Dataset"
-                assert isinstance(validation_data.element_spec, tuple), \
-                    "If validation_data is tf.data.Dataset, each element should be " \
-                    "(feature tensors, label tensor), where each feature/label tensor can be " \
-                    "either a single tensor or a tuple of tensors"
+                invalidInputError(isinstance(validation_data, tf.data.Dataset),
+                                  "train data and validation data should be both"
+                                  " tf.data.Dataset")
+                invalidInputError(isinstance(validation_data.element_spec, tuple),
+                                  "If validation_data is tf.data.Dataset, each element should be"
+                                  " (feature tensors, label tensor), where each feature/label"
+                                  " tensor can be either a single tensor or a tuple of tensors")
 
         if isinstance(data, SparkXShards):
             if data._get_class_name() == 'pandas.core.frame.DataFrame':
-                assert feature_cols is not None, \
-                    "feature columns is None; it should not be None in training"
-                assert label_cols is not None, \
-                    "label columns is None; it should not be None in training"
+                invalidInputError(feature_cols is not None,
+                                  "feature columns is None; it should not be None in training")
+                invalidInputError(label_cols is not None,
+                                  "label columns is None; it should not be None in training")
                 data, validation_data = process_xshards_of_pandas_dataframe(data, feature_cols,
                                                                             label_cols,
                                                                             validation_data,
@@ -891,10 +975,13 @@ class KerasEstimator(Estimator):
 
         return self
 
-    def predict(self, data, batch_size=4,
-                feature_cols=None,
-                auto_shard_files=False,
-                ):
+    def predict(
+        self,
+        data: Union["SparkXShards", "DataFrame"],
+        batch_size: int=4,
+        feature_cols: Optional[List[str]]=None,
+        auto_shard_files: bool=False
+    ) -> Union["SparkXShards", "DataFrame"]:
         """
         Predict input data
 
@@ -918,17 +1005,17 @@ class KerasEstimator(Estimator):
         """
 
         if isinstance(data, DataFrame):
-            assert feature_cols is not None, \
-                "feature columns is None; it should not be None in prediction"
+            invalidInputError(feature_cols is not None,
+                              "feature columns is None; it should not be None in prediction")
 
         if isinstance(data, SparkXShards):
             if data._get_class_name() == 'pandas.core.frame.DataFrame':
-                assert feature_cols is not None, \
-                    "feature columns is None; it should not be None in prediction"
+                invalidInputError(feature_cols is not None,
+                                  "feature columns is None; it should not be None in prediction")
                 data = process_xshards_of_pandas_dataframe(data, feature_cols)
 
-        assert not is_tf_data_dataset(data), "tf.data.Dataset currently cannot be used for" \
-                                             "estimator prediction"
+        invalidInputError(not is_tf_data_dataset(data),
+                          "tf.data.Dataset currently cannot be used for estimator prediction")
 
         dataset = to_dataset(data, batch_size=-1, batch_per_thread=batch_size,
                              validation_data=None,
@@ -946,11 +1033,14 @@ class KerasEstimator(Estimator):
         else:
             return predicted_rdd
 
-    def evaluate(self, data, batch_size=32,
-                 feature_cols=None,
-                 label_cols=None,
-                 auto_shard_files=False
-                 ):
+    def evaluate(
+        self,
+        data: Union["SparkXShards", "DataFrame", "tf.data.Dataset"],
+        batch_size: int=32,
+        feature_cols: Optional[List[str]]=None,
+        label_cols: Optional[List[str]]=None,
+        auto_shard_files: bool=False
+    ) -> Dict[str, float]:
         """
         Evaluate model.
 
@@ -971,17 +1061,17 @@ class KerasEstimator(Estimator):
         """
 
         if isinstance(data, DataFrame):
-            assert feature_cols is not None, \
-                "feature columns is None; it should not be None in evaluation"
-            assert label_cols is not None, \
-                "label columns is None; it should not be None in evaluation"
+            invalidInputError(feature_cols is not None,
+                              "feature columns is None; it should not be None in evaluation")
+            invalidInputError(label_cols is not None,
+                              "label columns is None; it should not be None in evaluation")
 
         if isinstance(data, SparkXShards):
             if data._get_class_name() == 'pandas.core.frame.DataFrame':
-                assert feature_cols is not None, \
-                    "feature columns is None; it should not be None in evaluation"
-                assert label_cols is not None, \
-                    "label columns is None; it should not be None in evaluation"
+                invalidInputError(feature_cols is not None,
+                                  "feature columns is None; it should not be None in evaluation")
+                invalidInputError(label_cols is not None,
+                                  "label columns is None; it should not be None in evaluation")
                 data = process_xshards_of_pandas_dataframe(data, feature_cols, label_cols)
 
         dataset = to_dataset(data, batch_size=-1, batch_per_thread=batch_size,
@@ -995,7 +1085,7 @@ class KerasEstimator(Estimator):
         return self.model.evaluate(dataset, batch_per_thread=batch_size)
 
     @enable_multi_fs_save
-    def save_keras_model(self, path, overwrite=True):
+    def save_keras_model(self, path: str, overwrite: bool=True) -> None:
         """
         Save tensorflow keras model in this estimator.
 
@@ -1004,7 +1094,7 @@ class KerasEstimator(Estimator):
         """
         self.model.save_model(path, overwrite=overwrite)
 
-    def get_model(self):
+    def get_model(self) -> "Model":
         """
         Get the trained Keras model
 
@@ -1013,7 +1103,7 @@ class KerasEstimator(Estimator):
         return self.model.model
 
     @enable_multi_fs_save
-    def save(self, model_path, overwrite=True):
+    def save(self, model_path: str, overwrite: bool=True) -> None:
         """
         Save model to model_path
 
@@ -1025,7 +1115,7 @@ class KerasEstimator(Estimator):
         self.save_keras_model(model_path, overwrite=overwrite)
 
     @enable_multi_fs_load
-    def load(self, model_path):
+    def load(self, model_path: str) -> None:
         """
         Load existing keras model
 
@@ -1034,7 +1124,7 @@ class KerasEstimator(Estimator):
         """
         self.model = KerasModel.load_model(model_path)
 
-    def clear_gradient_clipping(self):
+    def clear_gradient_clipping(self) -> None:
         """
         Clear gradient clipping parameters. In this case, gradient clipping will not be applied.
         In order to take effect, it needs to be called before fit.
@@ -1045,7 +1135,7 @@ class KerasEstimator(Estimator):
         self.clip_min = None
         self.clip_max = None
 
-    def set_constant_gradient_clipping(self, min, max):
+    def set_constant_gradient_clipping(self, min: float, max: float) -> None:
         """
         Set constant gradient clipping during the training process.
         In order to take effect, it needs to be called before fit.
@@ -1054,12 +1144,12 @@ class KerasEstimator(Estimator):
         :param max: The maximum value to clip by.
         :return:
         """
-        assert min > 0, "clip value should be larger than 0"
-        assert min < max, "clip max should be larger than clip min"
+        invalidInputError(min > 0, "clip value should be larger than 0")
+        invalidInputError(min < max, "clip max should be larger than clip min")
         self.clip_min = min
         self.clip_max = max
 
-    def set_l2_norm_gradient_clipping(self, clip_norm):
+    def set_l2_norm_gradient_clipping(self, clip_norm: float) -> None:
         """
         Clip gradient to a maximum L2-Norm during the training process.
         In order to take effect, it needs to be called before fit.
@@ -1070,7 +1160,12 @@ class KerasEstimator(Estimator):
         self.clip_norm = clip_norm
 
     @enable_multi_fs_save
-    def save_keras_weights(self, filepath, overwrite=True, save_format=None):
+    def save_keras_weights(
+        self,
+        filepath: str,
+        overwrite: bool=True,
+        save_format: Optional[str]=None
+    ) -> None:
         """
         Save tensorflow keras model weights in this estimator.
 
@@ -1083,7 +1178,7 @@ class KerasEstimator(Estimator):
         self.model.save_weights(filepath, overwrite, save_format)
 
     @enable_multi_fs_load
-    def load_keras_weights(self, filepath, by_name=False):
+    def load_keras_weights(self, filepath: str, by_name: bool=False) -> None:
         """
         Save tensorflow keras model in this estimator.
 

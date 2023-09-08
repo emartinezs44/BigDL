@@ -59,6 +59,13 @@
     </fileSet>
     <fileSet>
       <outputDirectory>/python</outputDirectory>
+      <directory>${project.parent.basedir}/ppml/target</directory>
+      <includes>
+        <include>bigdl-ppml*-python-api.zip</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <outputDirectory>/python</outputDirectory>
       <directory>${project.parent.basedir}/target</directory>
       <includes>
           <include>bigdl*-python-api.zip</include>
@@ -106,6 +113,34 @@
           <include>/**</include>
       </includes>
     </fileSet>
+    <fileSet>
+      <outputDirectory>/</outputDirectory>
+      <directory>${project.parent.basedir}/tpp</directory>
+      <includes>
+          <include>/**</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <outputDirectory>/python</outputDirectory>
+      <directory>${project.parent.basedir}/../python/ppml/scripts</directory>
+      <includes>
+          <include>start-fl-server.py</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <outputDirectory>/python</outputDirectory>
+      <directory>${project.parent.basedir}/../python/ppml/scripts</directory>
+      <includes>
+          <include>start-fgboost-server.py</include>
+      </includes>
+    </fileSet>
+    <fileSet>
+      <outputDirectory>/python/requirements</outputDirectory>
+      <directory>${project.parent.basedir}/../python/requirements</directory>
+      <includes>
+          <include>/**</include>
+      </includes>
+    </fileSet>
   </fileSets>
   <dependencySets>
     <dependencySet>
@@ -130,8 +165,8 @@
         <exclude>org.apache.spark:*:jar</exclude>
         <exclude>*:commons*:jar</exclude>
         <exclude>*:slf4j*:jar</exclude>
-        <exclude>*:log4j*:jar</exclude>
       </excludes>
     </dependencySet>
   </dependencySets>
 </assembly>
+

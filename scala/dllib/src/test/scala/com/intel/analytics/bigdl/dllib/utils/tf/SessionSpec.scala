@@ -20,19 +20,21 @@ import com.intel.analytics.bigdl.dllib.nn.MSECriterion
 import com.intel.analytics.bigdl.dllib.optim.{SGD, Trigger}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.utils.Engine
-import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkContext
 import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
 import java.io.{File => JFile}
 
 import com.google.protobuf.ByteString
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import org.tensorflow.framework.AttrValue
 
 import scala.collection.JavaConverters._
 
 class SessionSpec extends FlatSpec with Matchers with BeforeAndAfter {
-  Logger.getLogger("org").setLevel(Level.WARN)
-  Logger.getLogger("akka").setLevel(Level.WARN)
+
+  Configurator.setLevel("org", Level.WARN)
+  Configurator.setLevel("akka", Level.WARN)
 
 
   var sc: SparkContext = null
@@ -63,7 +65,7 @@ class SessionSpec extends FlatSpec with Matchers with BeforeAndAfter {
 
     import scala.collection.JavaConverters._
     val context = new Context[Float]()
-    val session = new BigDLSessionImpl[Float](nodes.asScala, context)
+    val session = new BigDLSessionImpl[Float](nodes.asScala.toSeq, context)
 
     val data = new Array[Tensor[Float]](100)
     val label = new Array[Tensor[Float]](100)
@@ -99,7 +101,7 @@ class SessionSpec extends FlatSpec with Matchers with BeforeAndAfter {
     val lenetModel = getLenetModel("lenet_batch_2.pbtxt")
 
     val context = new Context[Float]()
-    val session = new BigDLSessionImpl[Float](lenetModel, context)
+    val session = new BigDLSessionImpl[Float](lenetModel.toSeq, context)
 
     val endpoints = Seq(
       "fifo_queue_Dequeue"
@@ -121,7 +123,7 @@ class SessionSpec extends FlatSpec with Matchers with BeforeAndAfter {
     val lenetModel = getLenetModel("lenet_with_batch_3.pbtxt")
 
     val context = new Context[Float]()
-    val session = new BigDLSessionImpl[Float](lenetModel, context)
+    val session = new BigDLSessionImpl[Float](lenetModel.toSeq, context)
 
     val endpoints = Seq(
       "fifo_queue_Dequeue"

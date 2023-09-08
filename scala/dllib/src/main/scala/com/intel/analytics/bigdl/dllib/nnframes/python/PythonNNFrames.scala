@@ -16,7 +16,7 @@
 
 package com.intel.analytics.bigdl.dllib.nnframes.python
 
-import java.util.{ArrayList => JArrayList, List => JList}
+import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import com.intel.analytics.bigdl.dllib.feature.dataset.{Sample, Transformer}
 import com.intel.analytics.bigdl.dllib.optim.{OptimMethod, Trigger, ValidationMethod, ValidationResult}
@@ -27,7 +27,10 @@ import com.intel.analytics.bigdl.dllib.visualization.{TrainSummary, ValidationSu
 import com.intel.analytics.bigdl.{Criterion, Module}
 import com.intel.analytics.bigdl.dllib.common.PythonZoo
 import com.intel.analytics.bigdl.dllib.feature.common._
-import com.intel.analytics.bigdl.dllib.feature.image.RowToImageFeature
+import com.intel.analytics.bigdl.dllib.feature.image.{ImageProcessing, RowToImageFeature}
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
+
+import scala.collection.mutable
 // import com.intel.analytics.bigdl.dllib.feature.pmem._
 import com.intel.analytics.bigdl.dllib.nnframes._
 import org.apache.spark.api.java.JavaSparkContext
@@ -138,6 +141,12 @@ class PythonNNFrames[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
     cur
   }
 
+  def createCompose(list: JList[ImageProcessing]): ImageProcessing = {
+    import com.intel.analytics.bigdl.dllib.feature.image.transforms.Compose
+    val cur = Compose(list.asScala.toArray)
+    cur
+  }
+
   def createTensorToSample(): TensorToSample[T] = {
     TensorToSample()
   }
@@ -178,7 +187,9 @@ class PythonNNFrames[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
     val memType = level.trim.toUpperCase match {
       case "DRAM" => DRAM
       case "DISK_AND_DRAM" => DISK_AND_DRAM(numSlice)
-      case _ => throw new IllegalArgumentException(s"$level is not supported.")
+      case _ =>
+        Log4Error.invalidOperationError(false, s"$level is not supported.")
+        DRAM
     }
     estimator.setDataCacheLevel(memType)
   }
@@ -231,96 +242,6 @@ class PythonNNFrames[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
 
   def loadNNClassifierModel(path: String): NNClassifierModel[_] = {
     NNClassifierModel.load(path)
-  }
-
-  def getXGBClassifier(): XGBClassifier = {
-    val model = new XGBClassifier()
-    model
-  }
-
-  def setXGBClassifierNthread(model: XGBClassifier, value: Int): Unit = {
-    model.setNthread(value)
-  }
-
-  def setXGBClassifierNumRound(model: XGBClassifier, value: Int): Unit = {
-    model.setNumRound(value)
-  }
-
-  def fitXGBClassifier(model: XGBClassifier, df : DataFrame): XGBClassifierModel = {
-    model.fit(df)
-  }
-
-  def setXGBClassifierNumWorkers(model: XGBClassifier, value: Int): Unit = {
-    model.setNumWorkers(value)
-  }
-
-  def setXGBClassifierMissing(model: XGBClassifier, value: Int): Unit = {
-    model.setMissing(value)
-  }
-
-  def loadXGBClassifierModel(path: String, numClasses: Int): XGBClassifierModel = {
-    XGBClassifierModel.load(path, numClasses)
-  }
-
-  def setFeaturesXGBClassifierModel(model: XGBClassifierModel,
-                                          features: JList[String]): Unit = {
-    model.setFeaturesCol(features.asScala.toArray)
-  }
-
-  def setPredictionXGBClassifierModel(model: XGBClassifierModel,
-                                            prediction: String): Unit = {
-    model.setPredictionCol(prediction)
-  }
-
-  def transformXGBClassifierModel(model: XGBClassifierModel,
-                                        dataset: DataFrame): DataFrame = {
-    model.transform(dataset)
-  }
-
-  def getXGBRegressor(): XGBRegressor = {
-    val model = new XGBRegressor()
-    model
-  }
-
-  def setXGBRegressorNthread(model: XGBRegressor, value: Int): Unit = {
-    model.setNthread(value)
-  }
-
-  def setXGBRegressorNumRound(model: XGBRegressor, value: Int): Unit = {
-    model.setNumRound(value)
-  }
-
-  def setXGBRegressorNumWorkers(model: XGBRegressor, value: Int): Unit = {
-    model.setNumWorkers(value)
-  }
-
-  def fitXGBRegressor(model: XGBRegressor, df : DataFrame): XGBRegressorModel = {
-    model.fit(df)
-  }
-
-  def loadXGBRegressorModel(path: String) : XGBRegressorModel = {
-    XGBRegressorModel.load(path)
-  }
-
-  def setPredictionXGBRegressorModel(model: XGBRegressorModel, prediction : String): Unit = {
-    model.setPredictionCol(prediction)
-  }
-
-  def setInferBatchSizeXGBRegressorModel(model: XGBRegressorModel, value : Int): Unit = {
-    model.setInferBatchSize(value)
-  }
-
-  def setFeaturesXGBRegressorModel(model: XGBRegressorModel, features: String): Unit = {
-    model.setFeaturesCol(features)
-  }
-
-  def transformXGBRegressorModel(model: XGBRegressorModel,
-                                 dataset: DataFrame): DataFrame = {
-    model.transform(dataset)
-  }
-
-  def saveXGBRegressorModel(model: XGBRegressorModel, path: String): Unit = {
-    model.save(path)
   }
 
   def internalEval(estimator: NNEstimator[T],

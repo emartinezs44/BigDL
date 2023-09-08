@@ -13,11 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import itertools
-import logging
-import pickle
 
+import logging
 import numpy as np
+
+from bigdl.orca.learn.utils import get_latest_checkpoint
+from bigdl.dllib.utils.log4Error import invalidInputError
+
+from typing import TYPE_CHECKING, Dict, Union, Callable, Optional, Any
+if TYPE_CHECKING:
+    from bigdl.orca.learn.tf2.ray_estimator import TensorFlow2Estimator
+    from bigdl.orca.learn.tf2.pyspark_estimator import SparkTFEstimator
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +31,17 @@ logger = logging.getLogger(__name__)
 class Estimator(object):
     @staticmethod
     def from_keras(*,
-                   model_creator,
-                   config=None,
-                   verbose=False,
-                   workers_per_node=1,
-                   compile_args_creator=None,
-                   backend="tf2",
-                   cpu_binding=False,
-                   model_dir=None
-                   ):
+                   model_creator: Optional[Callable]=None,
+                   config: Optional[Dict]=None,
+                   verbose: bool=False,
+                   workers_per_node: int=1,
+                   compile_args_creator: Optional[Callable]=None,
+                   backend: str="ray",
+                   cpu_binding: bool=False,
+                   log_to_driver: bool=True,
+                   model_dir: Optional[str]=None,
+                   **kwargs
+                   ) -> Union["TensorFlow2Estimator", "SparkTFEstimator", None]:
         """
         Create an Estimator for tensorflow 2.
 
@@ -49,10 +57,16 @@ class Estimator(object):
                the backend="horovod". This function takes in the `config` dict and returns a
                dictionary like {"optimizer": tf.keras.optimizers.SGD(lr), "loss":
                "mean_squared_error", "metrics": ["mean_squared_error"]}
-        :param backend: (string) You can choose "horovod" or "tf2" as backend. Default: `tf2`.
+        :param backend: (string) You can choose "horovod", "ray" or "spark" as backend.
+         Default: `ray`.
         :param cpu_binding: (bool) Whether to binds threads to specific CPUs. Default: False
+        :param log_to_driver: (bool) Whether display executor log on driver in cluster mode.
+         Default: True. This option is only for "spark" backend.
+        :param model_dir: (str) The directory to save model states. It is required for "spark"
+        backend. For cluster mode, it should be a share filesystem path which can be accessed
+        by executors.
         """
-        if backend in {"tf2", "horovod"}:
+        if backend in {"ray", "horovod"}:
             from bigdl.orca.learn.tf2.ray_estimator import TensorFlow2Estimator
             return TensorFlow2Estimator(model_creator=model_creator, config=config,
                                         verbose=verbose, workers_per_node=workers_per_node,
@@ -60,21 +74,28 @@ class Estimator(object):
                                         cpu_binding=cpu_binding)
         elif backend == "spark":
             if cpu_binding:
-                raise ValueError("cpu_binding should not be True when using spark backend")
-            if not model_dir:
-                raise ValueError("Please specify model directory when using spark backend")
+                invalidInputError(False,
+                                  "cpu_binding should not be True when using spark backend")
             from bigdl.orca.learn.tf2.pyspark_estimator import SparkTFEstimator
             return SparkTFEstimator(model_creator=model_creator,
                                     config=config, verbose=verbose,
                                     compile_args_creator=compile_args_creator,
                                     workers_per_node=workers_per_node,
-                                    model_dir=model_dir)
+                                    log_to_driver=log_to_driver,
+                                    model_dir=model_dir,
+                                    **kwargs)
         else:
-            raise ValueError("Only horovod, tf2 and spark backends are supported"
-                             f" for now, got backend: {backend}")
+            invalidInputError(False,
+                              "Only horovod, ray and spark backends are supported"
+                              f" for now, got backend: {backend}")
+            return None
+
+    @staticmethod
+    def latest_checkpoint(checkpoint_dir: str) -> str:
+        return get_latest_checkpoint(checkpoint_dir)
 
 
-def make_data_creator(refs):
+def make_data_creator(refs: Any) -> Callable:
     def data_creator(config, batch_size):
         return refs
 

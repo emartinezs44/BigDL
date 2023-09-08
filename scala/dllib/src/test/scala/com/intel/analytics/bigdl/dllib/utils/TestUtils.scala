@@ -19,7 +19,7 @@ package com.intel.analytics.bigdl.dllib.utils
 import java.util.concurrent.atomic.AtomicInteger
 
 import com.intel.analytics.bigdl.dllib.nn.Sequential
-import com.intel.analytics.bigdl.dllib.nn.keras.{InputLayer, KerasLayer, Sequential => KSequential}
+import com.intel.analytics.bigdl.dllib.nn.internal.{InputLayer, KerasLayer, Sequential => KSequential}
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity, TensorModule}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
@@ -69,7 +69,9 @@ object TestUtils {
    */
   def cancelOnWindows(): Unit = {
     if (System.getProperty("os.name").toLowerCase().contains("win")) {
+      // scalastyle:off
       throw new TestCanceledException("This case should not be run on windows", 3)
+      // scalastyle:on
     }
   }
 
@@ -121,6 +123,12 @@ object TestUtils {
 
     (fout, dxout)
   }
+
+  def conditionFailTest(condition: Boolean, msg: String = null): Unit = {
+//     scalastyle:off
+    assert(condition, msg)
+//     scalastyle:on
+  }
 }
 
 class ExceptionTest[T: ClassTag](failCountNumberLists: Array[Int], sleep: Boolean)
@@ -133,7 +141,7 @@ class ExceptionTest[T: ClassTag](failCountNumberLists: Array[Int], sleep: Boolea
       if (sleep) {
         Thread.sleep(10000)
       }
-      throw new Exception("Fail task")
+      Log4Error.invalidOperationError(false, "fail task")
     }
     this.output
   }

@@ -16,13 +16,13 @@
 
 package com.intel.analytics.bigdl.dllib.keras.layers
 
-import com.intel.analytics.bigdl.dllib.nn.keras.{KerasLayer, SeparableConvolution2D => BigDLSeparableConvolution2D}
+import com.intel.analytics.bigdl.dllib.nn.internal.{KerasLayer, SeparableConvolution2D => BigDLSeparableConvolution2D}
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.DataFormat
 import com.intel.analytics.bigdl.dllib.nn.{InitializationMethod, Xavier}
 import com.intel.analytics.bigdl.dllib.optim.Regularizer
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.Shape
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Shape}
 import com.intel.analytics.bigdl.dllib.keras.Net
 import com.intel.analytics.bigdl.dllib.keras.layers.utils.KerasUtils
 
@@ -103,8 +103,10 @@ object SeparableConvolution2D {
     bias: Boolean = true,
     inputShape: Shape = null)(implicit ev: TensorNumeric[T]): SeparableConvolution2D[T] = {
     val subsampleArray = subsample match {
-      case null => throw new IllegalArgumentException("For SeparableConvolution2D, " +
-        "subsample can not be null, please input int tuple of length 2")
+      case null =>
+        Log4Error.invalidInputError(false, "For SeparableConvolution2D, " +
+        "subsample can not be null", "please input int tuple of length 2")
+        null
       case _ => Array(subsample._1, subsample._2)
     }
     new SeparableConvolution2D[T](nbFilter, nbRow, nbCol,

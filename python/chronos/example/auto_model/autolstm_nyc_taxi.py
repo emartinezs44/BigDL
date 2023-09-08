@@ -18,7 +18,7 @@ import numpy as np
 import argparse
 from sklearn.preprocessing import StandardScaler
 
-from bigdl.chronos.data.repo_dataset import get_public_dataset
+from bigdl.chronos.data import get_public_dataset
 from bigdl.chronos.autots.model.auto_lstm import AutoLSTM
 from bigdl.orca.automl import hp
 from bigdl.orca import init_orca_context, stop_orca_context
@@ -76,7 +76,8 @@ if __name__ == '__main__':
 
     auto_lstm.fit(data=(x_train, y_train),
                   epochs=args.epochs,
-                  validation_data=(x_val, y_val))
+                  validation_data=(x_val, y_val),
+                  n_sampling=2)
 
     yhat = auto_lstm.predict(x_test)
     unscale_y_test = tsdata_test.unscale_numpy(y_test)

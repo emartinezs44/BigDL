@@ -19,7 +19,7 @@ package com.intel.analytics.bigdl.dllib.nn
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.TensorModule
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.tensor._
-import com.intel.analytics.bigdl.dllib.utils.Engine
+import com.intel.analytics.bigdl.dllib.utils.{Engine, Log4Error}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
@@ -41,7 +41,8 @@ class BinaryThreshold[T: ClassTag](
   var inPlace = ip
 
   override def updateOutput(input: Tensor[T]): Tensor[T] = {
-    require(input.isContiguous())
+    Log4Error.invalidInputError(input.isContiguous(),
+      "BinaryThreshold expects input to be contiguous")
 
     val taskSize = input.nElement() / Engine.model.getPoolSize
     var extraTaskSize = input.nElement() % Engine.model.getPoolSize
@@ -109,7 +110,9 @@ class BinaryThreshold[T: ClassTag](
             })
             t += 1
           }
-        case _ => throw new UnsupportedOperationException(s"Only Float/Double supported")
+        case _ =>
+          Log4Error.invalidInputError(false, s"got unexpected type ${ev.getType()}",
+            s"Only Float/Double supported")
       }
       input
     }
@@ -169,7 +172,9 @@ class BinaryThreshold[T: ClassTag](
             })
             t += 1
           }
-        case _ => throw new UnsupportedOperationException(s"Only Float/Double supported")
+        case _ =>
+          Log4Error.invalidInputError(false, s"got unexpected type ${ev.getType()}",
+            s"Only Float/Double supported")
       }
     }
     Engine.model.sync(results)
@@ -187,7 +192,8 @@ class BinaryThreshold[T: ClassTag](
           gradInput.asInstanceOf[Tensor[Float]].map(input.asInstanceOf[Tensor[Float]], (g, i) =>
             if (i <= threshold) 0 else g)
         case _ =>
-          throw new UnsupportedOperationException(s"Only Float/Double supported")
+          Log4Error.invalidInputError(false, s"got unexpected type ${ev.getType()}",
+            s"Only Float/Double supported")
       }
     }
     else {
@@ -200,7 +206,9 @@ class BinaryThreshold[T: ClassTag](
         case FloatType =>
           gradInput.asInstanceOf[Tensor[Float]].map(input.asInstanceOf[Tensor[Float]], (g, i) =>
             if (i > threshold) g else 0)
-        case _ => throw new UnsupportedOperationException(s"Only Float/Double supported")
+        case _ =>
+          Log4Error.invalidInputError(false, s"got unexpected type ${ev.getType()}",
+            s"Only Float/Double supported")
       }
     }
     gradInput
@@ -288,7 +296,9 @@ class BinaryThreshold[T: ClassTag](
             })
             t += 1
           }
-        case _ => throw new UnsupportedOperationException(s"Only Float/Double supported")
+        case _ =>
+          Log4Error.invalidInputError(false, s"got unexpected type ${ev.getType()}",
+            s"Only Float/Double supported")
       }
     }
     else {
@@ -347,7 +357,9 @@ class BinaryThreshold[T: ClassTag](
             })
             t += 1
           }
-        case _ => throw new UnsupportedOperationException(s"Only Float/Double supported")
+        case _ =>
+          Log4Error.invalidInputError(false, s"got unexpected type ${ev.getType()}",
+            s"Only Float/Double supported")
       }
     }
 

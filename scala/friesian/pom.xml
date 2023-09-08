@@ -5,7 +5,7 @@
     <parent>
         <artifactId>bigdl-parent-spark_${spark.version}</artifactId>
         <groupId>com.intel.analytics.bigdl</groupId>
-        <version>0.14.0-SNAPSHOT</version>
+        <version>2.3.0-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -20,34 +20,159 @@
         <tagsToExclude>com.intel.analytics.bigdl.tags.Integration</tagsToExclude>
         <core.artifactId>zoo-core-dist-all</core.artifactId>
         <core.dependencyType>jar</core.dependencyType>
+        <dllib.scope>provided</dllib.scope>
+        <orca.scope>provided</orca.scope>
+        <core.scope>provided</core.scope>
+        <serving.scope>provided</serving.scope>
+        <jersey.version>2.36</jersey.version>
+        <bigdl.basedir>${project.parent.basedir}</bigdl.basedir>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>sonatype</id>
+            <name>sonatype repository</name>
+            <url>https://oss.sonatype.org/content/groups/public/</url>
+            <releases>
+                <enabled>true</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+    </repositories>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.glassfish.jersey</groupId>
+                <artifactId>jersey-bom</artifactId>
+                <version>${jersey.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>
             <groupId>com.intel.analytics.bigdl</groupId>
             <artifactId>bigdl-dllib-spark_${spark.version}</artifactId>
-            <version>0.14.0-SNAPSHOT</version>
-            <scope>provided</scope>
+            <version>2.3.0-SNAPSHOT</version>
+            <scope>${dllib.scope}</scope>
         </dependency>
         <dependency>
             <groupId>com.intel.analytics.bigdl</groupId>
             <artifactId>bigdl-orca-spark_${spark.version}</artifactId>
-            <version>0.14.0-SNAPSHOT</version>
-            <scope>provided</scope>
+            <version>2.3.0-SNAPSHOT</version>
+            <scope>${orca.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.intel.analytics.bigdl.core.dist</groupId>
+            <artifactId>all</artifactId>
+            <version>2.3.0-SNAPSHOT</version>
+            <scope>${bigdl-core-all-scope}</scope>
         </dependency>
         <dependency>
             <groupId>com.intel.analytics.zoo</groupId>
             <artifactId>${core.artifactId}</artifactId>
-            <version>0.12.0-SNAPSHOT</version>
+            <version>2.3.0-SNAPSHOT</version>
             <type>${core.dependencyType}</type>
-            <scope>provided</scope>
+            <scope>${core.scope}</scope>
         </dependency>
-
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-core_${scala.major.version}</artifactId>
             <version>${spark.version}</version>
             <scope>${spark-scope}</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.module</groupId>
+                    <artifactId>jackson-module-scala_${scala.major.version}</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.glassfish.jersey.media</groupId>
+                    <artifactId>jersey-media-jaxb</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>xerces</groupId>
+                    <artifactId>xercesImpl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-compress</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-common</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.ivy</groupId>
+                    <artifactId>ivy</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.21</version>
+            <scope>${spark-scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>3.2.4</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.mortbay.jetty</groupId>
+                    <artifactId>jetty</artifactId>
+	        </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jettison</groupId>
+                    <artifactId>jettison</artifactId>
+	        </exclusion>
+                <exclusion>
+                    <groupId>com.jcraft</groupId>
+                    <artifactId>jsch</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
@@ -60,10 +185,208 @@
             <artifactId>scalatest_${scala.major.version}</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java</artifactId>
+            <version>3.19.6</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.protobuf</groupId>
+            <artifactId>protobuf-java-util</artifactId>
+            <version>3.15.8</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.intel.analytics.bigdl</groupId>
+            <artifactId>bigdl-grpc-spark_${spark.version}</artifactId>
+            <version>2.3.0-SNAPSHOT</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.spark</groupId>
+            <artifactId>spark-sql_${scala.major.version}</artifactId>
+            <version>${spark.version}</version>
+            <scope>${spark-scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.lettuce</groupId>
+            <artifactId>lettuce-core</artifactId>
+            <version>6.1.6.RELEASE</version>
+            <scope>${serving.scope}</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.projectreactor</groupId>
+                    <artifactId>reactor-core</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-core</artifactId>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.latencyutils</groupId>
+            <artifactId>LatencyUtils</artifactId>
+            <version>2.0.3</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>me.dinowernli</groupId>
+            <artifactId>java-grpc-prometheus</artifactId>
+            <version>0.5.0</version>
+            <scope>${serving.scope}</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-codec</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- The client -->
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient</artifactId>
+            <version>0.12.0</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <!-- Hotspot JVM metrics-->
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient_hotspot</artifactId>
+            <version>0.12.0</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.prometheus</groupId>
+            <artifactId>simpleclient_httpserver</artifactId>
+            <version>0.12.0</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.dropwizard.metrics</groupId>
+            <artifactId>metrics-core</artifactId>
+            <version>4.2.3</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>31.0.1-jre</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.module</groupId>
+            <artifactId>jackson-module-scala_${scala.major.version}</artifactId>
+            <version>${jackson.version}</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+            <version>${jackson.version}</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>commons-cli</groupId>
+            <artifactId>commons-cli</artifactId>
+            <version>1.2</version>
+            <scope>${serving.scope}</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-api</artifactId>
+            <version>${log4j.version}</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-slf4j-impl</artifactId>
+            <version>${log4j.version}</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-core</artifactId>
+            <version>${log4j.version}</version>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-1.2-api</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-api</artifactId>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-services</artifactId>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+            <scope>${serving.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jersey.containers</groupId>
+            <artifactId>jersey-container-grizzly2-http</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.jersey.inject</groupId>
+            <artifactId>jersey-hk2</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${junit-jupyter.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>${junit5-maven-surefire-plugin.version}</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.maven.surefire</groupId>
+                        <artifactId>surefire-junit-platform</artifactId>
+                        <version>${junit5-maven-surefire-plugin.version}</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>${junit5-maven-failsafe-plugin.version}</version>
+            </plugin>
             <plugin>
                 <groupId>org.scalatest</groupId>
                 <artifactId>scalatest-maven-plugin</artifactId>
@@ -86,6 +409,15 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                </configuration>
             </plugin>
 
             <plugin>
@@ -134,25 +466,66 @@
                         <configuration>
                             <shadedArtifactAttached>true</shadedArtifactAttached>
                             <shadedClassifierName>jar-with-dependencies</shadedClassifierName>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <includes>
+                                        <include>META-INF/MANIFEST.MF</include>
+                                        <include>app.properties</include>
+                                        <include>META-INF/maven/com.intel.analytics.bigdl/</include>
+                                        <include>**/com/intel/analytics/bigdl/friesian/python/**</include>
+                                        <include>**/com/intel/analytics/bigdl/friesian/feature/**</include>
+                                    </includes>
+                                </filter>
+                            </filters>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>serving</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <shadedArtifactAttached>true</shadedArtifactAttached>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <shadedClassifierName>serving</shadedClassifierName>
+                            <filters>
+                                <filter>
+                                    <artifact>*:*</artifact>
+                                    <excludes>
+                                        <exclude>META-INF/*.SF</exclude>
+                                        <exclude>META-INF/*.DSA</exclude>
+                                        <exclude>META-INF/*.RSA</exclude>
+                                        <exclude>**/com/intel/analytics/bigdl/friesian/python/**</exclude>
+                                        <exclude>**/com/intel/analytics/bigdl/friesian/feature/**</exclude>
+                                        <exclude>**/com/intel/analytics/bigdl/friesian/FriesianSpec.scala</exclude>
+                                    </excludes>
+                                </filter>
+                            </filters>
+                            <transformers>
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                            </transformers>
                         </configuration>
                     </execution>
                 </executions>
             </plugin>
+
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <executions>
                     <!--<execution>-->
-                        <!--<id>with-spark</id>-->
-                        <!--<configuration>-->
-                            <!--<descriptors>-->
-                                <!--<descriptor>${project.basedir}/src/assembly/all-in-one.xml</descriptor>-->
-                            <!--</descriptors>-->
-                        <!--</configuration>-->
-                        <!--<phase>package</phase>-->
-                        <!--<goals>-->
-                            <!--<goal>single</goal>-->
-                        <!--</goals>-->
+                    <!--<id>with-spark</id>-->
+                    <!--<configuration>-->
+                    <!--<descriptors>-->
+                    <!--<descriptor>${project.basedir}/src/assembly/all-in-one.xml</descriptor>-->
+                    <!--</descriptors>-->
+                    <!--</configuration>-->
+                    <!--<phase>package</phase>-->
+                    <!--<goals>-->
+                    <!--<goal>single</goal>-->
+                    <!--</goals>-->
                     <!--</execution>-->
                     <execution>
                         <id>python</id>
@@ -228,17 +601,28 @@
 
     <profiles>
         <profile>
+            <id>serving</id>
+            <properties>
+                <dllib.scope>compile</dllib.scope>
+                <orca.scope>compile</orca.scope>
+                <core.scope>compile</core.scope>
+                <serving.scope>compile</serving.scope>
+                <jackson.version>2.12.7</jackson.version>
+            </properties>
+        </profile>
+
+        <profile>
             <id>per_platform</id>
             <properties>
-              <bigdl-core-all-scope>provided</bigdl-core-all-scope>
+                <bigdl-core-all-scope>provided</bigdl-core-all-scope>
             </properties>
             <dependencies>
-              <dependency>
-                <groupId>com.intel.analytics.bigdl.core.dist</groupId>
-                <artifactId>${os-flag}</artifactId>
-                <version>0.14.0-SNAPSHOT</version>
-                <type>pom</type>
-              </dependency>
+                <dependency>
+                    <groupId>com.intel.analytics.bigdl.core.dist</groupId>
+                    <artifactId>${os-flag}</artifactId>
+                    <version>2.3.0-SNAPSHOT</version>
+                    <type>pom</type>
+                </dependency>
             </dependencies>
         </profile>
 
@@ -270,6 +654,7 @@
                 <core.artifactId>zoo-core-dist-linux64</core.artifactId>
                 <core.dependencyType>pom</core.dependencyType>
                 <spark-mllib-scope>provided</spark-mllib-scope>
+                <bigdl-core-all-scope>provided</bigdl-core-all-scope>
             </properties>
         </profile>
 
@@ -279,6 +664,7 @@
                 <core.artifactId>zoo-core-dist-mac</core.artifactId>
                 <core.dependencyType>pom</core.dependencyType>
                 <spark-mllib-scope>provided</spark-mllib-scope>
+                <bigdl-core-all-scope>provided</bigdl-core-all-scope>
             </properties>
         </profile>
     </profiles>

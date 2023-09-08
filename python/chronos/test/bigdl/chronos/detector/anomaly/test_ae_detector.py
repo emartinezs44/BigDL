@@ -16,17 +16,18 @@
 
 import pytest
 import numpy as np
-from bigdl.orca.test_zoo_utils import ZooTestCase
+from unittest import TestCase
 
 from bigdl.chronos.detector.anomaly.ae_detector import AEDetector
+from ... import op_torch, op_tf2
 
 
-class TestAEDetector(ZooTestCase):
+class TestAEDetector(TestCase):
 
-    def setup_method(self, method):
+    def setUp(self):
         pass
 
-    def teardown_method(self, method):
+    def tearDown(self):
         pass
 
     def create_data(self):
@@ -36,6 +37,7 @@ class TestAEDetector(ZooTestCase):
         data[600:800] = 10
         return data
 
+    @op_tf2
     def test_ae_fit_score_rolled_keras(self):
         y = self.create_data()
         ad = AEDetector(roll_len=314)
@@ -45,6 +47,7 @@ class TestAEDetector(ZooTestCase):
         anomaly_indexes = ad.anomaly_indexes()
         assert len(anomaly_indexes) == int(ad.ratio * len(y))
 
+    @op_torch
     def test_ae_fit_score_rolled_pytorch(self):
         y = self.create_data()
         ad = AEDetector(roll_len=314, backend="torch")
@@ -54,6 +57,7 @@ class TestAEDetector(ZooTestCase):
         anomaly_indexes = ad.anomaly_indexes()
         assert len(anomaly_indexes) == int(ad.ratio * len(y))
 
+    @op_tf2
     def test_ae_fit_score_unrolled(self):
         y = self.create_data()
         ad = AEDetector(roll_len=0)
@@ -63,18 +67,20 @@ class TestAEDetector(ZooTestCase):
         anomaly_indexes = ad.anomaly_indexes()
         assert len(anomaly_indexes) == int(ad.ratio * len(y))
 
+    @op_torch
+    @op_tf2
     def test_corner_cases(self):
         y = self.create_data()
         ad = AEDetector(roll_len=314, backend="dummy")
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             ad.fit(y)
         ad = AEDetector(roll_len=314)
         with pytest.raises(RuntimeError):
             ad.score()
         y = np.array([1])
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             ad.fit(y)
         y = self.create_data()
         y = y.reshape(2, -1)
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             ad.fit(y)

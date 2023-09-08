@@ -21,6 +21,8 @@ import sys
 from bigdl.dllib.utils.file_utils import callZooFunc
 from bigdl.dllib.nn.layer import Model as BModel
 from bigdl.dllib.net.graph_net import GraphNet
+from bigdl.dllib.utils.log4Error import *
+
 
 if sys.version >= '3':
     long = int
@@ -51,10 +53,10 @@ class JavaToPython:
             base_module = self._load_ppackage_by_jpackage(jpackage_name)
         if pclass_name in dir(base_module):
             pclass = getattr(base_module, pclass_name)
-            assert "from_jvalue" in dir(pclass), \
-                "pclass: {} should implement from_jvalue method".format(pclass)
+            invalidInputError("from_jvalue" in dir(pclass),
+                              "pclass: {} should implement from_jvalue method".format(pclass))
             return pclass
-        raise Exception("No proper python class for: {}".format(self.jfullname))
+        invalidInputError(False, "No proper python class for: {}".format(self.jfullname))
 
     def _get_py_name(self, jclass_name):
         if jclass_name == "Model":
@@ -62,13 +64,13 @@ class JavaToPython:
         elif jclass_name == "Sequential":
             return "Sequential"
         else:
-            raise Exception("Not supported type: {}".format(jclass_name))
+            invalidInputError(False, "Not supported type: {}".format(jclass_name))
 
     def _load_ppackage_by_jpackage(self, jpackage_name):
         if jpackage_name in ("com.intel.analytics.bigdl.dllib.keras.Model",
                              "com.intel.analytics.bigdl.dllib.keras.Sequential"):
             return importlib.import_module('bigdl.dllib.keras.models')
-        raise Exception("Not supported package: {}".format(jpackage_name))
+        invalidInputError(False, "Not supported package: {}".format(jpackage_name))
 
 
 class Net:
@@ -93,14 +95,14 @@ class Net:
     @staticmethod
     def load(model_path, weight_path=None, bigdl_type="float"):
         """
-        Load an existing Analytics Zoo model defined in Keras-style(with weights).
+        Load an existing BigDL model defined in Keras-style(with weights).
 
         :param model_path: The path to load the saved model.
                           Local file system, HDFS and Amazon S3 are supported.
                           HDFS path should be like 'hdfs://[host]:[port]/xxx'.
                           Amazon S3 path should be like 's3a://bucket/xxx'.
         :param weight_path: The path for pre-trained weights if any. Default is None.
-        :return: An Analytics Zoo model.
+        :return: A BigDL model.
         """
         jmodel = callZooFunc(bigdl_type, "netLoad", model_path, weight_path)
         return Net.from_jvalue(jmodel, bigdl_type)

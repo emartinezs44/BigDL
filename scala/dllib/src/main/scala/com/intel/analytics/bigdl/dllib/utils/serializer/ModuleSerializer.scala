@@ -19,13 +19,13 @@ import com.intel.analytics.bigdl.Module
 import com.intel.analytics.bigdl.dllib.models.maskrcnn.MaskRCNN
 import com.intel.analytics.bigdl.dllib.nn._
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity, TensorModule}
-import com.intel.analytics.bigdl.dllib.nn.keras.{KerasLayer, KerasLayerSerializer, Model, Sequential => KSequential}
+import com.intel.analytics.bigdl.dllib.nn.internal.{KerasLayer, KerasLayerSerializer, Model, Sequential => KSequential}
 import com.intel.analytics.bigdl.dllib.nn.ops.{RandomUniform => RandomUniformOps}
 import com.intel.analytics.bigdl.dllib.nn.tf.{DecodeRawSerializer, ParseExample, ParseSingleExample, StridedSlice}
 import com.intel.analytics.bigdl.dllib.optim.Regularizer
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.ReflectionUtils
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, ReflectionUtils}
 import com.intel.analytics.bigdl.dllib.utils.serializer.converters.DataConverter
 
 import scala.collection.mutable
@@ -129,7 +129,8 @@ object ModuleSerializer extends ModuleSerializable{
           val groupTypeAttr = attrMap.get(SerConst.GROUP_TYPE)
           val groupType = DataConverter.getAttributeValue(context, groupTypeAttr).
             asInstanceOf[String]
-          require(groupSerializerMaps.contains(groupType), s" Group serializer does" +
+          Log4Error.invalidOperationError(groupSerializerMaps.contains(groupType),
+            s" Group serializer does" +
             s" not exist for $groupType")
           groupSerializerMaps(groupType)
         } else {
@@ -151,8 +152,9 @@ object ModuleSerializer extends ModuleSerializable{
         loadModule(context)
     } catch {
       case e: Exception =>
-        throw new RuntimeException(
-          s"Loading module ${context.bigdlModule.getModuleType} exception :", e)
+        Log4Error.unKnowExceptionError(false,
+          s"Loading module ${context.bigdlModule.getModuleType} exception :", cause = e)
+        null
     }
   }
 
@@ -162,8 +164,10 @@ object ModuleSerializer extends ModuleSerializable{
    * @param serializer serialzable implementation for this module
    */
   def registerModule(moduleType : String, serializer : ModuleSerializable) : Unit = {
-    require(!serializerMaps.contains(moduleType), s"$moduleType already registered!")
-    require(!groupSerializerMaps.contains(moduleType), s"$moduleType already " +
+    Log4Error.invalidOperationError(!serializerMaps.contains(moduleType),
+      s"$moduleType already registered!")
+    Log4Error.invalidOperationError(!groupSerializerMaps.contains(moduleType),
+      s"$moduleType already " +
       s"registered with group serializer!")
     serializerMaps(moduleType) = serializer
   }
@@ -176,9 +180,11 @@ object ModuleSerializer extends ModuleSerializable{
    */
   def registerGroupModules(superModuleType : String, groupSerializer :
     ModuleSerializable) : Unit = {
-    require(!serializerMaps.contains(superModuleType), s"$moduleType already " +
+    Log4Error.invalidOperationError(!serializerMaps.contains(superModuleType),
+      s"$moduleType already " +
       s"registered with single serializer!")
-    require(!groupSerializerMaps.contains(superModuleType), s"$moduleType already " +
+    Log4Error.invalidOperationError(!groupSerializerMaps.contains(superModuleType),
+      s"$moduleType already " +
       s"registered with group serializer!")
     groupSerializerMaps(superModuleType) = groupSerializer
   }
@@ -239,11 +245,11 @@ object ModuleSerializer extends ModuleSerializable{
     registerModule("com.intel.analytics.bigdl.nn.StaticGraph", Graph)
     registerModule("com.intel.analytics.bigdl.dllib.nn.DynamicGraph", Graph)
     registerModule("com.intel.analytics.bigdl.nn.DynamicGraph", Graph)
-    registerModule("com.intel.analytics.bigdl.dllib.nn.keras.Model", Model)
+    registerModule("com.intel.analytics.bigdl.dllib.nn.internal.Model", Model)
     registerModule("com.intel.analytics.bigdl.nn.keras.Model", Model)
-    registerModule("com.intel.analytics.bigdl.dllib.nn.keras.Sequential", KSequential)
+    registerModule("com.intel.analytics.bigdl.dllib.nn.internal.Sequential", KSequential)
     registerModule("com.intel.analytics.bigdl.nn.keras.Sequential", KSequential)
-    registerModule("com.intel.analytics.bigdl.dllib.nn.keras.layers.KerasLayerWrapper",
+    registerModule("com.intel.analytics.bigdl.dllib.nn.internal.layers.KerasLayerWrapper",
       KerasLayerSerializer)
     registerModule("com.intel.analytics.bigdl.nn.keras.layers.KerasLayerWrapper",
       KerasLayerSerializer)

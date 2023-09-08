@@ -19,6 +19,8 @@ import com.intel.analytics.bigdl.dllib.tensor.{DenseTensorApply, DoubleType, Flo
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import java.util.Arrays.binarySearch
 
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
+
 import scala.reflect.ClassTag
 
 /**
@@ -48,7 +50,7 @@ class BucketizedCol[T: ClassTag](
   private val boundaries: Array[Double])(implicit ev: TensorNumeric[T])
   extends Operation[Tensor[T], Tensor[Int], T] {
 
-  require(boundaries.length >= 1,
+  Log4Error.invalidInputError(boundaries.length >= 1,
     "the length of boundaries must be more than or equal to 1")
 
   private val boundariesImpl = boundaries.map(ev.fromType[Double])
@@ -69,7 +71,8 @@ class BucketizedCol[T: ClassTag](
           input.asInstanceOf[Tensor[Double]],
           x => math.abs(binarySearch(boundariesImpl.asInstanceOf[Array[Double]], x) + 1))
       case _ =>
-        throw new RuntimeException("Unsupported tensor type")
+        Log4Error.invalidInputError(false, s"${ev.getType()} is not supported",
+          "only support FloatType and DoubleType")
     }
 
     output = resTensor

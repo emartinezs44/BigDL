@@ -24,7 +24,7 @@ import com.intel.analytics.bigdl.dllib.nn.abstractnn.AbstractModule
 import com.intel.analytics.bigdl.serialization.Bigdl._
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.Shape
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Shape}
 import com.intel.analytics.bigdl.dllib.utils.serializer.{DeserializeContext, SerializeContext}
 import com.intel.analytics.bigdl.dllib.utils.serializer.converters.{DataConverter, TensorConverter}
 // import com.intel.analytics.zoo.common.CheckedObjectInputStream
@@ -55,7 +55,7 @@ class WordEmbedding[T: ClassTag] private(
     override val inputShape: Shape = null)(implicit ev: TensorNumeric[T])
   extends Embedding[T](inputDim, outputDim, inputShape = inputShape) {
 
-  require(!trainable, "WordEmbedding is not trainable for now.")
+  Log4Error.invalidInputError(!trainable, "WordEmbedding is not trainable for now.")
 
   override def doBuild(inputShape: Shape): AbstractModule[Tensor[T], Tensor[T], T] = {
     BIdentity().asInstanceOf[AbstractModule[Tensor[T], Tensor[T], T]]
@@ -73,11 +73,11 @@ class WordEmbedding[T: ClassTag] private(
       output = output.view(inputBuffer.size(1), inputBuffer.size(2), weight.size(2))
     } catch {
       case e: IllegalArgumentException =>
-        throw new IllegalArgumentException(
+        Log4Error.unKnowExceptionError(false,
           s"EmbeddingGloVe updateOutput get exception: ${e.getMessage}\n" +
-            s"please ensure all elements of your input smaller than $inputDim.", e)
+            s"please ensure all elements of your input smaller than $inputDim.", cause = e)
       case e: Exception =>
-        throw e
+        Log4Error.invalidOperationError(false, e.getLocalizedMessage, cause = e)
     }
     output
   }
@@ -106,7 +106,7 @@ class WordEmbedding[T: ClassTag] private(
 object WordEmbedding {
 
   DataConverter.registerConverter(
-    "com.intel.analytics.zoo.pipeline.api.keras.layers.WordEmbedding.EmbeddingMatrixHolder[T]",
+    "com.intel.analytics.bigdl.dllib.keras.layers.WordEmbedding.EmbeddingMatrixHolder[T]",
     EmbeddingMatrixHolderConverter)
 
   val id = new AtomicInteger(0) // id in the registry map should be unique
@@ -160,11 +160,11 @@ object WordEmbedding {
       randomizeUnknown: Boolean = false,
       normalize: Boolean = false)
     (implicit ev: TensorNumeric[T]): (Int, Int, Tensor[T]) = {
-    require(new File(embeddingFile).exists(),
+    Log4Error.invalidInputError(new File(embeddingFile).exists(),
       s"embeddingFile $embeddingFile doesn't exist. Please check your file path.")
 
     if (wordIndex != null) {
-      require(wordIndex.values.forall(_ > 0),
+      Log4Error.invalidInputError(wordIndex.values.forall(_ > 0),
         "In wordIndex, indices should be positive and start from 1 " +
           "with 0 reserved for unknown words.")
     }
@@ -198,8 +198,10 @@ object WordEmbedding {
       case "glove.6B.300d.txt" => 300
       case "glove.42B.300d.txt" => 300
       case "glove.840B.300d.txt" => 300
-      case _ => throw new IllegalArgumentException(s"Unsupported embeddingFile: " +
+      case _ =>
+        Log4Error.invalidInputError(false, s"Unsupported embeddingFile: " +
         s"$embeddingFile")
+        1
     }
   }
 
@@ -344,9 +346,9 @@ object WordEmbedding {
       id = in.readString()
       val (cachedWeight, isCreated) = weightRegistry.getOrCreate(id) {
         val len = in.readInt()
-        require(len != 0, "weight length should not be zero," +
+        Log4Error.invalidInputError(len != 0, "weight length should not be zero," +
           "please set logging level to debug for more information")
-        assert(len >= 0, "weight length should be an non-negative integer")
+        Log4Error.invalidInputError(len >= 0, "weight length should be an non-negative integer")
         val w = new Array[Byte](len)
         timing("reading weight from stream") {
           var numOfBytes = 0
@@ -364,7 +366,7 @@ object WordEmbedding {
       }
       if (!isCreated) {
         val len = in.readInt()
-        assert(len >= 0, "weight length should be an non-negative integer")
+        Log4Error.invalidInputError(len >= 0, "weight length should be an non-negative integer")
         in.skip(len)
       }
       weight = cachedWeight.asInstanceOf[Tensor[T]]

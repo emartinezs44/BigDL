@@ -19,7 +19,8 @@ package com.intel.analytics.bigdl.dllib.feature.transform.vision.image
 import com.intel.analytics.bigdl.dllib.feature.dataset.{ChainedTransformer, Transformer}
 import com.intel.analytics.bigdl.opencv.OpenCV
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.opencv.OpenCVMat
-import org.apache.log4j.Logger
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
+import org.apache.logging.log4j.LogManager
 
 /**
  * FeatureTransformer is a transformer that transform ImageFeature
@@ -59,12 +60,13 @@ abstract class FeatureTransformer()
    * @return ImageFeature
    */
   def transform(feature: ImageFeature): ImageFeature = {
-    require(OpenCV.isOpenCVLoaded, "opencv isn't loaded")
+    Log4Error.invalidOperationError(OpenCV.isOpenCVLoaded, "opencv isn't loaded")
     if (!feature.isValid) return feature
     try {
       transformMat(feature)
       if (outKey.isDefined) {
-        require(outKey.get != ImageFeature.mat, s"the output key should not equal to" +
+        Log4Error.invalidOperationError(outKey.get != ImageFeature.mat,
+          s"the output key should not equal to" +
           s" ${ImageFeature.mat}, please give another name")
         if (feature.contains(outKey.get)) {
           val mat = feature[OpenCVMat](outKey.get)
@@ -81,7 +83,8 @@ abstract class FeatureTransformer()
           logger.warn(s"failed ${path} in transformer ${getClass}")
           e.printStackTrace()
         } else {
-          throw e
+          Log4Error.unKnowExceptionError(false, s"failed in transformer ${getClass}",
+            cause = e)
         }
     }
     feature
@@ -117,7 +120,7 @@ abstract class FeatureTransformer()
 }
 
 object FeatureTransformer {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 }
 
 /**

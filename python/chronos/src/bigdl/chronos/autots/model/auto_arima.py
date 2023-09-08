@@ -16,11 +16,11 @@
 # limitations under the License.
 #
 
-from bigdl.orca.automl.auto_estimator import AutoEstimator
-from bigdl.chronos.model.arima import ARIMABuilder
-
-
+import warnings
+from bigdl.chronos.model.arima import ARIMABuilder, ARIMAModel
+from bigdl.chronos.autots.utils import recalculate_n_sampling
 # -
+
 
 class AutoARIMA:
 
@@ -32,10 +32,12 @@ class AutoARIMA:
                  Q=1,
                  m=7,
                  metric='mse',
+                 metric_mode=None,
                  logs_dir="/tmp/auto_arima_logs",
                  cpus_per_trial=1,
                  name="auto_arima",
                  remote_dir=None,
+                 load_dir=None,
                  **arima_config
                  ):
         """
@@ -64,7 +66,14 @@ class AutoARIMA:
         :param m: Int or hp sampling function from an integer space for hyperparameter p
                of the ARIMA model.
                e.g. hp.choice([4, 7, 12, 24, 365]).
-        :param metric: String. The evaluation metric name to optimize. e.g. "mse"
+        :param metric: String or customized evaluation metric function.
+            If string, metric is the evaluation metric name to optimize, e.g. "mse".
+            If callable function, it signature should be func(y_true, y_pred), where y_true and
+            y_pred are numpy ndarray. The function should return a float value as evaluation result.
+        :param metric_mode: One of ["min", "max"]. "max" means greater metric value is better.
+            You have to specify metric_mode if you use a customized metric function.
+            You don't have to specify metric_mode if you use the built-in metric in
+            bigdl.orca.automl.metrics.Evaluator.
         :param logs_dir: Local directory to save logs and results. It defaults to
                "/tmp/auto_arima_logs"
         :param cpus_per_trial: Int. Number of cpus for each trial. It defaults to 1.
@@ -75,22 +84,30 @@ class AutoARIMA:
         :param arima_config: Other ARIMA hyperparameters.
 
         """
-        self.search_space = {
-            "p": p,
-            "q": q,
-            "seasonal": seasonal,
-            "P": P,
-            "Q": Q,
-            "m": m,
-        }
-        self.metric = metric
-        model_builder = ARIMABuilder()
-        self.auto_est = AutoEstimator(model_builder=model_builder,
-                                      logs_dir=logs_dir,
-                                      resources_per_trial={
-                                          "cpu": cpus_per_trial},
-                                      remote_dir=remote_dir,
-                                      name=name)
+        if load_dir:
+            self.best_model = ARIMAModel()
+            self.best_model.restore(load_dir)
+        try:
+            from bigdl.orca.automl.auto_estimator import AutoEstimator
+            self.search_space = {
+                "p": p,
+                "q": q,
+                "seasonal": seasonal,
+                "P": P,
+                "Q": Q,
+                "m": m,
+            }
+            self.metric = metric
+            self.metric_mode = metric_mode
+            model_builder = ARIMABuilder()
+            self.auto_est = AutoEstimator(model_builder=model_builder,
+                                          logs_dir=logs_dir,
+                                          resources_per_trial={
+                                              "cpu": cpus_per_trial},
+                                          remote_dir=remote_dir,
+                                          name=name)
+        except ImportError:
+            warnings.warn("You need to install `bigdl-orca[automl]` to use `fit` function.")
 
     def fit(self,
             data,
@@ -112,8 +129,9 @@ class AutoARIMA:
                optimized to the metric_threshold or it has been trained for {epochs} epochs.
         :param validation_data: Validation data. A 1-D numpy array.
         :param metric_threshold: a trial will be terminated when metric threshold is met
-        :param n_sampling: Number of times to sample from the search_space. Defaults to 1.
-               If hp.grid_search is in search_space, the grid will be repeated n_sampling of times.
+        :param n_sampling: Number of trials to evaluate in total. Defaults to 1.
+               If hp.grid_search is in search_space, the grid will be run n_sampling of trials
+               and round up n_sampling according to hp.grid_search.
                If this is -1, (virtually) infinite samples are generated
                until a stopping condition is met.
         :param search_alg: str, all supported searcher provided by ray tune
@@ -125,9 +143,12 @@ class AutoARIMA:
         :param scheduler: str, all supported scheduler provided by ray tune
         :param scheduler_params: parameters for scheduler
         """
+        n_sampling = recalculate_n_sampling(self.search_space,
+                                            n_sampling) if n_sampling != -1 else -1
         self.auto_est.fit(data=data,
                           validation_data=validation_data,
                           metric=self.metric,
+                          metric_mode=self.metric_mode,
                           metric_threshold=metric_threshold,
                           n_sampling=n_sampling,
                           search_space=self.search_space,

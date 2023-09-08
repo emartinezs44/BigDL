@@ -17,6 +17,7 @@
 from bigdl.dllib.nn.keras.layers.layer import KerasLayer
 from bigdl.dllib.optim.optimizer import *
 from bigdl.dllib.nn.criterion import *
+from bigdl.dllib.utils.log4Error import *
 import multiprocessing
 import warnings
 
@@ -28,6 +29,7 @@ class KerasModel(KerasLayer, Container, SharedStaticUtils):
     .. note:: `bigdl.dllib.keras` is deprecated in 0.11.
     This will be removed in future releases.
     """
+
     def __convert_optim_method(self, optimizer):
         optimizer = optimizer.lower()
         if optimizer == "adagrad":
@@ -43,7 +45,7 @@ class KerasModel(KerasLayer, Container, SharedStaticUtils):
         elif optimizer == "adamax":
             return Adamax(epsilon=1e-8)
         else:
-            raise TypeError("Unsupported optimizer: %s" % optimizer)
+            invalidInputError(False, "Unsupported optimizer: %s" % optimizer)
 
     def __convert_criterion(self, criterion):
         criterion = criterion.lower()
@@ -72,7 +74,7 @@ class KerasModel(KerasLayer, Container, SharedStaticUtils):
         elif criterion == "cosine_proximity" or criterion == "cosine":
             return CosineProximityCriterion()
         else:
-            raise TypeError("Unsupported loss: %s" % criterion)
+            invalidInputError(False, "Unsupported loss: %s" % criterion)
 
     def __convert_metrics(self, metrics):
         metrics = to_list(metrics)
@@ -81,7 +83,7 @@ class KerasModel(KerasLayer, Container, SharedStaticUtils):
             if metric.lower() == "accuracy":
                 bmetrics.append(Top1Accuracy())
             else:
-                raise TypeError("Unsupported metrics: %s" % metric)
+                invalidInputError(False, "Unsupported metrics: %s" % metric)
         return bmetrics
 
     def compile(self, optimizer, loss, metrics=None):
@@ -93,7 +95,8 @@ class KerasModel(KerasLayer, Container, SharedStaticUtils):
                    string representation, such as 'sgd'.
         loss: Criterion to be used. One can alternatively pass in the corresponding string
               representation, such as 'mse'.
-        metrics: List of validation methods to be used. Default is None. One can alternatively use ['accuracy'].
+        metrics: List of validation methods to be used. Default is None. One can alternatively use
+        ['accuracy'].
         """
         if isinstance(optimizer, six.string_types):
             optimizer = self.__convert_optim_method(optimizer)
@@ -129,7 +132,7 @@ class KerasModel(KerasLayer, Container, SharedStaticUtils):
             elif (isinstance(x, RDD) or isinstance(x, DataSet)) and not y:
                 training_data = x
             else:
-                raise TypeError("Unsupported training data type: %s" % type(x))
+                invalidInputError(False, "Unsupported training data type: %s" % type(x))
             callBigDlFunc(self.bigdl_type, "fit",
                           self.value,
                           training_data,
@@ -166,7 +169,7 @@ class KerasModel(KerasLayer, Container, SharedStaticUtils):
         elif isinstance(x, RDD) and not y:
             evaluation_data = x
         else:
-            raise TypeError("Unsupported evaluation data type: %s" % type(x))
+            invalidInputError(False, "Unsupported evaluation data type: %s" % type(x))
         return callBigDlFunc(self.bigdl_type, "evaluate",
                              self.value,
                              evaluation_data,
@@ -187,13 +190,13 @@ class KerasModel(KerasLayer, Container, SharedStaticUtils):
             elif isinstance(x, RDD):
                 features = x
             else:
-                raise TypeError("Unsupported prediction data type: %s" % type(x))
+                invalidInputError(False, "Unsupported prediction data type: %s" % type(x))
             return self.predict_distributed(features)
         else:
             if isinstance(x, np.ndarray):
                 return self.predict_local(x)
             else:
-                raise TypeError("Unsupported prediction data type: %s" % type(x))
+                invalidInputError(False, "Unsupported prediction data type: %s" % type(x))
 
 
 class Sequential(KerasModel):
@@ -209,9 +212,10 @@ class Sequential(KerasModel):
     .. note:: `bigdl.dllib.keras` is deprecated in 0.11.
     This will be removed in future releases.
     """
+
     def __init__(self, jvalue=None, **kwargs):
-        warnings.warn("bigdl.dllib.keras is deprecated in 0.11. "
-                      "Recommend to use Analytics Zoo's Keras API.")
+        warnings.warn("bigdl.dllib.nn.keras is deprecated. "
+                      "Recommend to use bigdl.dllib.keras instead.")
         super(Sequential, self).__init__(jvalue, **kwargs)
 
     @staticmethod
@@ -242,13 +246,15 @@ class Model(KerasModel):
     .. note:: `bigdl.dllib.keras` is deprecated in 0.11.
     This will be removed in future releases.
     """
-    def __init__(self, input, output, jvalue=None,  **kwargs):
-        warnings.warn("bigdl.dllib.keras is deprecated in BigDL 0.11."
-                      "Recommend to use Analytics Zoo's Keras API.")
+
+    def __init__(self, input, output, jvalue=None, **kwargs):
+        warnings.warn("bigdl.dllib.nn.keras is deprecated. "
+                      "Recommend to use bigdl.dllib.keras instead.")
         super(Model, self).__init__(jvalue,
                                     to_list(input),
                                     to_list(output),
                                     **kwargs)
+
     @staticmethod
     def from_jvalue(jvalue, bigdl_type="float"):
         """

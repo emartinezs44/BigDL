@@ -18,6 +18,7 @@ package com.intel.analytics.bigdl.dllib.nn
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{IdentityOutputShape, TensorModule}
 import com.intel.analytics.bigdl.dllib.tensor._
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 import scala.reflect.ClassTag
 
@@ -45,30 +46,34 @@ class LeakyReLU[T: ClassTag](
 
 
   override def updateOutput(input: Tensor[T]): Tensor[T] = {
-    require(input.isContiguous(), "input should be contiguous")
+    Log4Error.invalidInputError(input.isContiguous(), "input should be contiguous")
     if (inplace) output = input
     input.getType() match {
       case FloatType => updateOutputFloat(input.toTensor[Float], output.toTensor[Float],
         negval.toFloat, inplace)
       case DoubleType => updateOutputDouble(input.toTensor[Double], output.toTensor[Double],
         negval, inplace)
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"$t is not supported",
+          "only support FloatType and DoubleType")
     }
     output
   }
 
   override def updateGradInput(input: Tensor[T], gradOutput: Tensor[T]): Tensor[T] = {
-    require(input.isSameSizeAs(gradOutput),
+    Log4Error.invalidInputError(input.isSameSizeAs(gradOutput),
       "input should have the same size with gradOutput" +
         s"input size ${input.dim()} gradOutput size ${gradOutput.dim()}")
-    require(gradOutput.isContiguous(), "gradOutput should be contiguous")
+    Log4Error.invalidInputError(gradOutput.isContiguous(), "gradOutput should be contiguous")
     if (inplace) gradInput = gradOutput
     input.getType() match {
       case FloatType => updateGradInputFloat(input.toTensor[Float], gradOutput.toTensor[Float],
         gradInput.toTensor[Float], negval.toFloat, inplace)
       case DoubleType => updateGradInputDouble(input.toTensor[Double], gradOutput.toTensor[Double],
         gradInput.toTensor[Double], negval, inplace)
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"$t is not supported",
+          "only support FloatType and DoubleType")
     }
     gradInput
   }

@@ -13,24 +13,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import math
 import os.path
 
 from pyspark.sql import DataFrame
+import ray
 
 from bigdl.orca.data import SparkXShards
 from bigdl.orca.learn.spark_estimator import Estimator as SparkEstimator
 from bigdl.dllib.utils.common import get_node_and_core_number
 from bigdl.dllib.utils import nest
 from bigdl.dllib.nncontext import init_nncontext
+from bigdl.orca.data.utils import spark_df_to_pd_sparkxshards
+from bigdl.orca.learn.utils import process_xshards_of_pandas_dataframe,\
+    add_predict_to_pd_xshards
 
 from openvino.inference_engine import IECore
 import numpy as np
+from bigdl.dllib.utils.log4Error import invalidInputError
+
+from typing import (List, Optional, Union)
 
 
 class Estimator(object):
     @staticmethod
-    def from_openvino(*, model_path):
+    def from_openvino(*, model_path: str) -> "OpenvinoEstimator":
         """
         Load an openVINO Estimator.
 
@@ -42,7 +50,7 @@ class Estimator(object):
 class OpenvinoEstimator(SparkEstimator):
     def __init__(self,
                  *,
-                 model_path):
+                 model_path: str) -> None:
         self.load(model_path)
 
     def fit(self, data, epochs, batch_size=32, feature_cols=None, label_cols=None,
@@ -50,9 +58,14 @@ class OpenvinoEstimator(SparkEstimator):
         """
         Fit is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
-    def predict(self, data, feature_cols=None, batch_size=4):
+    def predict(self,  # type: ignore[override]
+                data: Union["SparkXShards", "DataFrame", "np.ndarray", List["np.ndarray"]],
+                feature_cols: Optional[List[str]] = None,
+                batch_size: Optional[int] = 4,
+                input_cols: Optional[Union[str, List[str]]]=None
+                ) -> Optional[Union["SparkXShards", "DataFrame", "np.ndarray", List["np.ndarray"]]]:
         """
         Predict input data
 
@@ -62,6 +75,9 @@ class OpenvinoEstimator(SparkEstimator):
                feature}, where feature(label) is a numpy array or a list of numpy arrays.
         :param feature_cols: Feature column name(s) of data. Only used when data is a Spark
                DataFrame. Default: None.
+        :param input_cols: Str or List of str. The model input list(order related). Users can
+               specify the input order using the `inputs` parameter. If inputs=None, The default
+               OpenVINO model input list will be used. Default: None.
         :return: predicted result.
                  If the input data is XShards, the predict result is a XShards, each partition
                  of the XShards is a dictionary of {'prediction': result}, where the result is a
@@ -72,12 +88,22 @@ class OpenvinoEstimator(SparkEstimator):
         sc = init_nncontext()
         model_bytes_broadcast = sc.broadcast(self.model_bytes)
         weight_bytes_broadcast = sc.broadcast(self.weight_bytes)
+        if input_cols:
+            if not isinstance(input_cols, list):
+                input_cols = [input_cols]
+            invalidInputError(set(input_cols) == set(self.inputs),
+                              "The inputs names need to match the model inputs, the model inputs: "
+                              + ", ".join(self.inputs))
+        else:
+            input_cols = self.inputs
+        outputs = list(self.output_dict.keys())
+        invalidInputError(len(outputs) != 0, "The number of model outputs should not be 0.")
+        is_df = False
+        schema = None
 
         def partition_inference(partition):
             model_bytes = model_bytes_broadcast.value
             weight_bytes = weight_bytes_broadcast.value
-            partition = list(partition)
-            data_num = len(partition)
             ie = IECore()
             config = {'CPU_THREADS_NUM': str(self.core_num)}
             ie.set_config(config, 'CPU')
@@ -85,10 +111,8 @@ class OpenvinoEstimator(SparkEstimator):
                                   weights=weight_bytes, init_from_buffer=True)
             net.batch_size = batch_size
             local_model = ie.load_network(network=net, device_name="CPU",
-                                          num_requests=data_num)
-            inputs = list(iter(local_model.requests[0].input_blobs))
-            outputs = list(iter(local_model.requests[0].output_blobs))
-            assert len(outputs) != 0, "The number of model outputs should not be 0."
+                                          num_requests=1)
+            infer_request = local_model.requests[0]
 
             def add_elem(d):
                 d_len = len(d)
@@ -99,66 +123,130 @@ class OpenvinoEstimator(SparkEstimator):
                 else:
                     return d, d_len
 
-            results = []
-            for idx, batch_data in enumerate(partition):
-                infer_request = local_model.requests[idx]
+            def generate_output_row(batch_input_dict):
                 input_dict = dict()
-                elem_num = 0
-                if isinstance(batch_data, list):
-                    for i, input in enumerate(inputs):
-                        input_dict[input], elem_num = add_elem(batch_data[i])
-                else:
-                    input_dict[inputs[0]], elem_num = add_elem(batch_data)
+                for col, input in zip(feature_cols, input_cols):
+                    value = batch_input_dict[col]
+                    feature_type = schema_dict[col]
+                    if isinstance(feature_type, df_types.FloatType):
+                        input_dict[input], elem_num = add_elem(np.array(value).astype(np.float32))
+                    elif isinstance(feature_type, df_types.IntegerType):
+                        input_dict[input], elem_num = add_elem(np.array(value).astype(np.int32))
+                    elif isinstance(feature_type, df_types.StringType):
+                        input_dict[input], elem_num = add_elem(np.array(value).astype(np.str))
+                    elif isinstance(feature_type, df_types.ArrayType):
+                        if isinstance(feature_type.elementType, df_types.StringType):
+                            input_dict[input], elem_num = add_elem(np.array(value).astype(np.str))
+                        else:
+                            input_dict[input], elem_num = add_elem(
+                                np.array(value).astype(np.float32))
+                    elif isinstance(value[0], DenseVector):
+                        input_dict[input], elem_num = add_elem(value.values.astype(np.float32))
+
                 infer_request.infer(input_dict)
                 if len(outputs) == 1:
-                    results.append(infer_request.output_blobs[outputs[0]].buffer[:elem_num])
+                    pred = infer_request.output_blobs[outputs[0]].buffer[:elem_num]
+                    pred = [[np.expand_dims(output, axis=0).tolist()] for output in pred]
                 else:
-                    results.append(list(map(lambda output:
-                                            infer_request.output_blobs[output].buffer[:elem_num],
-                                            outputs)))
+                    pred = list(map(lambda output:
+                                    infer_request.output_blobs[output].buffer[:elem_num],
+                                    outputs))
+                    pred = [list(np.expand_dims(output, axis=0).tolist()
+                                 for output in single_result)
+                            for single_result in zip(*pred)]
+                return pred
 
-            return results
+            if not is_df:
+                for batch_data in partition:
+                    input_dict = dict()
+                    elem_num = 0
+                    if isinstance(batch_data, list):
+                        for i, input in enumerate(input_cols):
+                            input_dict[input], elem_num = add_elem(batch_data[i])
+                    else:
+                        input_dict[input_cols[0]], elem_num = add_elem(batch_data)
+                    infer_request.infer(input_dict)
+                    if len(outputs) == 1:
+                        pred = infer_request.output_blobs[outputs[0]].buffer[:elem_num]
+                    else:
+                        pred = list(map(lambda output:
+                                        infer_request.output_blobs[output].buffer[:elem_num],
+                                        outputs))
+                    yield pred
+            else:
+                batch_dict = {col: [] for col in feature_cols}
+                batch_row = []
+                cnt = 0
+                schema_dict = {col: schema[col].dataType for col in feature_cols}
+                import pyspark.sql.types as df_types
+                from pyspark.ml.linalg import DenseVector
+                from pyspark.sql import Row
+                for row in partition:
+                    cnt += 1
+                    batch_row.append(row)
+                    for col in feature_cols:
+                        batch_dict[col].append(row[col])
+                    if cnt >= batch_size:
+                        pred = generate_output_row(batch_dict)
+                        for r, p in zip(batch_row, pred):
+                            row = Row(*([r[col] for col in r.__fields__] + p))
+                            yield row
+                        del pred
+                        batch_dict = {col: [] for col in feature_cols}
+                        batch_row = []
+                        cnt = 0
+                if cnt > 0:
+                    pred = generate_output_row(batch_dict)
+                    for r, p in zip(batch_row, pred):
+                        row = Row(*([r[col] for col in r.__fields__] + p))
+                        yield row
+                    del pred
+            del local_model
+            del net
 
         def predict_transform(dict_data, batch_size):
-            assert isinstance(dict_data, dict), "each shard should be an dict"
-            assert "x" in dict_data, "key x should in each shard"
+            invalidInputError(isinstance(dict_data, dict), "each shard should be an dict")
+            invalidInputError("x" in dict_data, "key x should in each shard")
             feature_data = dict_data["x"]
             if isinstance(feature_data, np.ndarray):
-                assert feature_data.shape[0] <= batch_size, \
-                    "The batch size of input data (the second dim) should be less than the model " \
-                    "batch size, otherwise some inputs will be ignored."
+                invalidInputError(feature_data.shape[0] <= batch_size,
+                                  "The batch size of input data (the second dim) should be less"
+                                  " than the model batch size, otherwise some inputs will"
+                                  " be ignored.")
             elif isinstance(feature_data, list):
                 for elem in feature_data:
-                    assert isinstance(elem, np.ndarray), "Each element in the x list should be " \
-                                                         "a ndarray, but get " + \
-                                                         elem.__class__.__name__
-                    assert elem.shape[0] <= batch_size, "The batch size of each input data (the " \
-                                                        "second dim) should be less than the " \
-                                                        "model batch size, otherwise some inputs " \
-                                                        "will be ignored."
+                    invalidInputError(isinstance(elem, np.ndarray),
+                                      "Each element in the x list should be a ndarray,"
+                                      " but get " + elem.__class__.__name__)
+                    invalidInputError(elem.shape[0] <= batch_size,
+                                      "The batch size of each input data (the second dim) should"
+                                      " be less than the model batch size, otherwise some inputs"
+                                      " will be ignored.")
             else:
-                raise ValueError("x in each shard should be a ndarray or a list of ndarray.")
+                invalidInputError(False,
+                                  "x in each shard should be a ndarray or a list of ndarray.")
             return feature_data
 
+        def update_result_shard(data):
+            shard, y = data
+            shard["prediction"] = y
+            return shard
+
         if isinstance(data, DataFrame):
-            from bigdl.orca.learn.utils import dataframe_to_xshards, convert_predict_rdd_to_dataframe
-            xshards, _ = dataframe_to_xshards(data,
-                                              validation_data=None,
-                                              feature_cols=feature_cols,
-                                              label_cols=None,
-                                              mode="predict")
-            transformed_data = xshards.transform_shard(predict_transform, batch_size)
+            xshards = spark_df_to_pd_sparkxshards(data)
+            pd_sparkxshards = process_xshards_of_pandas_dataframe(xshards,
+                                                                  feature_cols=feature_cols)
+
+            transformed_data = pd_sparkxshards.transform_shard(predict_transform, batch_size)
             result_rdd = transformed_data.rdd.mapPartitions(lambda iter: partition_inference(iter))
-            return convert_predict_rdd_to_dataframe(data, result_rdd.flatMap(lambda data: data))
+
+            pred_shards = SparkXShards(pd_sparkxshards.rdd.zip(result_rdd).map(update_result_shard))
+            res_shards = add_predict_to_pd_xshards(xshards, pred_shards)
+            return res_shards.to_spark_df()
         elif isinstance(data, SparkXShards):
             transformed_data = data.transform_shard(predict_transform, batch_size)
             result_rdd = transformed_data.rdd.mapPartitions(lambda iter: partition_inference(iter))
-
-            def update_result_shard(data):
-                shard, y = data
-                shard["prediction"] = y
-                return shard
-            return SparkXShards(data.rdd.zip(result_rdd).map(update_result_shard))
+            return SparkXShards(result_rdd)
         elif isinstance(data, (np.ndarray, list)):
             if isinstance(data, np.ndarray):
                 split_num = math.ceil(len(data)/batch_size)
@@ -168,18 +256,19 @@ class OpenvinoEstimator(SparkEstimator):
             elif isinstance(data, list):
                 flattened = nest.flatten(data)
                 data_length = len(flattened[0])
-                data_to_be_rdd = []
+                data_to_be_rdd = []  # type: ignore
                 split_num = math.ceil(flattened[0].shape[0]/batch_size)
                 num_slices = min(split_num, self.node_num)
                 for i in range(split_num):
                     data_to_be_rdd.append([])
                 for x in flattened:
-                    assert isinstance(x, np.ndarray), "the data in the data list should be " \
-                                                      "ndarrays, but get " + \
-                                                      x.__class__.__name__
-                    assert len(x) == data_length, \
-                        "the ndarrays in data must all have the same size in first dimension" \
-                        ", got first ndarray of size {} and another {}".format(data_length, len(x))
+                    invalidInputError(isinstance(x, np.ndarray),
+                                      "the data in the data list should be ndarrays,"
+                                      " but get " + x.__class__.__name__)
+                    invalidInputError(len(x) == data_length,
+                                      "the ndarrays in data must all have the same"
+                                      " size in first dimension, got first ndarray"
+                                      " of size {} and another {}".format(data_length, len(x)))
                     x_parts = np.array_split(x, split_num)
                     for idx, x_part in enumerate(x_parts):
                         data_to_be_rdd[idx].append(x_part)
@@ -198,28 +287,31 @@ class OpenvinoEstimator(SparkEstimator):
                 result_arr = np.concatenate(result_arr_list, axis=0)
             return result_arr
         else:
-            raise ValueError("Only XShards, Spark DataFrame, a numpy array and a list of numpy arr"
-                             "ays are supported as input data, but get " + data.__class__.__name__)
+            invalidInputError(False,
+                              "Only XShards, Spark DataFrame, a numpy array and a list of numpy"
+                              " arrays are supported as input data, but"
+                              " get " + data.__class__.__name__)
+        return None
 
     def evaluate(self, data, batch_size=32, feature_cols=None, label_cols=None):
         """
         Evaluate is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def get_model(self):
         """
         Get_model is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
-    def save(self, model_path):
+    def save(self, model_path: str):
         """
         Save is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
-    def load(self, model_path):
+    def load(self, model_path: str) -> None:
         """
         Load an openVINO model.
 
@@ -227,52 +319,60 @@ class OpenvinoEstimator(SparkEstimator):
         :return:
         """
         self.node_num, self.core_num = get_node_and_core_number()
-        assert isinstance(model_path, str), "The model_path should be string."
-        assert os.path.exists(model_path), "The model_path should be exist."
+        invalidInputError(isinstance(model_path, str), "The model_path should be string.")
+        invalidInputError(os.path.exists(model_path), "The model_path should be exist.")
         with open(model_path, 'rb') as file:
             self.model_bytes = file.read()
 
         with open(model_path[:model_path.rindex(".")] + ".bin", 'rb') as file:
             self.weight_bytes = file.read()
 
-    def set_tensorboard(self, log_dir, app_name):
+        ie = IECore()
+        config = {'CPU_THREADS_NUM': str(self.core_num)}
+        ie.set_config(config, 'CPU')
+        net = ie.read_network(model=self.model_bytes,
+                              weights=self.weight_bytes, init_from_buffer=True)
+        self.inputs = list(net.input_info.keys())
+        self.output_dict = {k: v.shape for k, v in net.outputs.items()}
+
+    def set_tensorboard(self, log_dir: str, app_name: str):
         """
         Set_tensorboard is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def clear_gradient_clipping(self):
         """
         Clear_gradient_clipping is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def set_constant_gradient_clipping(self, min, max):
         """
         Set_constant_gradient_clipping is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def set_l2_norm_gradient_clipping(self, clip_norm):
         """
         Set_l2_norm_gradient_clipping is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def get_train_summary(self, tag=None):
         """
         Get_train_summary is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def get_validation_summary(self, tag=None):
         """
         Get_validation_summary is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")
 
     def load_orca_checkpoint(self, path, version):
         """
         Load_orca_checkpoint is not supported in OpenVINOEstimator
         """
-        raise NotImplementedError
+        invalidInputError(False, "not implemented")

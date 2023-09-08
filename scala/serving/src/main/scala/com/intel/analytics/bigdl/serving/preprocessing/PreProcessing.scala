@@ -22,7 +22,6 @@ import com.intel.analytics.bigdl.dllib.nn.abstractnn.Activity
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.utils.T
 import org.opencv.imgcodecs.Imgcodecs
-import org.apache.log4j.Logger
 
 import scala.collection.mutable.ArrayBuffer
 import com.intel.analytics.bigdl.orca.inference.{EncryptSupportive, InferenceSupportive}
@@ -30,15 +29,17 @@ import com.intel.analytics.bigdl.serving.{ClusterServing, ClusterServingHelper}
 import com.intel.analytics.bigdl.serving.http.Instances
 import com.intel.analytics.bigdl.serving.serialization.{JsonInputDeserializer, StreamSerializer}
 import com.intel.analytics.bigdl.serving.utils.{Conventions, RedisUtils}
+import org.apache.logging.log4j.LogManager
 import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
 import scala.collection.JavaConverters._
 import redis.clients.jedis.Jedis
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 class PreProcessing()
   extends EncryptSupportive with InferenceSupportive {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
   if (ClusterServing.helper == null) {
     ClusterServing.helper = new ClusterServingHelper
   }
@@ -120,10 +121,10 @@ class PreProcessing()
     } else {
       java.util.Base64.getDecoder.decode(s)
     }
-    val mat = OpenCVMethod.fromImageBytes(byteBuffer, Imgcodecs.CV_LOAD_IMAGE_UNCHANGED)
+    val mat = OpenCVMethod.fromImageBytes(byteBuffer, Imgcodecs.IMREAD_COLOR)
     if (helper.imageResize != "") {
       val hw = helper.imageResize.split(",")
-      require(hw.length == 2, "Image dim must be 2")
+      Log4Error.invalidOperationError(hw.length == 2, "Image dim must be 2")
       Imgproc.resize(mat, mat, new Size(hw(0).trim.toInt, hw(1).trim.toInt))
     }
 //    Imgproc.resize(mat, mat, new Size(224, 224))
@@ -133,11 +134,18 @@ class PreProcessing()
     OpenCVMat.toFloatPixels(mat, arrayBuffer)
 
     val imageTensor = Tensor[Float](arrayBuffer, Array(height, width, channel))
-    if (helper.chwFlag) {
+    val singleTensor = if (helper.chwFlag) {
       imageTensor.transpose(1, 3)
         .transpose(2, 3).contiguous()
     } else {
       imageTensor
+    }
+    if (helper.modelType == "openvino") {
+      // if OpenVINO model, return the single tensor and batch them before inference
+      singleTensor
+    } else {
+      // if other model, add a dimension to construct the input with batch_size dimension
+      singleTensor.addSingletonDimension()
     }
   }
   def decodeTensor(info: (ArrayBuffer[Int], ArrayBuffer[Float],

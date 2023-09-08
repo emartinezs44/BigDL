@@ -16,12 +16,15 @@
 
 import torch
 import torch.nn as nn
-from bigdl.orca.automl.model.base_pytorch_model import PytorchBaseModel
+from pytorch_lightning import seed_everything
+from bigdl.chronos.pytorch.model_wrapper.normalization import NormalizeTSModel
+from bigdl.chronos.pytorch.model_wrapper.decomposition import DecompositionTSModel
 
 
 class LSTMModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim, layer_num, dropout, output_dim):
+    def __init__(self, input_dim, hidden_dim, layer_num, dropout, output_dim, seed):
         super(LSTMModel, self).__init__()
+        seed_everything(seed, workers=True)
         self.hidden_dim = hidden_dim
         self.dropout = dropout
         self.layer_num = layer_num
@@ -56,21 +59,39 @@ def model_creator(config):
     hidden_dim = config.get("hidden_dim", 32)
     dropout = config.get("dropout", 0.2)
     layer_num = config.get("layer_num", 2)
+    from bigdl.nano.utils.log4Error import invalidInputError
     if isinstance(hidden_dim, list):
-        assert len(hidden_dim) == layer_num, \
-            "length of hidden_dim should be equal to layer_num"
+        invalidInputError(len(hidden_dim) == layer_num,
+                          "length of hidden_dim should be equal to layer_num")
     if isinstance(dropout, list):
-        assert len(dropout) == layer_num, \
-            "length of dropout should be equal to layer_num"
+        invalidInputError(len(dropout) == layer_num,
+                          "length of dropout should be equal to layer_num")
     if isinstance(hidden_dim, int):
         hidden_dim = [hidden_dim]*layer_num
     if isinstance(dropout, (float, int)):
         dropout = [dropout]*layer_num
-    return LSTMModel(input_dim=config["input_feature_num"],
-                     hidden_dim=hidden_dim,
-                     layer_num=layer_num,
-                     dropout=dropout,
-                     output_dim=config["output_feature_num"],)
+
+    model = LSTMModel(input_dim=config["input_feature_num"],
+                      hidden_dim=hidden_dim,
+                      layer_num=layer_num,
+                      dropout=dropout,
+                      output_dim=config["output_feature_num"],
+                      seed=config.get("seed", None))
+    if config.get("normalization", False):
+        model = NormalizeTSModel(model, config["output_feature_num"])
+    decomposition_kernel_size = config.get("decomposition_kernel_size", 0)
+    if decomposition_kernel_size > 1:
+        model_copy = LSTMModel(input_dim=config["input_feature_num"],
+                               hidden_dim=hidden_dim,
+                               layer_num=layer_num,
+                               dropout=dropout,
+                               output_dim=config["output_feature_num"],
+                               seed=config.get("seed", None))
+        if config.get("normalization", False):
+            model_copy = NormalizeTSModel(model_copy, config["output_feature_num"])
+        model = DecompositionTSModel((model, model_copy), decomposition_kernel_size)
+
+    return model
 
 
 def optimizer_creator(model, config):
@@ -82,26 +103,31 @@ def loss_creator(config):
     return nn.MSELoss()
 
 
-class VanillaLSTMPytorch(PytorchBaseModel):
+try:
+    from bigdl.orca.automl.model.base_pytorch_model import PytorchBaseModel
 
-    def __init__(self, check_optional_config=True):
-        """
-        Constructor of Vanilla LSTM model
-        """
-        super().__init__(model_creator=model_creator,
-                         optimizer_creator=optimizer_creator,
-                         loss_creator=loss_creator,
-                         check_optional_config=check_optional_config)
+    class VanillaLSTMPytorch(PytorchBaseModel):
 
-    def _get_required_parameters(self):
-        return {
-            "input_feature_num",
-            "output_feature_num"
-        }
+        def __init__(self, check_optional_config=False):
+            """
+            Constructor of Vanilla LSTM model
+            """
+            super().__init__(model_creator=model_creator,
+                             optimizer_creator=optimizer_creator,
+                             loss_creator=loss_creator,
+                             check_optional_config=check_optional_config)
 
-    def _get_optional_parameters(self):
-        return {
-            'hidden_dim',
-            'layer_num',
-            'dropout',
-        } | super()._get_optional_parameters()
+        def _get_required_parameters(self):
+            return {
+                "input_feature_num",
+                "output_feature_num"
+            }
+
+        def _get_optional_parameters(self):
+            return {
+                'hidden_dim',
+                'layer_num',
+                'dropout',
+            } | super()._get_optional_parameters()
+except ImportError:
+    pass

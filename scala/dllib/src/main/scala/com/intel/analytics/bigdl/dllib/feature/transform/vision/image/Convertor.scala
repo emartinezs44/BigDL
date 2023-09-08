@@ -22,7 +22,8 @@ import com.intel.analytics.bigdl.opencv.OpenCV
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.opencv.OpenCVMat
-import org.apache.log4j.Logger
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
+import org.apache.logging.log4j.LogManager
 
 import scala.reflect._
 
@@ -39,7 +40,7 @@ class BytesToMat(byteKey: String = ImageFeature.bytes)
 }
 
 object BytesToMat {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
   def apply(byteKey: String = ImageFeature.bytes): BytesToMat = new BytesToMat(byteKey)
 
   def transform(feature: ImageFeature, byteKey: String): ImageFeature = {
@@ -47,7 +48,8 @@ object BytesToMat {
     val bytes = feature[Array[Byte]](byteKey)
     var mat: OpenCVMat = null
     try {
-      require(null != bytes && bytes.length > 0, "image file bytes should not be empty")
+      Log4Error.invalidOperationError(null != bytes && bytes.length > 0,
+        "image file bytes should not be empty")
       mat = OpenCVMat.fromImageBytes(bytes)
       feature(ImageFeature.mat) = mat
       feature(ImageFeature.originalSize) = mat.shape()
@@ -70,10 +72,10 @@ object BytesToMat {
 class PixelBytesToMat(byteKey: String = ImageFeature.bytes) extends FeatureTransformer {
 
   override def transform(feature: ImageFeature): ImageFeature = {
-    require(OpenCV.isOpenCVLoaded, "opencv isn't loaded")
+    Log4Error.invalidOperationError(OpenCV.isOpenCVLoaded, "opencv isn't loaded")
     if (!feature.isValid) return feature
     try {
-      require(feature.getOriginalSize != null,
+      Log4Error.invalidOperationError(feature.getOriginalSize != null,
         "please set the original size of image in ImageFeature")
       val pixels = feature[Array[Byte]](byteKey)
       val mat = OpenCVMat.fromPixelsBytes(pixels, feature.getOriginalHeight,
@@ -94,7 +96,7 @@ class PixelBytesToMat(byteKey: String = ImageFeature.bytes) extends FeatureTrans
 }
 
 object PixelBytesToMat {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
   def apply(byteKey: String = ImageFeature.bytes): PixelBytesToMat = new PixelBytesToMat(byteKey)
 }
 
@@ -138,7 +140,7 @@ class MatToFloats(validHeight: Int, validWidth: Int, validChannels: Int,
 }
 
 object MatToFloats {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 
   def apply(validHeight: Int = 300, validWidth: Int = 300, validChannels: Int = 3,
     outKey: String = ImageFeature.floats, shareBuffer: Boolean = true): MatToFloats =
@@ -189,7 +191,7 @@ class MatToTensor[T: ClassTag](toRGB: Boolean = false,
 }
 
 object MatToTensor {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 
   def apply[T: ClassTag](toRGB: Boolean = false, tensorKey: String = ImageFeature.imageTensor,
     shareBuffer: Boolean = true, greyToRGB: Boolean = false)
@@ -214,7 +216,8 @@ class ImageFrameToSample[T: ClassTag](inputKeys: Array[String] = Array(ImageFeat
     try {
       val inputs = inputKeys.map(key => {
         val input = feature[Tensor[T]](key)
-        require(input.isInstanceOf[Tensor[T]], s"the input $key should be tensor")
+        Log4Error.invalidOperationError(input.isInstanceOf[Tensor[T]],
+          s"the input $key should be tensor")
         input.asInstanceOf[Tensor[T]]
       })
       val sample = if (targetKeys == null) {
@@ -222,7 +225,8 @@ class ImageFrameToSample[T: ClassTag](inputKeys: Array[String] = Array(ImageFeat
       } else {
         val targets = targetKeys.map(key => {
           val target = feature[Tensor[T]](key)
-          require(target.isInstanceOf[Tensor[T]], s"the target $key should be tensor")
+          Log4Error.invalidOperationError(target.isInstanceOf[Tensor[T]],
+            s"the target $key should be tensor")
           target.asInstanceOf[Tensor[T]]
         })
         ArraySample[T](inputs, targets)
@@ -241,7 +245,7 @@ class ImageFrameToSample[T: ClassTag](inputKeys: Array[String] = Array(ImageFeat
 }
 
 object ImageFrameToSample {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 
   def apply[T: ClassTag](inputKeys: Array[String] = Array(ImageFeature.imageTensor),
     targetKeys: Array[String] = null,

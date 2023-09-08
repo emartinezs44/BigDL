@@ -16,18 +16,14 @@
 
 package com.intel.analytics.bigdl.friesian.feature
 
-import java.util
-import java.util.{List => JList}
-
 import org.apache.spark.TaskContext
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, IntegerType}
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.{DataFrame, Row}
 
-import scala.collection.{immutable, mutable}
+import scala.collection.mutable
 import scala.collection.mutable.WrappedArray
-import reflect.runtime.universe._
 import scala.util.Random
 
 private[friesian] object Utils {
@@ -187,10 +183,10 @@ private[friesian] object Utils {
     }
   }
 
-  def padArr[T]: (Int, mutable.WrappedArray[T]) => mutable.Seq[T] = {
-    (maxLength: Int, history: WrappedArray[T]) => {
+  def padArr[T]: (Int, Any, mutable.WrappedArray[T]) => mutable.Seq[T] = {
+    (maxLength: Int, maskToken: Any, history: WrappedArray[T]) => {
       val n = history.length
-      val padValue = castValueFromNum(history(0), 0)
+      val padValue = castValueFromNum(history(0), maskToken)
       val pads: mutable.Seq[T] = if (maxLength > n) {
         history ++ (0 to maxLength - n - 1).map(_ => padValue)
       } else {
@@ -200,10 +196,10 @@ private[friesian] object Utils {
     }
   }
 
-  def padMatrix[T]: (Int, WrappedArray[WrappedArray[T]]) => Seq[Seq[T]] = {
-    (maxLength: Int, history: WrappedArray[WrappedArray[T]]) => {
+  def padMatrix[T]: (Int, Any, WrappedArray[WrappedArray[T]]) => Seq[Seq[T]] = {
+    (maxLength: Int, maskToken: Any, history: WrappedArray[WrappedArray[T]]) => {
       val n = history.length
-      val padValue = castValueFromNum(history(0)(0), 0)
+      val padValue = castValueFromNum(history(0)(0), maskToken)
       if (maxLength > n) {
         val hishead = history(0)
         val padArray =
@@ -215,12 +211,29 @@ private[friesian] object Utils {
     }
   }
 
-  def castValueFromNum[T](num: T, value: Int): T = {
+  def castValueFromNum[T](num: T, value: Any): T = {
+    val targetType = value match {
+      case _: Double | _: Long | _: Int | _: Float => "numeric"
+      case _: String => "string"
+      case _ => throw new IllegalArgumentException(
+        s"Unsupported value type ${value.getClass.getName} ($value).")
+    }
     val out: Any = num match {
-      case _: Double => value.toDouble
-      case _: Int => value
-      case _: Float => value.toFloat
-      case _: Long => value.toLong
+      case _: Double | _: Long | _: Int | _: Float =>
+        if (targetType == "numeric") {
+          val valueNumber = value.asInstanceOf[Number]
+          num match {
+            case _: Double => valueNumber.doubleValue()
+            case _: Long => valueNumber.longValue()
+            case _: Int => valueNumber.intValue()
+            case _: Float => valueNumber.floatValue()
+          }
+        } else {
+          throw new IllegalArgumentException(s"Failed to convert mask_token type " +
+            s"${value.getClass.getName} to the element type of column ${num.getClass.getName}. " +
+            s"Please provide right mask_token.")
+        }
+      case _: String => value.toString
       case _ => throw new IllegalArgumentException(
         s"Unsupported value type ${num.getClass.getName} ($num).")
     }
@@ -266,16 +279,20 @@ private[friesian] object Utils {
                         key: String, value: String): DataFrame = {
 
     val colTypes = df.schema.fields.filter(x => x.name.equalsIgnoreCase(colName))
-    val lookup = mapBr.value
     if(colTypes.length > 0) {
       val colType = colTypes(0)
       val replaceUdf = colType.dataType match {
-        case IntegerType => udf((x: Int) => lookup.getOrElse(x, 0))
+        case IntegerType => udf((x: Int) => mapBr.value.getOrElse(x, 0))
         case ArrayType(IntegerType, _) =>
-          udf((arr: WrappedArray[Int]) => arr.map(x => lookup.getOrElse(x, 0)))
+          udf((arr: WrappedArray[Int]) => {
+            val lookup = mapBr.value
+            arr.map(x => lookup.getOrElse(x, 0))
+          })
         case ArrayType(ArrayType(IntegerType, _), _) =>
-          udf((mat: WrappedArray[WrappedArray[Int]]) =>
-            mat.map(arr => arr.map(x => lookup.getOrElse(x, 0))))
+          udf((mat: WrappedArray[WrappedArray[Int]]) => {
+            val lookup = mapBr.value
+            mat.map(arr => arr.map(x => lookup.getOrElse(x, 0)))
+          })
         case _ => throw new IllegalArgumentException(
           s"Unsupported data type ${colType.dataType.typeName} " +
             s"of column ${colType.name} in addValueFeatures")

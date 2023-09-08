@@ -24,7 +24,7 @@ import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.tensor._
 import com.intel.analytics.bigdl.dllib.utils.serializer.converters.DataConverter
 import com.intel.analytics.bigdl.dllib.utils.serializer.{DeserializeContext, ModuleData, SerializeContext}
-import com.intel.analytics.bigdl.dllib.utils.{T, Table}
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, T, Table}
 
 import scala.reflect.runtime.universe
 import scala.reflect.ClassTag
@@ -44,8 +44,10 @@ private[bigdl] class SpatialConvolution[T: ClassTag](
   val format: DataFormat = DataFormat.NCHW
 )(implicit ev: TensorNumeric[T]) extends QuantizedModule[T](nOutputPlane) with Initializable {
 
-  require(nInputPlane % nGroup == 0, "Number of input channels should be multiples of group.")
-  require(nOutputPlane % nGroup == 0, "Number of output channels should be multiples of group.")
+  Log4Error.invalidInputError(nInputPlane % nGroup == 0,
+    "Number of input channels should be multiples of group.")
+  Log4Error.invalidInputError(nOutputPlane % nGroup == 0,
+    "Number of output channels should be multiples of group.")
 
   private val data: QuantizedTensor[T] = QuantizedDummyTensor[T]()
   val bias: Tensor[T] = Tensor[T](nOutputPlane)
@@ -95,7 +97,9 @@ private[bigdl] class SpatialConvolution[T: ClassTag](
         case FloatType =>
           weight(i - 1).asInstanceOf[QuantizedTensor[T]].release()
           weight(i - 1) = QuantizedTensor[T](groupWeight, params)
-        case _ => throw new UnsupportedOperationException(s"Only support Float for quantized model")
+        case _ =>
+          Log4Error.invalidInputError(false, s"${ev.getType()} is not supported",
+            "only support Float for quantized model")
       }
     }
 
@@ -103,12 +107,13 @@ private[bigdl] class SpatialConvolution[T: ClassTag](
   }
 
   override def updateOutput(input: Tensor[T]): Tensor[T] = {
-    require(input.dim() == 3 || input.dim() == 4,
+    Log4Error.invalidInputError(input.dim() == 3 || input.dim() == 4,
       "quantized.SpatialConvolution: " + ErrorInfo.constrainInputAs3DOrBatch)
-    require(input.isContiguous())
+    Log4Error.invalidInputError(input.isContiguous(),
+      "SpatialConvolution expect input be contiguous")
 
     val (dimHeight, dimWidth, channelDim) = format.getHWCDims(input.dim())
-    require(input.size(channelDim) == nInputPlane, s"input channel size " +
+    Log4Error.invalidInputError(input.size(channelDim) == nInputPlane, s"input channel size " +
       s"${input.size(channelDim)} is not the same as nInputPlane $nInputPlane")
 
     val inputWidth = input.size(dimWidth)
@@ -157,7 +162,9 @@ private[bigdl] class SpatialConvolution[T: ClassTag](
             im2ColAndGemmFloat(batch)
           batch += 1
         }
-      case _ => throw new UnsupportedOperationException(s"Only support Float for quantized model")
+      case _ =>
+        Log4Error.invalidInputError(false, s"${ev.getType()} is not supported",
+          "only support Float for quantized model")
     }
 
     @inline def im2ColAndGemmFloat(batch: Int): Unit = {
@@ -211,7 +218,9 @@ private[bigdl] class SpatialConvolution[T: ClassTag](
   }
 
   override def updateGradInput(input: Tensor[T], gradOutput: Tensor[T]): Tensor[T] = {
-    throw new UnsupportedOperationException(s"Doesn't updateGradInput for quantized model")
+    Log4Error.invalidOperationError(false,
+      s"Doesn't support updateGradInput for quantized model")
+    input
   }
 
   override def parameters(): (Array[Tensor[T]], Array[Tensor[T]]) = {
@@ -305,7 +314,9 @@ object SpatialConvolution extends QuantSerializer {
       case FloatType =>
         DataConverter.setAttributeValue(context, weightBuilder, conv.weight,
           universe.typeOf[Array[Tensor[Float]]])
-      case _ => throw new UnsupportedOperationException(s"Only support Float for quantized model")
+      case _ =>
+        Log4Error.invalidOperationError(false,
+          s"Doesn't support updateGradInput for quantized model")
     }
     modelBuilder.putAttr("weights", weightBuilder.build)
   }

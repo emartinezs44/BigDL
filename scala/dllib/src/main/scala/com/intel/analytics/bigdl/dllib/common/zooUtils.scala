@@ -22,11 +22,12 @@ import java.nio.file.{Path => JPath}
 
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.Activity
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 import org.apache.commons.io.filefilter.WildcardFileFilter
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FSDataInputStream, FSDataOutputStream, FileSystem, Path}
 import org.apache.hadoop.io.IOUtils
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
 import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable
@@ -34,7 +35,7 @@ import scala.collection.mutable.ArrayBuffer
 
 private[bigdl] object zooUtils {
 
-  private val logger = Logger.getLogger(getClass)
+  private val logger = LogManager.getLogger(getClass)
 
   @inline
   def timeIt[T](name: String)(f: => T): T = {
@@ -109,7 +110,7 @@ private[bigdl] object zooUtils {
       }
     } catch {
       case _: FileNotFoundException => logger.warn(s"$path doesn't exist!")
-      case _: IOException => logger.error(s"List paths of $path error!")
+      case _: IOException => logger.info(s"List paths of $path error!")
     }
     fs.close()
     res.toArray
@@ -217,7 +218,8 @@ private[bigdl] object zooUtils {
   def appendPrefix(localPath: String): String = {
     if (!localPath.startsWith("file://")) {
       if (!localPath.startsWith("/")) {
-        throw new Exception("local path must be a absolute path")
+        Log4Error.invalidInputError(false, s"local path must be a absolute path")
+        null
       } else {
         "file://" + localPath
       }
@@ -252,7 +254,7 @@ private[bigdl] object zooUtils {
     try {
       result = fs.exists(new Path(updatedPath))
     } catch {
-      case _: IOException => logger.error(s"Check existence of $path error!")
+      case _: IOException => logger.info(s"Check existence of $path error!")
     } finally {
       fs.close()
     }
@@ -269,7 +271,7 @@ private[bigdl] object zooUtils {
     try {
       fs.mkdirs(new Path(updatedPath))
     } catch {
-      case _: IOException => logger.error(s"make directory of $path error!")
+      case _: IOException => logger.info(s"make directory of $path error!")
     } finally {
       fs.close()
     }
@@ -301,12 +303,6 @@ private[bigdl] object zooUtils {
       if (null != out) out.close()
       if (null != fs) fs.close()
     }
-  }
-
-  def logUsageErrorAndThrowException(errMessage: String, cause: Throwable = null): Unit = {
-    logger.error(s"********************************Usage Error****************************\n"
-      + errMessage)
-    throw new AnalyticsZooException(errMessage, cause)
   }
 
   def createTmpDir(prefix: String = "Zoo", permissions: String = "rwx------"): JPath = {

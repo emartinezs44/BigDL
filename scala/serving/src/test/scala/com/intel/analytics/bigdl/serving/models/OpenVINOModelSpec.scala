@@ -21,12 +21,14 @@ import com.intel.analytics.bigdl.serving.serialization.ArrowDeserializer
 import org.scalatest.{FlatSpec, Matchers}
 
 import scala.sys.process._
+import com.intel.analytics.bigdl.serving.utils.AssertUtils
 
 class OpenVINOModelSpec extends FlatSpec with Matchers {
   ClusterServing.helper = new ClusterServingHelper()
   "OpenVINO Inception_v1" should "work" in {
-    ("wget -O /tmp/openvino_inception_v1.tar http://10.239.45.10:8081" +
-      "/repository/raw/analytics-zoo-data/openvino_inception_v1.tar").!
+    ("wget --no-check-certificate -O /tmp/openvino_inception_v1.tar https://sourceforge.net/" +
+"projects/analytics-zoo/files/analytics-zoo-data/openvino_inception_v1.tar").!
+
     "tar -xvf /tmp/openvino_inception_v1.tar -C /tmp/".!
     val resource = getClass().getClassLoader().getResource("serving")
     val dataPath = resource.getPath + "/image-3_224_224-arrow-base64"
@@ -47,14 +49,14 @@ class OpenVINOModelSpec extends FlatSpec with Matchers {
 
     postProcessed.foreach(x => {
       val result = ArrowDeserializer.getArray(x._2)
-      require(result(0)._1.length == 1001, "result length wrong")
-      require(result(0)._2.length == 1, "result shape wrong")
+      AssertUtils.conditionFailTest(result(0)._1.length == 1001, "result length wrong")
+      AssertUtils.conditionFailTest(result(0)._2.length == 1, "result shape wrong")
     })
   }
 
   "OpenVINO Mobilenet_v1" should "work" in {
-    ("wget -O /tmp/openvino_mobilenet_v1.tar http://10.239.45.10:8081" +
-      "/repository/raw/analytics-zoo-data/openvino_mobilenet_v1.tar").!
+    ("wget --no-check-certificate -O /tmp/openvino_mobilenet_v1.tar https://sourceforge.net/" +
+"projects/analytics-zoo/files/analytics-zoo-data/openvino_mobilenet_v1.tar").!
     "tar -xvf /tmp/openvino_mobilenet_v1.tar -C /tmp/".!
     val resource = getClass().getClassLoader().getResource("serving")
     val dataPath = resource.getPath + "/image-3_224_224-arrow-base64"
@@ -76,22 +78,22 @@ class OpenVINOModelSpec extends FlatSpec with Matchers {
 
     postProcessed.foreach(x => {
       val result = ArrowDeserializer.getArray(x._2)
-      require(result(0)._1.length == 1001, "result length wrong")
-      require(result(0)._2.length == 1, "result shape wrong")
+      AssertUtils.conditionFailTest(result(0)._1.length == 1001, "result length wrong")
+      AssertUtils.conditionFailTest(result(0)._2.length == 1, "result shape wrong")
     })
   }
 
 
   "OpenVINO Mobilenet_v2" should "work" in {
-    ("wget -O /tmp/openvino_mobilenet_v2.tar http://10.239.45.10:8081" +
-      "/repository/raw/analytics-zoo-data/openvino_mobilenet_v2.tar").!
+    ("wget --no-check-certificate -O /tmp/openvino_mobilenet_v2.tar https://sourceforge.net/" +
+"projects/analytics-zoo/files/analytics-zoo-data/openvino_mobilenet_v2.tar").!
     "tar -xvf /tmp/openvino_mobilenet_v2.tar -C /tmp/".!
     val resource = getClass().getClassLoader().getResource("serving")
     val dataPath = resource.getPath + "/image-3_224_224-arrow-base64"
     val b64string = scala.io.Source.fromFile(dataPath).mkString
 
     ClusterServing.helper = new ClusterServingHelper()
-val helper = ClusterServing.helper
+    val helper = ClusterServing.helper
     helper.modelType = "openvino"
     helper.weightPath = "/tmp/openvino_mobilenet_v2/mobilenet_v2.bin"
     helper.defPath = "/tmp/openvino_mobilenet_v2/mobilenet_v2.xml"
@@ -106,22 +108,22 @@ val helper = ClusterServing.helper
 
     postProcessed.foreach(x => {
       val result = ArrowDeserializer.getArray(x._2)
-      require(result(0)._1.length == 1001, "result length wrong")
-      require(result(0)._2.length == 1, "result shape wrong")
+      AssertUtils.conditionFailTest(result(0)._1.length == 1001, "result length wrong")
+      AssertUtils.conditionFailTest(result(0)._2.length == 1, "result shape wrong")
     })
   }
 
 
   "OpenVINO Resnet50_openvino2020" should "work" in {
-    ("wget -O /tmp/openvino2020_resnet50.tar http://10.239.45.10:8081" +
-      "/repository/raw/analytics-zoo-data/openvino2020_resnet50.tar").!
+    ("wget --no-check-certificate -O /tmp/openvino2020_resnet50.tar https://sourceforge.net/" +
+"projects/analytics-zoo/files/analytics-zoo-data/openvino2020_resnet50.tar").!
     "tar -xvf /tmp/openvino2020_resnet50.tar -C /tmp/".!
     val resource = getClass().getClassLoader().getResource("serving")
     val dataPath = resource.getPath + "/image-3_224_224-arrow-base64"
     val b64string = scala.io.Source.fromFile(dataPath).mkString
 
     ClusterServing.helper = new ClusterServingHelper()
-val helper = ClusterServing.helper
+    val helper = ClusterServing.helper
     helper.modelType = "openvino"
     helper.weightPath = "/tmp/openvino2020_resnet50/resnet_v1_50.bin"
     helper.defPath = "/tmp/openvino2020_resnet50/resnet_v1_50.xml"
@@ -136,22 +138,22 @@ val helper = ClusterServing.helper
 
     postProcessed.foreach(x => {
       val result = ArrowDeserializer.getArray(x._2)
-      require(result(0)._1.length == 1000, "result length wrong")
-      require(result(0)._2.length == 1, "result shape wrong")
+      AssertUtils.conditionFailTest(result(0)._1.length == 1000, "result length wrong")
+      AssertUtils.conditionFailTest(result(0)._2.length == 1, "result shape wrong")
     })
   }
 
 
   "OpenVINO Resnet50" should "work" in {
-    ("wget -O /tmp/openvino_resnet50.tar http://10.239.45.10:8081" +
-      "/repository/raw/analytics-zoo-data/openvino_resnet50.tar").!
+    ("wget --no-check-certificate -O /tmp/openvino_resnet50.tar https://sourceforge.net/" +
+"projects/analytics-zoo/files/analytics-zoo-data/openvino_resnet50.tar").!
     "tar -xvf /tmp/openvino_resnet50.tar -C /tmp/".!
     val resource = getClass().getClassLoader().getResource("serving")
     val dataPath = resource.getPath + "/image-3_224_224-arrow-base64"
     val b64string = scala.io.Source.fromFile(dataPath).mkString
 
     ClusterServing.helper = new ClusterServingHelper()
-val helper = ClusterServing.helper
+    val helper = ClusterServing.helper
     helper.modelType = "openvino"
     helper.weightPath = "/tmp/openvino_resnet50/frozen_inference_graph.bin"
     helper.defPath = "/tmp/openvino_resnet50/frozen_inference_graph.xml"
@@ -166,23 +168,23 @@ val helper = ClusterServing.helper
 
     postProcessed.foreach(x => {
       val result = ArrowDeserializer.getArray(x._2)
-      require(result(0)._1.length == 1000, "result length wrong")
-      require(result(0)._2.length == 1, "result shape wrong")
+      AssertUtils.conditionFailTest(result(0)._1.length == 1000, "result length wrong")
+      AssertUtils.conditionFailTest(result(0)._2.length == 1, "result shape wrong")
     })
   }
 
 
 
   "OpenVINO Vgg16" should "work" in {
-    ("wget -O /tmp/openvino_vgg16.tar http://10.239.45.10:8081" +
-      "/repository/raw/analytics-zoo-data/openvino_vgg16.tar").!
+    ("wget --no-check-certificate -O /tmp/openvino_vgg16.tar https://sourceforge.net/" +
+"projects/analytics-zoo/files/analytics-zoo-data/openvino_vgg16.tar").!
     "tar -xvf /tmp/openvino_vgg16.tar -C /tmp/".!
     val resource = getClass().getClassLoader().getResource("serving")
     val dataPath = resource.getPath + "/image-3_224_224-arrow-base64"
     val b64string = scala.io.Source.fromFile(dataPath).mkString
 
     ClusterServing.helper = new ClusterServingHelper()
-val helper = ClusterServing.helper
+    val helper = ClusterServing.helper
     helper.modelType = "openvino"
     helper.weightPath = "/tmp/openvino_vgg16/vgg_16.bin"
     helper.defPath = "/tmp/openvino_vgg16/vgg_16.xml"
@@ -197,22 +199,23 @@ val helper = ClusterServing.helper
 
     postProcessed.foreach(x => {
       val result = ArrowDeserializer.getArray(x._2)
-      require(result(0)._1.length == 1000, "result length wrong")
-      require(result(0)._2.length == 1, "result shape wrong")
+      AssertUtils.conditionFailTest(result(0)._1.length == 1000, "result length wrong")
+      AssertUtils.conditionFailTest(result(0)._2.length == 1, "result shape wrong")
     })
   }
 
 
   "OpenVINO face_detection_0100" should "work" in {
-    ("wget -O /tmp/openvino_face_detection_0100.tar http://10.239.45.10:8081" +
-      "/repository/raw/analytics-zoo-data/openvino_face_detection_0100.tar").!
+    ("wget --no-check-certificate -O /tmp/openvino_face_detection_0100.tar " +
+     "https://sourceforge.net/" +
+"projects/analytics-zoo/files/analytics-zoo-data/openvino_face_detection_0100.tar").!
     "tar -xvf /tmp/openvino_face_detection_0100.tar -C /tmp/".!
     val resource = getClass().getClassLoader().getResource("serving")
     val dataPath = resource.getPath + "/image-3_224_224-arrow-base64"
     val b64string = scala.io.Source.fromFile(dataPath).mkString
 
     ClusterServing.helper = new ClusterServingHelper()
-val helper = ClusterServing.helper
+    val helper = ClusterServing.helper
     helper.modelType = "openvino"
     helper.weightPath = "/tmp/openvino_face_detection_0100/face-detection-0100.bin"
     helper.defPath = "/tmp/openvino_face_detection_0100/face-detection-0100.xml"
@@ -227,8 +230,8 @@ val helper = ClusterServing.helper
 
     postProcessed.foreach(x => {
       val result = ArrowDeserializer.getArray(x._2)
-      require(result(0)._1.length == 1400, "result length wrong")
-      require(result(0)._2.length == 3, "result shape wrong")
+      AssertUtils.conditionFailTest(result(0)._1.length == 1400, "result length wrong")
+      AssertUtils.conditionFailTest(result(0)._2.length == 3, "result shape wrong")
     })
   }
 

@@ -22,7 +22,7 @@ import breeze.linalg.{DenseMatrix => BrzDenseMatrix, DenseVector => BrzDenseVect
 import com.intel.analytics.bigdl.mkl.MKL
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.Activity
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.{File, Table}
+import com.intel.analytics.bigdl.dllib.utils.{File, Log4Error, Table}
 import org.apache.spark.mllib.linalg.{DenseMatrix, DenseVector, Matrix, Vector}
 
 import scala.collection.mutable
@@ -195,7 +195,7 @@ trait Tensor[T] extends Serializable with TensorMath[T] with Activity {
 
 
   /**
-   * @return the value of a scalar. Requires the tensor to be a scalar.
+   * @return the value of a scalar. Log4Error.unKnowExceptionErrors the tensor to be a scalar.
    */
   def value(): T
 
@@ -406,7 +406,8 @@ trait Tensor[T] extends Serializable with TensorMath[T] with Activity {
   def resize(size1: Int, size2: Int, size3: Int, size4: Int, size5: Int): Tensor[T]
 
   def resize(sizes: Array[Int], nElement: Int): Tensor[T] = {
-    throw new UnsupportedOperationException("resize with nElement for sparse tensor only")
+    Log4Error.invalidOperationError(false, "resize with nElement for sparse tensor only")
+    null
   }
 
   //  def repeatTensor(result: Tensor, tensor: Tensor, size: Int*)
@@ -600,7 +601,8 @@ trait Tensor[T] extends Serializable with TensorMath[T] with Activity {
    * @return an array number of non-zero elements in first dimension.
    */
   def numNonZeroByRow(): Array[Int] = {
-    throw new UnsupportedOperationException("countNonZero for sparse tensor only")
+    Log4Error.invalidOperationError(false, "numNonZeroByRow for sparse tensor only")
+    null
   }
 
   /**
@@ -743,8 +745,10 @@ trait Tensor[T] extends Serializable with TensorMath[T] with Activity {
    */
   def save(path : String, overWrite : Boolean = false) : this.type
 
-  override def toTable: Table =
-    throw new IllegalArgumentException("Tensor cannot be cast to Table")
+  override def toTable: Table = {
+    Log4Error.invalidOperationError(false, "Tensor cannot be cast to Table")
+    null
+  }
 
   /**
    * Return true because it's a Tensor implemented from [[Activity]]
@@ -913,8 +917,10 @@ object Tensor {
         case e: Float => ev.fromType(e)
         case e: Double => ev.fromType(e)
         case e: String => ev.fromType(e)
-        case _ => throw new IllegalArgumentException(s"Not support numeric type " +
+        case _ =>
+          Log4Error.invalidOperationError(false, s"Not support numeric type " +
           flatTable[Any](i).getClass.getName)
+          ev.fromType(0)
       }
     }
 
@@ -973,8 +979,9 @@ object Tensor {
    */
   def apply[@specialized(Float, Double) T: ClassTag](storage: Storage[T])(
     implicit ev: TensorNumeric[T]): Tensor[T] = {
-    require(storage.isInstanceOf[ArrayStorage[_]], "Only support array storage in this operaiton")
-    new DenseTensor(storage.asInstanceOf[ArrayStorage[T]])
+    Log4Error.unKnowExceptionError(storage.isInstanceOf[ArrayStorage[_]],
+      "Only support array storage in this operaiton")
+    DenseTensor(storage.asInstanceOf[ArrayStorage[T]])
   }
 
   /**
@@ -989,7 +996,8 @@ object Tensor {
   def apply[@specialized(Float, Double) T: ClassTag](data: Array[T],
     shape: Array[Int])(implicit ev: TensorNumeric[T]): Tensor[T] = {
     if (shape.product != data.length) {
-      require(data.length == 1, "shape total size doesn't match data length")
+      Log4Error.unKnowExceptionError(data.length == 1,
+        "shape total size doesn't match data length")
       // Here we create a repeat tensor
       val strides = new Array[Int](shape.length)
       new DenseTensor[T]().set(Storage[T](data), storageOffset = 1, sizes = shape,
@@ -1021,7 +1029,7 @@ object Tensor {
     storageOffset: Int,
     size: Array[Int] = null,
     stride: Array[Int] = null)(implicit ev: TensorNumeric[T]): Tensor[T] = {
-    new DenseTensor(storage.asInstanceOf[ArrayStorage[T]], storageOffset, size, stride)
+    DenseTensor(storage.asInstanceOf[ArrayStorage[T]], storageOffset, size, stride)
   }
 
   /**
@@ -1034,7 +1042,15 @@ object Tensor {
    * @return
    */
   def apply[@specialized(Float, Double) T: ClassTag](other: Tensor[T])(
-    implicit ev: TensorNumeric[T]): Tensor[T] = new DenseTensor(other)
+    implicit ev: TensorNumeric[T]): Tensor[T] = {
+    val newT = new DenseTensor[T](null, 0, null, null, 0)
+    val _storage = other.storage().asInstanceOf[ArrayStorage[T]]
+    val _storageOffset = other.storageOffset() - 1
+    val _size = other.size()
+    val _stride = other.stride()
+    DenseTensor.newWithStorage[T](newT, _storage, _storageOffset, _size, _stride, ev)
+    newT
+  }
 
   /**
    * create a tensor with a given breeze vector. The tensor will have the same size
@@ -1290,7 +1306,8 @@ object Tensor {
         shape : Array[Int],
         nElement: Int = 1)(
         implicit ev: TensorNumeric[T]): Tensor[T] = {
-    require(nElement <= shape.product)
+    Log4Error.unKnowExceptionError(nElement <= shape.product,
+      s"nElement $nElement should not be greater than shape.product ${shape.product}")
     SparseTensor(shape, nElement)
   }
 
@@ -1311,7 +1328,8 @@ object Tensor {
     } else if (sparseTensor.isInstanceOf[DenseTensor[T]]) {
       res.copy(sparseTensor)
     } else {
-      throw new IllegalArgumentException("Tensor.dense: Illegal tensor type.")
+      Log4Error.invalidOperationError(false, "Tensor.dense: Illegal tensor type.")
+      null
     }
   }
 
@@ -1357,8 +1375,8 @@ object Tensor {
         distinctBuffer: Tensor[T] = null,
         indicesBuffer: Tensor[Int] = null
         )(implicit ev: TensorNumeric[T]): (Tensor[T], Tensor[Int]) = {
-    require(tensor.isContiguous(), "unique only support contiguous tensor")
-    require(tensor.dim() == 1, "unique only support 1D tensor")
+    Log4Error.unKnowExceptionError(tensor.isContiguous(), "unique only support contiguous tensor")
+    Log4Error.unKnowExceptionError(tensor.dim() == 1, "unique only support 1D tensor")
     val array = tensor.storage().array()
     val arrayOffset = tensor.storageOffset() - 1
 

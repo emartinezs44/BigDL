@@ -18,11 +18,16 @@ import os
 import os.path as osp
 from PIL import Image
 import logging
+from bigdl.dllib.utils.log4Error import invalidInputError, invalidOperationError
+from typing import TYPE_CHECKING, List, Tuple, Optional, Dict, no_type_check
+
+if TYPE_CHECKING:
+    from numpy import ndarray
 
 try:
     import xml.etree.cElementTree as ET
 except ImportError:
-    import xml.etree.ElementTree as ET
+    import xml.etree.ElementTree as ET  # type: ignore
 
 
 class VOCDatasets:
@@ -37,10 +42,10 @@ class VOCDatasets:
     difficult: bool, False ignore voc xml difficult value.
     """
 
-    def __init__(self, root="VOCdevkit",
-                 splits_names=[(2007, "trainval")],
-                 classes=None,
-                 difficult=False) -> None:
+    def __init__(self, root: str="VOCdevkit",
+                 splits_names: List[Tuple[int, str]]=[(2007, "trainval")],
+                 classes: Optional[List[str]]=None,
+                 difficult: bool=False) -> None:
 
         self.CLASSES = ['aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
                         'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse', 'motorbike',
@@ -54,11 +59,11 @@ class VOCDatasets:
         self._imgid_items = self._load_items(splits_names)
         self._anno_path = osp.join('{}', 'Annotations', '{}.xml')
         self._image_path = osp.join('{}', 'JPEGImages', '{}.jpg')
-        self._im_shapes = {}
+        self._im_shapes = {}  # type: Dict[int, Tuple]
         self._im_anno = [self._load_label(idx) for idx in range(len(self))]
-        self._im_cache = {}
+        self._im_cache = {}  # type: Dict[str, "ndarray"]
 
-    def _load_items(self, splits_names):
+    def _load_items(self, splits_names: List[Tuple[int, str]]) -> List[Tuple[str, str]]:
 
         img_ids = []
         for year, txtname in splits_names:
@@ -71,24 +76,25 @@ class VOCDatasets:
                 continue
         return img_ids
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self._imgid_items)
 
-    def __iter__(self):
+    def __iter__(self) -> zip:
         img_path = [self._image_path.format(*img_id) for img_id in self._imgid_items]
         return zip(img_path, self._im_anno)
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx: int) -> Tuple["ndarray", "ndarray"]:
         img_id = self._imgid_items[idx]
         img_path = self._image_path.format(*img_id)
         if img_path in self._im_cache:
-            img = self._im_cache
+            img = self._im_cache[img_path]
         else:
-            img = self._read_image(img_path)
+            img = self._read_image(img_path)  # type: ignore
 
         return img, self._im_anno[idx]
 
-    def _load_label(self, idx):
+    @no_type_check
+    def _load_label(self, idx: int) -> "ndarray":
         img_id = self._imgid_items[idx]
         anno_path = self._anno_path.format(*img_id)
         root = ET.parse(anno_path).getroot()
@@ -131,33 +137,34 @@ class VOCDatasets:
             label = label[..., :5]
         try:
             self._check_label(label, width, height)
-        except AssertionError as e:
+        except RuntimeError as e:
             logging.warning("Invalid label at %s, %s", anno_path, e)
         return label
 
-    def _check_label(self, label, width=1, height=1):
+    def _check_label(self, label: "ndarray", width: int=1, height: int=1) -> None:
         """Check if label is correct."""
         xmin = label[:, 0]
         ymin = label[:, 1]
         xmax = label[:, 2]
         ymax = label[:, 3]
-        assert ((0 <= xmin) & (xmin < width)).any(), \
-            "xmin must in [0, {}), given {}".format(width, xmin)
-        assert ((0 <= ymin) & (ymin < height)).any(), \
-            "ymin must in [0, {}), given {}".format(height, ymin)
-        assert ((xmin < xmax) & (xmax <= width)).any(), \
-            "xmax must in ({}, {}], given {}".format(xmin, width, xmax)
-        assert ((ymin < ymax) & (ymax <= height)).any(), \
-            "ymax must in ({}, {}], given {}".format(ymin, height, ymax)
+        invalidInputError(((0 <= xmin) & (xmin < width)).any(),
+                          "xmin must in [0, {}), given {}".format(width, xmin))
+        invalidInputError(((0 <= ymin) & (ymin < height)).any(),
+                          "ymin must in [0, {}), given {}".format(height, ymin))
+        invalidInputError(((xmin < xmax) & (xmax <= width)).any(),
+                          "xmax must in ({}, {}], given {}".format(xmin, width, xmax))
+        invalidInputError(((ymin < ymax) & (ymax <= height)).any(),
+                          "ymax must in ({}, {}], given {}".format(ymin, height, ymax))
 
-    def _read_image(self, image_path):
+    def _read_image(self, image_path: str) -> Optional["ndarray"]:
         try:
             img = Image.open(image_path)
             img = np.array(img)
             img = img.astype(np.uint8)
             return img
         except FileNotFoundError as e:
-            raise e
+            invalidOperationError(False, str(e), cause=e)
+        return None
 
     @property
     def classes_label(self):

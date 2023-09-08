@@ -14,19 +14,15 @@
 # limitations under the License.
 #
 
-from bigdl.orca import init_orca_context, stop_orca_context
 import os
 import argparse
 import tensorflow as tf
+from bigdl.dllib.utils.log4Error import invalidInputError
+from bigdl.orca import init_orca_context, stop_orca_context
 
 _DEFAULT_IMAGE_SIZE = 224
 _NUM_CHANNELS = 3
 _NUM_CLASSES = 1001
-
-_NUM_IMAGES = {
-    'train': 1281167,
-    'validation': 50000,
-}
 
 _NUM_TRAIN_FILES = 1024
 _NUM_VAL_FILES = 128
@@ -87,10 +83,10 @@ def _central_crop(image, crop_height, crop_width):
 
 def _mean_image_subtraction(image, means, num_channels):
     if image.get_shape().ndims != 3:
-        raise ValueError('Input must be of size [height, width, C>0]')
+        invalidInputError(False, 'Input must be of size [height, width, C>0]')
 
     if len(means) != num_channels:
-        raise ValueError('len(means) must match the number of channels')
+        invalidInputError(False, 'len(means) must match the number of channels')
 
     # We have a 1-D tensor of means; convert to 3-D.
     # means = tf.expand_dims(tf.expand_dims(means, 0), 0)
@@ -339,6 +335,11 @@ def get_lr_schedule_callbacks(initial_lr):
 parser = argparse.ArgumentParser()
 parser.add_argument('--cluster_mode', type=str, default="local",
                     help='The mode for the Spark cluster.')
+parser.add_argument('--runtime', type=str, default="spark",
+                    help='The runtime for backend. One of spark or ray')
+parser.add_argument('--address', type=str, default="",
+                    help='The cluster address if the driver connects to an existing ray cluster. '
+                         'If it is empty, a new ray cluster will be created.')
 parser.add_argument("--worker_num", type=int, default=2,
                     help="The number of slave nodes to be used in the cluster."
                          "You can change it depending on your own cluster setting.")
@@ -361,17 +362,25 @@ parser.add_argument("--use_dummy_data", action='store_true', default=False,
                     help="Whether to use dummy data")
 parser.add_argument("--benchmark", action='store_true', default=False)
 parser.add_argument("--enable_numa_binding", action='store_true', default=False)
-
+parser.add_argument("--num_images_train", type=int, default=1281167,
+                    help="the num of training images")
+parser.add_argument("--num_images_validation", type=int, default=50000,
+                    help="the num of validation images")
+parser.add_argument("--epochs", type=int, default=18, help=" epochs.")
 if __name__ == "__main__":
 
     args = parser.parse_args()
-    num_nodes = 1 if args.cluster_mode == "local" else args.worker_num
-    init_orca_context(cluster_mode=args.cluster_mode, cores=args.cores, num_nodes=num_nodes,
-                      memory=args.memory, init_ray_on_spark=True,
-                      enable_numa_binding=args.enable_numa_binding)
+    if args.runtime == "ray":
+        init_orca_context(runtime=args.runtime, address=args.address)
+    else:
+        num_nodes = 1 if args.cluster_mode == "local" else args.worker_num
+        init_orca_context(cluster_mode=args.cluster_mode, cores=args.cores, num_nodes=num_nodes,
+                          memory=args.memory, init_ray_on_spark=True,
+                          enable_numa_binding=args.enable_numa_binding)
 
     if not args.use_dummy_data:
-        assert args.data_dir is not None, "--data_dir must be provided if not using dummy data"
+        invalidInputError(args.data_dir is not None,
+                          "--data_dir must be provided if not using dummy data")
 
     if not os.path.exists(args.log_dir):
         os.mkdir(args.log_dir)
@@ -414,18 +423,17 @@ if __name__ == "__main__":
             callbacks=callbacks,
         )
     else:
-        epoch = 0
-        for i in range(5):
-            dummy = args.use_dummy_data
+        dummy = args.use_dummy_data
 
-            results = trainer.fit(
-                data=train_data_creator if not dummy else dummy_data_creator,
-                epochs=18,
-                batch_size=global_batch_size,
-                validation_data=val_data_creator if not dummy else dummy_data_creator,
-                steps_per_epoch=_NUM_IMAGES['train'] // global_batch_size,
-                callbacks=callbacks,
-                validation_steps=_NUM_IMAGES['validation'] // global_batch_size,
-            )
-            epoch += 18
-        trainer.save(os.path.join(args.log_dir, f"model-{epoch}.pkl"))
+        results = trainer.fit(
+            data=train_data_creator if not dummy else dummy_data_creator,
+            epochs=args.epochs,
+            batch_size=global_batch_size,
+            validation_data=val_data_creator if not dummy else dummy_data_creator,
+            steps_per_epoch=args.num_images_train // global_batch_size,
+            callbacks=callbacks,
+            validation_steps=args.num_images_validation // global_batch_size,
+        )
+
+        trainer.save(os.path.join(args.log_dir, f"model-{args.epochs}.pkl"))
+    stop_orca_context()

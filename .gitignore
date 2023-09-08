@@ -19,6 +19,7 @@ dependency-reduced-pom.xml
 .worksheet
 *.iml
 .idea/
+.vscode/
 
 # macOS specific
 .DS_Store
@@ -42,6 +43,8 @@ nohup.out
 */.project
 */.settings/
 *.so
+*.so.*
+*.dylib
 __pycache__
 *.egg-info
 target

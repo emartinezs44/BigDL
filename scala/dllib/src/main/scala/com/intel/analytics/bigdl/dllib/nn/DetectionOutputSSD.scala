@@ -23,10 +23,9 @@ import com.intel.analytics.bigdl.dllib.nn.{Module => _, _}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.util.BboxUtil
-import com.intel.analytics.bigdl.dllib.utils.Table
-import com.intel.analytics.bigdl.dllib.utils.Shape
-import org.apache.log4j.Logger
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Shape, Table}
 import DetectionOutputSSD.logger
+import org.apache.logging.log4j.LogManager
 
 import scala.reflect.ClassTag
 
@@ -281,12 +280,15 @@ class DetectionOutputSSD[T: ClassTag](val nClasses: Int = 21,
     if (isTraining()) {
       return inputShape
     }
-    throw new RuntimeException("Not support computeOutputShape for DetectionOutputSSD Inference")
+    Log4Error.invalidOperationError(false,
+      "Not support computeOutputShape for DetectionOutputSSD Inference")
+
+    null
   }
 }
 
 object DetectionOutputSSD {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 
   def apply[@specialized(Float) T: ClassTag]
   (param: DetectionOutputParam, postProcess: Boolean = true)

@@ -14,14 +14,16 @@
 # limitations under the License.
 #
 
-from bigdl.chronos.autots.model.auto_prophet import AutoProphet
+from bigdl.chronos.utils import LazyImport
+AutoProphet = LazyImport('bigdl.chronos.autots.model.auto_prophet.AutoProphet')
+hp = LazyImport('bigdl.orca.automl.hp')
 
 import os
 import numpy as np
 import pandas as pd
 import tempfile
 from unittest import TestCase
-from bigdl.orca.automl import hp
+from ... import op_distributed, op_diff_set_all
 
 
 def get_data():
@@ -32,6 +34,8 @@ def get_data():
     return data, expect_horizon
 
 
+@op_distributed
+@op_diff_set_all
 class TestAutoProphet(TestCase):
     def setUp(self) -> None:
         from bigdl.orca import init_orca_context
@@ -48,7 +52,7 @@ class TestAutoProphet(TestCase):
                                    seasonality_prior_scale=hp.loguniform(0.01, 10),
                                    holidays_prior_scale=hp.loguniform(0.01, 10),
                                    seasonality_mode=hp.choice(['additive', 'multiplicative']),
-                                   changepoint_range=hp.uniform(0.8, 0.95)
+                                   changepoint_range=hp.uniform(0.8, 0.95),
                                    )
 
         auto_prophet.fit(data=data,
@@ -64,7 +68,14 @@ class TestAutoProphet(TestCase):
 
     def test_auto_prophet_predict_evaluate(self):
         data, expect_horizon = get_data()
-        auto_prophet = AutoProphet(metric="mse",
+        from torchmetrics.functional import mean_squared_error
+        import torch
+        def customized_metric(y_true, y_pred):
+            return mean_squared_error(torch.from_numpy(y_pred),
+                                      torch.from_numpy(y_true)).numpy()
+
+        auto_prophet = AutoProphet(metric=customized_metric,
+                                   metric_mode="min",
                                    changepoint_prior_scale=hp.loguniform(0.001, 0.5),
                                    seasonality_prior_scale=hp.loguniform(0.01, 10),
                                    holidays_prior_scale=hp.loguniform(0.01, 10),
@@ -101,4 +112,10 @@ class TestAutoProphet(TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             ckpt_name = os.path.join(tmp_dir_name, "json")
             auto_prophet.save(ckpt_name)
+            pred = auto_prophet.predict(horizon=10, freq="D")
             auto_prophet.restore(ckpt_name)
+            pred_old = auto_prophet.predict(horizon=10, freq="D")
+            new_auto_prophet = AutoProphet(load_dir=ckpt_name)
+            pred_new = new_auto_prophet.predict(horizon=10, freq="D")
+            np.testing.assert_almost_equal(pred.yhat.values, pred_new.yhat.values)
+            np.testing.assert_almost_equal(pred.yhat.values, pred_old.yhat.values)

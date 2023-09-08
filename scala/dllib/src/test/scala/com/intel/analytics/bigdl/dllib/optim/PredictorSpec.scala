@@ -25,12 +25,13 @@ import com.intel.analytics.bigdl.dllib.nn.quantized.{StorageInfo, StorageManager
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image._
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.augmentation.{CenterCrop, ChannelNormalize, Resize}
-import com.intel.analytics.bigdl.dllib.utils.{Table, T}
+import com.intel.analytics.bigdl.dllib.utils.{T, Table}
 import com.intel.analytics.bigdl.dllib.utils._
 import com.intel.analytics.bigdl.dllib.utils.RandomGenerator._
 import com.intel.analytics.bigdl.dllib.utils.SparkContextLifeCycle
 import org.apache.commons.lang3.SerializationUtils
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
 
@@ -175,7 +176,7 @@ class PredictorSpec extends SparkContextLifeCycle with Matchers {
       println(imageFeatures(x - 1)[Sample[Float]](ImageFeature.sample)
         .getFeatureSize()(0).mkString("x"))
       println(x, imageFeatures(x - 1).predict().asInstanceOf[Tensor[Float]].size().mkString("x"))
-      assert(imageFeatures(x - 1).predict() != null)
+      TestUtils.conditionFailTest(imageFeatures(x - 1).predict() != null)
     })
   }
 
@@ -201,8 +202,8 @@ class PredictorSpec extends SparkContextLifeCycle with Matchers {
     (1 to 20).foreach(x => {
       imageFeatures(x - 1).uri() should be (x.toString)
       print(imageFeatures(x - 1).predict())
-      assert(imageFeatures(x - 1).predict() != null)
-      assert(imageFeatures(x - 1).predict().asInstanceOf[Table].length() == 2)
+      TestUtils.conditionFailTest(imageFeatures(x - 1).predict() != null)
+      TestUtils.conditionFailTest(imageFeatures(x - 1).predict().asInstanceOf[Table].length() == 2)
     })
   }
 
@@ -247,15 +248,15 @@ class PredictorSpec extends SparkContextLifeCycle with Matchers {
     val imageFeatures = detection.rdd.collect()
     (1 to 20).foreach(x => {
       imageFeatures(x - 1).uri() should be (x.toString)
-      assert(imageFeatures(x - 1).predict() != null)
-      assert(imageFeatures(x - 1).predict().asInstanceOf[Table].length() == 3)
+      TestUtils.conditionFailTest(imageFeatures(x - 1).predict() != null)
+      TestUtils.conditionFailTest(imageFeatures(x - 1).predict().asInstanceOf[Table].length() == 3)
     })
   }
 
   "model predict should have no memory leak" should "be correct" in {
     import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric.NumericFloat
     LoggerFilter.redirectSparkInfoLogs()
-    Logger.getLogger("com.intel.analytics.bigdl.dllib.optim").setLevel(Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl.dllib.optim", Level.INFO)
     RNG.setSeed(100)
     val resource = getClass.getClassLoader.getResource("pascal/")
     val imageFrame = ImageFrame.read(resource.getFile, sc) ->

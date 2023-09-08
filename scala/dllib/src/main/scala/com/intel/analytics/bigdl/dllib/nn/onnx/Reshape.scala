@@ -18,12 +18,11 @@
 package com.intel.analytics.bigdl.dllib.nn.onnx
 
 import scala.reflect.ClassTag
-
 import com.intel.analytics.bigdl.dllib.nn
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.Table
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Table}
 
 
 /**
@@ -42,15 +41,18 @@ class Reshape[T: ClassTag](var shape: Array[Int] = null)(implicit ev: TensorNume
 
     if (input.isTable) {
       val inputTable = input.toTable
-      require(inputTable.length() == 2)
+      Log4Error.invalidInputError(inputTable.length() == 2,
+        s"inputTable.length() ${inputTable.length() == 2} should be 2")
       dataTensor = inputTable.get[Tensor[T]](1).get
       shape = inputTable.get[Tensor[T]](2).get.squeeze().toArray().map(ev.toType[Int])
     } else if (input.isTensor) {
       dataTensor = input.toTensor[T]
     } else {
-      throw new IllegalArgumentException()
+      Log4Error.invalidOperationError(false, s"unsupported type ${input}",
+        "only support Table, Tensor")
+      null
     }
-    require(shape != null, "shape should not be null")
+    Log4Error.invalidInputError(shape != null, "shape should not be null")
     val innerReshaper = nn.Reshape(shape, batchMode = Option(false))
     output = innerReshaper.forward(dataTensor)
     output
@@ -62,7 +64,9 @@ class Reshape[T: ClassTag](var shape: Array[Int] = null)(implicit ev: TensorNume
     } else if (input.isTensor) {
       input.toTensor[T]
     } else {
-      throw new IllegalArgumentException()
+      Log4Error.invalidOperationError(false, s"unsupported type ${input}",
+        "only support Tensor, Table")
+      null
     }
     gradInput = inputTensor.zero()
     gradInput

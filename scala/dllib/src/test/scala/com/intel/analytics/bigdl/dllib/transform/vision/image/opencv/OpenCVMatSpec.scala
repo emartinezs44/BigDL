@@ -21,10 +21,11 @@ import java.io.File
 import com.intel.analytics.bigdl.opencv.OpenCV
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.util.BoundingBox
-import com.intel.analytics.bigdl.dllib.utils.{T}
+import com.intel.analytics.bigdl.dllib.utils.T
 import com.intel.analytics.bigdl.dllib.utils._
 import org.apache.commons.io.FileUtils
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import org.apache.spark.SparkContext
 import org.opencv.core.CvType
 import org.opencv.imgcodecs.Imgcodecs
@@ -33,9 +34,10 @@ import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
 class OpenCVMatSpec extends FlatSpec with Matchers with BeforeAndAfter {
   val resource = getClass().getClassLoader().getResource("pascal/000025.jpg")
 
-  Logger.getLogger("org").setLevel(Level.ERROR)
-  Logger.getLogger("akka").setLevel(Level.ERROR)
-  Logger.getLogger("breeze").setLevel(Level.ERROR)
+  Configurator.setLevel("org", Level.ERROR)
+  Configurator.setLevel("akka", Level.ERROR)
+  Configurator.setLevel("breeze", Level.ERROR)
+
   "toFloatsPixels" should "work properly" in {
     val img = OpenCVMat.read(resource.getFile)
     val floats = new Array[Float](img.height() * img.width() * img.channels())
@@ -165,7 +167,7 @@ class OpenCVMatSpec extends FlatSpec with Matchers with BeforeAndAfter {
     val img = OpenCVMat.read(resource.getFile)
     val bytes = OpenCVMat.toBytePixels(img)
     val shape = img.shape()
-    val rdd = sc.parallelize(Array(img))
+    val rdd = sc.parallelize(Seq(img))
     val collect = rdd.collect()
     collect(0).`type`() should be (CvType.CV_8UC3)
     val bytes2 = OpenCVMat.toBytePixels(collect(0))
@@ -177,7 +179,7 @@ class OpenCVMatSpec extends FlatSpec with Matchers with BeforeAndAfter {
     val img = OpenCVMat.read(resource.getFile)
     val floats = OpenCVMat.toFloatPixels(img)
     val shape = img.shape()
-    val rdd = sc.parallelize(Array(img))
+    val rdd = sc.parallelize(Seq(img))
     val collect = rdd.collect()
     collect(0).`type`() should be (CvType.CV_32FC3)
     val floats2 = OpenCVMat.toFloatPixels(collect(0))
@@ -195,7 +197,7 @@ class OpenCVMatSpec extends FlatSpec with Matchers with BeforeAndAfter {
   "empty serialize" should "work properly" in {
     OpenCV.isOpenCVLoaded
     val img = new OpenCVMat()
-    val rdd = sc.parallelize(Array(img))
+    val rdd = sc.parallelize(Seq(img))
     val out = rdd.collect()
     OpenCVMat.toBytePixels(out(0))._1.length should be (0)
   }

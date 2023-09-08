@@ -19,6 +19,7 @@ import com.intel.analytics.bigdl.dllib.nn.ResizeBilinear.InterpolationWeight
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, DataFormat}
 import com.intel.analytics.bigdl.dllib.tensor.{DoubleType, FloatType, Tensor}
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 import scala.reflect.ClassTag
 
@@ -43,8 +44,8 @@ class ResizeBilinear[T: ClassTag](val outputHeight: Int, val outputWidth: Int,
   import ResizeBilinear._
 
   override def updateOutput(input: Tensor[Float]): Tensor[Float] = {
-    require(input.nDimension() == 4, "only accept 4D input")
-    require(input.isContiguous(), "only accept contiguous input")
+    Log4Error.invalidInputError(input.nDimension() == 4, "only accept 4D input")
+    Log4Error.invalidInputError(input.isContiguous(), "only accept contiguous input")
 
     dataFormat match {
       case DataFormat.NHWC => updateOutputNHWC(input)
@@ -89,7 +90,7 @@ class ResizeBilinear[T: ClassTag](val outputHeight: Int, val outputWidth: Int,
             output.storage().array(),
             outputOffset)
         } else {
-          throw new IllegalArgumentException(
+          Log4Error.invalidOperationError(false,
             s"ResizeBilinear does not support type ${input.getType()}")
         }
 
@@ -136,7 +137,7 @@ class ResizeBilinear[T: ClassTag](val outputHeight: Int, val outputWidth: Int,
           output.storage().array(),
           output.storageOffset() - 1)
       } else {
-        throw new IllegalArgumentException(
+        Log4Error.invalidOperationError(false,
           s"ResizeBilinear does not support type ${input.getType()}")
       }
 
@@ -145,10 +146,10 @@ class ResizeBilinear[T: ClassTag](val outputHeight: Int, val outputWidth: Int,
   }
 
   override def updateGradInput(input: Tensor[Float], gradOutput: Tensor[Float]): Tensor[Float] = {
-    require(input.nDimension() == 4, "only accept 4D input")
-    require(gradOutput.nDimension() == 4, "only accept 4D gradOutput")
-    require(input.isContiguous(), "only accept contiguous input")
-    require(gradOutput.isContiguous(), "only accept contiguous gradOutput")
+    Log4Error.invalidInputError(input.nDimension() == 4, "only accept 4D input")
+    Log4Error.invalidInputError(gradOutput.nDimension() == 4, "only accept 4D gradOutput")
+    Log4Error.invalidInputError(input.isContiguous(), "only accept contiguous input")
+    Log4Error.invalidInputError(gradOutput.isContiguous(), "only accept contiguous gradOutput")
 
     dataFormat match {
       case DataFormat.NHWC => updateGradInputNHWC(input, gradOutput)
@@ -164,8 +165,8 @@ class ResizeBilinear[T: ClassTag](val outputHeight: Int, val outputWidth: Int,
     val inWidth = input.size(3)
     val channels = input.size(4)
 
-    require(gradOutput.size(2) == outputHeight, "output height is not match")
-    require(gradOutput.size(3) == outputWidth, "output width is not match")
+    Log4Error.invalidInputError(gradOutput.size(2) == outputHeight, "output height is not match")
+    Log4Error.invalidInputError(gradOutput.size(3) == outputWidth, "output width is not match")
 
     val heightScale = calculateResizeScale(inHeight, outputHeight, alignCorners)
     val widthScale = calculateResizeScale(inWidth, outputWidth, alignCorners)
@@ -189,7 +190,7 @@ class ResizeBilinear[T: ClassTag](val outputHeight: Int, val outputWidth: Int,
         gradInputData, gradInputOffset,
         gradOutputData, gradOutputOffset)
     } else {
-      throw new IllegalArgumentException(
+      Log4Error.invalidOperationError(false,
         s"ResizeBilinear does not support type ${input.getType()}")
     }
 
@@ -203,8 +204,8 @@ class ResizeBilinear[T: ClassTag](val outputHeight: Int, val outputWidth: Int,
     val inHeight = input.size(3)
     val inWidth = input.size(4)
 
-    require(gradOutput.size(3) == outputHeight, "output height is not match")
-    require(gradOutput.size(4) == outputWidth, "output width is not match")
+    Log4Error.invalidInputError(gradOutput.size(3) == outputHeight, "output height is not match")
+    Log4Error.invalidInputError(gradOutput.size(4) == outputWidth, "output width is not match")
 
     val heightScale = calculateResizeScale(inHeight, outputHeight, alignCorners)
     val widthScale = calculateResizeScale(inWidth, outputWidth, alignCorners)
@@ -232,7 +233,7 @@ class ResizeBilinear[T: ClassTag](val outputHeight: Int, val outputWidth: Int,
           gradInputData, inOffset,
           gradOutputData, outOffset)
       } else {
-        throw new IllegalArgumentException(
+        Log4Error.invalidOperationError(false,
           s"ResizeBilinear does not support type ${input.getType()}")
       }
       i += 1

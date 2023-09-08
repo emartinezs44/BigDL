@@ -27,12 +27,12 @@ import com.intel.analytics.bigdl.dllib.nn.mkldnn.Phase.{InferencePhase, Training
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.utils._
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
 
 import scala.reflect.ClassTag
 
 object LocalOptimizer {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 }
 
 /**
@@ -58,7 +58,10 @@ class LocalOptimizer[T: ClassTag] (
   private val subModelNumber = Engine.getEngineType match {
     case MklBlas => coreNumber
     case MklDnn => 1
-    case _ => throw new IllegalArgumentException
+    case _ =>
+      Log4Error.invalidInputError(false, s"unexpected engine type ${Engine.getEngineType}",
+        "only support MklBlas and MklDnn")
+      0
   }
 
   private val workingModels = {

@@ -13,7 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import tensorflow as tf
 
 
 from .Sequential import Sequential
-from .Model import Model
+from .Model import V2Model as Model
+from .inference.optimizer import InferenceOptimizer
+from .customized_training_utils import nano_bf16

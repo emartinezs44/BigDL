@@ -1,8 +1,8 @@
-ARG BIGDL_VERSION=0.14.0-SNAPSHOT
+ARG BIGDL_VERSION=2.1.0-SNAPSHOT
 ARG SPARK_VERSION=3.1.2
 
 # stage.1 graphene
-FROM ubuntu:18.04 AS graphene
+FROM ubuntu:20.04 AS graphene
 ARG GRAPHENE_BRANCH=branch-1.2-rc1
 RUN env DEBIAN_FRONTEND=noninteractive apt-get update && \
     env DEBIAN_FRONTEND=noninteractive apt-get install -y \
@@ -31,7 +31,7 @@ RUN /graphene/Scripts/download --output redis.tar.gz --sha256 f7ded6c27d48c20bc7
 RUN for f in $(find /graphene/Runtime -type l); do cp --remove-destination $(realpath $f) $f; done
 
 # stage.2 jdk & scala & flink
-FROM ubuntu:18.04 as flink
+FROM ubuntu:20.04 as flink
 ARG FLINK_VERSION=1.11.3
 ARG SCALA_VERSION=2.12
 ARG SCALA_SUB_VERSION_NUM=10
@@ -42,7 +42,7 @@ ENV SCALA_VERSION ${SCALA_VERSION}
 ENV SCALA_SUB_VERSION_NUM ${SCALA_SUB_VERSION_NUM}
 
 RUN apt-get update --fix-missing && \
-    apt-get install -y apt-utils wget unzip
+    env DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y tzdata apt-utils wget unzip
 # java
 RUN wget $JDK_URL && \
     gunzip jdk-$JDK_VERSION-linux-x64.tar.gz && \
@@ -58,11 +58,19 @@ RUN cd / && wget -c https://downloads.lightbend.com/scala/${SCALA_VERSION}.${SCA
 RUN cd /opt && \
     wget https://archive.apache.org/dist/flink/flink-${FLINK_VERSION}/flink-${FLINK_VERSION}-bin-scala_${SCALA_VERSION}.tgz && \
     tar -zxvf flink-${FLINK_VERSION}-bin-scala_${SCALA_VERSION}.tgz && \
-    rm flink-${FLINK_VERSION}-bin-scala_${SCALA_VERSION}.tgz
+    rm flink-${FLINK_VERSION}-bin-scala_${SCALA_VERSION}.tgz && \
+    rm /opt/flink-${FLINK_VERSION}/lib/log4j-1.2-api-2.12.1.jar && \
+    rm /opt/flink-${FLINK_VERSION}/lib/log4j-api-2.12.1.jar && \
+    rm /opt/flink-${FLINK_VERSION}/lib/log4j-core-2.12.1.jar && \
+    rm /opt/flink-${FLINK_VERSION}/lib/log4j-slf4j-impl-2.12.1.jar && \
+    wget -P /opt/flink-${FLINK_VERSION}/lib/ https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-1.2-api/2.17.1/log4j-1.2-api-2.17.1.jar && \
+    wget -P /opt/flink-${FLINK_VERSION}/lib/ https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-api/2.17.1/log4j-api-2.17.1.jar && \
+    wget -P /opt/flink-${FLINK_VERSION}/lib/ https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-core/2.17.1/log4j-core-2.17.1.jar && \
+    wget -P /opt/flink-${FLINK_VERSION}/lib/ https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-slf4j-impl/2.17.1/log4j-slf4j-impl-2.17.1.jar
 RUN ls -al /opt
 
 # stage.3 bigdl
-FROM ubuntu:18.04 as bigdl
+FROM ubuntu:20.04 as bigdl
 ARG BIGDL_VERSION
 ARG SPARK_VERSION
 ENV SPARK_VERSION		${SPARK_VERSION}
@@ -79,8 +87,8 @@ RUN ./download-bigdl.sh && \
     cd /opt && \
     ./download-bigdl-serving.sh
 RUN cd /opt && \
-    wget https://raw.githubusercontent.com/intel-analytics/BigDL/branch-2.0/scala/serving/scripts/perf-benchmark/e2e_throughput.py && \
-    wget https://raw.githubusercontent.com/intel-analytics/BigDL/branch-2.0/scala/serving/scripts/perf-benchmark/requirement.yml && \
+    wget https://raw.githubusercontent.com/intel-analytics/BigDL/main/scala/serving/scripts/perf-benchmark/e2e_throughput.py && \
+    wget https://raw.githubusercontent.com/intel-analytics/BigDL/main/scala/serving/scripts/perf-benchmark/requirement.yml && \
     wget -c "https://sourceforge.net/projects/analytics-zoo/files/analytics-zoo-data/ILSVRC2012_val_00000001.JPEG/download" -O ILSVRC2012_val_00000001.JPEG && \
     mkdir resnet50 && \
     cd resnet50 && \
@@ -89,7 +97,7 @@ RUN cd /opt && \
 
 
 # stage.4 ppml
-FROM ubuntu:18.04
+FROM ubuntu:20.04
 ARG BIGDL_VERSION
 ARG SPARK_VERSION
 ARG SCALA_VERSION=2.12
@@ -160,7 +168,8 @@ COPY --from=bigdl /opt/e2e_throughput.py /ppml/trusted-realtime-ml/java/work/ben
 COPY --from=bigdl /opt/requirement.yml /ppml/trusted-realtime-ml/java/work/benchmark/requirement.yml
 
 RUN apt-get update --fix-missing && \
-    apt-get install -y apt-utils vim curl nano wget unzip maven git tree && \
+    env DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y tzdata && \
+    apt-get install -y apt-utils vim curl nano wget unzip git tree && \
     apt-get install -y libsm6 make build-essential && \
     apt-get install -y autoconf gawk bison libcurl4-openssl-dev python3-protobuf libprotobuf-c-dev protobuf-c-compiler && \
     apt-get install -y openssl libssl-dev pkg-config && \
@@ -211,6 +220,6 @@ RUN chmod a+x /ppml/trusted-realtime-ml/redis/init.sh && \
     chmod a+x /ppml/trusted-realtime-ml/check-status.sh && \
     chmod a+x /ppml/trusted-realtime-ml/start-all.sh
 
-ENV PYTHONPATH	${PYTHONPATH}:/graphene/meson_build_output/lib/python3.6/site-packages
+ENV PYTHONPATH	${PYTHONPATH}:/graphene/meson_build_output/lib/python3.8/site-packages
 ENV LC_ALL	C.UTF-8
 ENV LANG	C.UTF-8

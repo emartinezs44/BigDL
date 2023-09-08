@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 import caffe.Caffe.{LayerParameter, NetParameter, V1LayerParameter}
 import com.intel.analytics.bigdl.dllib.nn.{Container, Graph, Sequential, View}
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.{File, FileWriter, Node}
+import com.intel.analytics.bigdl.dllib.utils.{File, FileWriter, Log4Error, Node}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -34,7 +34,7 @@ import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.IOUtils
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
 /**
  * A utility to convert BigDL model into caffe format and persist into local/hdfs file system
  *
@@ -48,7 +48,7 @@ class CaffePersister[T: ClassTag](val prototxtPath: String,
       val modelPath: String, val module : AbstractModule[Activity, Activity, T],
       useV2 : Boolean = true, overwrite : Boolean = false)(implicit ev: TensorNumeric[T]) {
 
-  private val logger = Logger.getLogger(getClass)
+  private val logger = LogManager.getLogger(getClass)
 
   private val hdfsPrefix: String = "hdfs:"
 
@@ -70,8 +70,9 @@ class CaffePersister[T: ClassTag](val prototxtPath: String,
       return module.asInstanceOf[Graph[T]]
     }
     // other containers/layers to be supported later
-    throw new CaffeConversionException(s"container $module is not supported," +
+    Log4Error.invalidOperationError(false, s"container $module is not supported," +
       s"only graph supported")
+    null
   }
   // create caffe layers graph based on BigDL execution plan
   private def convertToCaffe() : Unit = {
@@ -85,7 +86,7 @@ class CaffePersister[T: ClassTag](val prototxtPath: String,
       val module = execution.element
       logger.info(s"find dependencies for ${module.getName}")
       if (module.isInstanceOf[View[T]]) {
-        require(preModules.size == 1, "view pre-node size should be 1")
+        Log4Error.unKnowExceptionError(preModules.size == 1, "view pre-node size should be 1")
         val preNode = preModules(0)
         val nextNodes = execution.nextNodes
         val nextNodesName = nextNodes.map(_.element.getName())

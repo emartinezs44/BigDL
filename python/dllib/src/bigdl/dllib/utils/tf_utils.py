@@ -29,10 +29,11 @@ from tensorflow.python.platform import gfile
 from bigdl.dllib.nn.layer import Model
 from bigdl.dllib.utils.common import JTensor
 from bigdl.dllib.utils.common import callBigDlFunc
+from bigdl.dllib.utils.log4Error import *
 import os
 
-def get_path(output_name, sess=None):
 
+def get_path(output_name, sess=None):
     if sess is None:
         sess = tf.Session()
         init = tf.global_variables_initializer()
@@ -49,7 +50,6 @@ def get_path(output_name, sess=None):
                      [output_name],
                      temp + '/model.pb', sess)
     return temp + '/model.pb'
-
 
 
 def convert(input_ops, output_ops, byte_order, bigdl_type):
@@ -75,7 +75,7 @@ def convert(input_ops, output_ops, byte_order, bigdl_type):
         shutil.rmtree(temp)
     except OSError as e:
         if e.errno != errno.ENOENT:
-            raise
+            invalidOperationError(False, str(e), cause=e)
 
     return model
 
@@ -90,7 +90,7 @@ def export_checkpoint(checkpoint_path):
     reader = tf.train.NewCheckpointReader(checkpoint_path)
 
     # Get tensor name list
-    tensor_names = filter(lambda n: n!='global_step',
+    tensor_names = filter(lambda n: n != 'global_step',
                           reader.get_variable_to_shape_map().keys())
     # Prepare key-value dictionary
     tensors = {}
@@ -117,15 +117,15 @@ def save_variable_bigdl(tensors, target_path, bigdl_type="float"):
         else:
             value = tensors[tn]
         jtensors[tn] = JTensor.from_ndarray(value)
-        
+
     callBigDlFunc(bigdl_type, "saveTensorDictionary", jtensors, target_path)
 
 
 def dump_model(path, graph=None, sess=None, ckpt_file=None, bigdl_type="float"):
     """
-    Dump a tensorflow model to files. The graph will be dumped to path/model.pb, and the checkpoint will
-    be dumped to path/model.bin
-    
+    Dump a tensorflow model to files. The graph will be dumped to path/model.pb, and the checkpoint
+    will be dumped to path/model.bin
+
     :param path: dump folder path
     :param sess: if user pass in session, we assume that the variable of the graph in the session
     has been inited
@@ -134,7 +134,7 @@ def dump_model(path, graph=None, sess=None, ckpt_file=None, bigdl_type="float"):
     :return: nothing
     """
     if not os.path.isdir(path):
-        raise ValueError("Folder " + path + " does not exist")
+        invalidInputError(False, "Folder " + path + " does not exist")
 
     temp = None
     if ckpt_file is None:
@@ -161,7 +161,7 @@ def dump_model(path, graph=None, sess=None, ckpt_file=None, bigdl_type="float"):
             shutil.rmtree(temp)
         except OSError as e:
             if e.errno != errno.ENOENT:
-                raise
+                invalidOperationError(False, str(e), cause=e)
 
 
 def merge_checkpoint(input_graph,

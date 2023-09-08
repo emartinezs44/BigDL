@@ -20,10 +20,14 @@ import numpy as np
 from pyspark.ml.linalg import DenseVector, SparseVector, VectorUDT
 import sys
 import os
+import re
+from bigdl.dllib.utils.log4Error import *
+
 
 if sys.version >= '3':
     long = int
     unicode = str
+
 
 def to_sample_rdd(x, y, sc, num_slices=None):
     """
@@ -49,7 +53,7 @@ def get_node_ip():
     import errno
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # This command will raise an exception if there is no internet connection.
+        # This command will throw an exception if there is no internet connection.
         s.connect(("8.8.8.8", 80))
         node_ip_address = s.getsockname()[0]
     except OSError as e:
@@ -88,8 +92,8 @@ def detect_conda_env_name():
     err = err.decode("utf-8")
     errorcode = pro.returncode
     if 0 != errorcode:
-        raise EnvironmentError(err +
-                               "Cannot find conda info. Please verify your conda installation")
+        invalidInputError(False, err +
+                          "Cannot find conda info. Please verify your conda installation")
     for line in out.split('\n'):
         item = line.split(':')
         if len(item) == 2:
@@ -99,8 +103,9 @@ def detect_conda_env_name():
     python_location = detect_python_location()
     if "envs" in python_location:
         return python_location.split("/")[-3]
-    raise EnvironmentError(err + "Failed to detect the current conda environment. Please verify"
-                                 "your conda installation and activate the env you want to use")
+        invalidInputError(False,
+                          err + "Failed to detect the current conda environment. Please verify "
+                                "your conda installation and activate the env you want to use")
 
 
 # This is adopted from conda-pack.
@@ -109,11 +114,11 @@ def pack_conda_main(conda_name, tmp_path):
     pack_env = os.environ.copy()
     if "PYTHONHOME" in pack_env:
         pack_env.pop("PYTHONHOME")
-    pack_cmd = "conda pack --format tar.gz --n-threads 8 -f -n {} -o {}"\
+    pack_cmd = "conda pack --format tar.gz --n-threads 8 -f -n {} -o {}" \
         .format(conda_name, tmp_path)
     pro = subprocess.Popen(pack_cmd, shell=True, env=pack_env)
     if pro.wait() != 0:
-        raise RuntimeError(f"conda pack failed! Error executing command: {pack_cmd} ")
+        invalidInputError(False, f"conda pack failed! Error executing command: {pack_cmd} ")
 
 
 def pack_penv(conda_name, output_name):
@@ -129,8 +134,9 @@ def pack_penv(conda_name, output_name):
 def get_conda_python_path():
     conda_env_path = "/".join(detect_python_location().split("/")[:-2])
     python_interpreters = glob.glob("{}/lib/python*".format(conda_env_path))
-    assert len(python_interpreters) == 1, "Conda env should contain a single Python " \
-                                          "interpreter, but got: {}".format(python_interpreters)
+    invalidInputError(len(python_interpreters) == 1,
+                      "Conda env should contain a single Python "
+                      "interpreter, but got: {}".format(python_interpreters))
     return python_interpreters[0]
 
 
@@ -138,24 +144,42 @@ def get_executor_conda_zoo_classpath(conda_path):
     from bigdl.dllib.utils.engine import get_bigdl_jars
     bigdl_jars = get_bigdl_jars()
     python_interpreter_name = get_conda_python_path().split("/")[-1]  # Python version
-    prefix = "{}/lib/{}/site-packages/"\
+    prefix = "{}/lib/{}/site-packages/" \
         .format(conda_path, python_interpreter_name)
-    executor_classpath=[]
+    executor_classpath = []
     for jar_path in list(bigdl_jars):
         postfix = "/".join(jar_path.split("/")[-5:])
         executor_classpath.append("{}/{}".format(prefix, postfix))
     return executor_classpath
 
+
 def get_zoo_bigdl_classpath_on_driver():
     from bigdl.dllib.utils.engine import get_bigdl_classpath
     bigdl_classpath = get_bigdl_classpath()
-    assert bigdl_classpath, "Cannot find BigDL classpath, please check your installation"
+    invalidInputError(bigdl_classpath,
+                      "Cannot find BigDL classpath, please check your installation")
     return bigdl_classpath
 
 
 def set_python_home():
     if "PYTHONHOME" not in os.environ:
         os.environ['PYTHONHOME'] = "/".join(detect_python_location().split("/")[:-2])
+
+
+def get_bigdl_class_version():
+    from bigdl.dllib.utils.engine import get_bigdl_jars
+    bigdl_jars = get_bigdl_jars()
+    try:
+        bigdl_class_version = re.search('spark_(.+?)-jar', bigdl_jars[1]).group(1)[6:]
+    except AttributeError:
+        # not found
+        bigdl_class_version = 'Cannot find BigDL classpath, please check your installation'
+    return bigdl_class_version
+
+
+def get_bigdl_image_workdir():
+    bigdl_image_workdir = "/opt/spark/work-dir"  # WORKDIR defined in dockerfile
+    return bigdl_image_workdir
 
 
 def _is_scalar_type(dtype, accept_str_col=False):
@@ -167,6 +191,10 @@ def _is_scalar_type(dtype, accept_str_col=False):
     if isinstance(dtype, df_types.LongType):
         return True
     if isinstance(dtype, df_types.DoubleType):
+        return True
+    if isinstance(dtype, df_types.TimestampType):
+        return True
+    if isinstance(dtype, df_types.DecimalType):
         return True
     if accept_str_col and isinstance(dtype, df_types.StringType):
         return True
@@ -180,14 +208,40 @@ def convert_row_to_numpy(row, schema, feature_cols, label_cols, accept_str_col=F
         for name in cols:
             feature_type = schema[name].dataType
             if _is_scalar_type(feature_type, accept_str_col):
-                result.append(np.array(row[name]))
+                if isinstance(feature_type, df_types.FloatType):
+                    result.append(np.array(row[name]).astype(np.float32))
+                elif isinstance(feature_type, df_types.DoubleType):
+                    result.append(np.array(row[name]).astype(np.float64))
+                elif isinstance(feature_type, df_types.TimestampType):
+                    result.append(np.array(row[name]).astype('datetime64[ns]'))
+                elif isinstance(feature_type, df_types.IntegerType):
+                    result.append(np.array(row[name]).astype(np.int32))
+                elif isinstance(feature_type, df_types.LongType):
+                    result.append(np.array(row[name]).astype(np.int64))
+                elif isinstance(feature_type, df_types.DecimalType):
+                    result.append(np.array(row[name]).astype(np.float64))
+                else:
+                    result.append(np.array(row[name]))
             elif isinstance(feature_type, df_types.ArrayType):
-                result.append(np.array(row[name]).astype(np.float32))
+                if accept_str_col and isinstance(feature_type.elementType, df_types.StringType):
+                    result.append(np.array(row[name]).astype(np.str))
+                elif isinstance(feature_type.elementType, df_types.FloatType):
+                    result.append(np.array(row[name]).astype(np.float32))
+                elif isinstance(feature_type.elementType, df_types.DoubleType):
+                    result.append(np.array(row[name]).astype(np.float64))
+                elif isinstance(feature_type.elementType, df_types.IntegerType):
+                    result.append(np.array(row[name]).astype(np.int32))
+                elif isinstance(feature_type.elementType, df_types.LongType):
+                    result.append(np.array(row[name]).astype(np.int64))
+                elif isinstance(feature_type.elementType, df_types.DecimalType):
+                    result.append(np.array(row[name]).astype(np.float64))
+                else:
+                    result.append(np.array(row[name]))
             elif isinstance(row[name], DenseVector):
                 result.append(row[name].values.astype(np.float32))
             else:
-                assert isinstance(row[name], SparseVector), \
-                    "unsupported field {}, data {}".format(schema[name], row[name])
+                invalidInputError(isinstance(row[name], SparseVector),
+                                  "unsupported field {}, data {}".format(schema[name], row[name]))
                 result.append(row[name].toArray())
         if len(result) == 1:
             return result[0]

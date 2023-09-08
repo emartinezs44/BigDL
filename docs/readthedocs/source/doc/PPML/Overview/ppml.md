@@ -1,38 +1,38 @@
-# PPML User Guide
+# Privacy Preserving Machine Learning (PPML) User Guide
 
-## 1. Privacy Preserving Machine Learning
-Protecting privacy and confidentiality is critical for large-scale data analysis and machine learning. BigDL ***PPML*** combines various low level hardware and software security technologies (e.g., Intel SGX, LibOS such as Graphene and Occlum, Federated Learning, etc.), so that users can continue to apply standard Big Data and AI technologies (such as Apache Spark, Apache Flink, Tensorflow, PyTorch, etc.) without sacrificing privacy.
+## 1. Introduction
+Protecting privacy and confidentiality is critical for large-scale data analysis and machine learning. BigDL ***PPML*** combines various low-level hardware and software security technologies (e.g., [Intel® Software Guard Extensions (Intel® SGX)](https://www.intel.com/content/www/us/en/architecture-and-technology/software-guard-extensions.html), [Library Operating System (LibOS)](https://events19.linuxfoundation.org/wp-content/uploads/2017/12/Library-OS-is-the-New-Container-Why-is-Library-OS-A-Better-Option-for-Compatibility-and-Sandboxing-Chia-Che-Tsai-UC-Berkeley.pdf) such as [Graphene](https://github.com/gramineproject/graphene) and [Occlum](https://github.com/occlum/occlum), [Federated Learning](https://en.wikipedia.org/wiki/Federated_learning), etc.), so that users can continue to apply standard Big Data and AI technologies (such as Apache Spark, Apache Flink, Tensorflow, PyTorch, etc.) without sacrificing privacy.
 
 ## 1.1 PPML for Big Data AI
 BigDL provides a distributed PPML platform for protecting the *end-to-end Big Data AI pipeline* (from data ingestion, data analysis, all the way to machine learning and deep learning). In particular, it extends the single-node [Trusted Execution Environment](https://en.wikipedia.org/wiki/Trusted_execution_environment) to provide a *Trusted Cluster Environment*, so as to run unmodified Big Data analysis and ML/DL programs in a secure fashion on (private or public) cloud:
 
  * Compute and memory protected by SGX Enclaves
- * Network communication protected by remote attestation and TLS
+ * Network communication protected by remote attestation and [Transport Layer Security (TLS)](https://en.wikipedia.org/wiki/Transport_Layer_Security)
  * Storage (e.g., data and model) protected by encryption
- * Optional federated learning support
+ * Optional Federated Learning support
 
-That is, even when the program runs in an untrusted cloud environment, all the data and models are protected (e.g., using encryption) on disk and network, and the compute and memory are also protected using SGX Enclaves, so as to preserve the confidentiality and privacy during data analysis and machine learning.
+That is, even when the program runs in an untrusted cloud environment, all the data and models are protected (e.g., using encryption) on disk and network, and the compute and memory are also protected using SGX Enclaves, so as to preserve confidentiality and privacy during data analysis and machine learning.
 
 In the current release, two types of trusted Big Data AI applications are supported:
 
-1. Big Data analytics and ML/DL (supporting [Apache Spark](https://spark.apache.org/) and [BigDL](https://github.com/intel-analytics/BigDL))
-2. Realtime compute and ML/DL (supporting [Apache Flink](https://flink.apache.org/) and BigDL [Cluster Serving](https://www.usenix.org/conference/opml20/presentation/song))
+1. Big Data analytics and ML/DL (supporting Apache Spark and BigDL)
+2. Realtime compute and ML/DL (supporting Apache Flink and [BigDL Cluster Serving](https://www.usenix.org/conference/opml20/presentation/song))
 
 ## 2. Trusted Big Data Analytics and ML
-With the trusted Big Data analytics and ML/DL support, users can run standard Spark data analysis (such as Spark SQL, Dataframe, MLlib, etc.) and distributed deep learning (using BigDL) in a secure and trusted fashion.
+With the trusted Big Data analytics and Machine Learning(ML)/Deep Learning(DL) support, users can run standard Spark data analysis (such as Spark SQL, Dataframe, Spark MLlib, etc.) and distributed deep learning (using BigDL) in a secure and trusted fashion.
 
 ### 2.1 Prerequisite
 
-Download scripts and dockerfiles from [this link](https://github.com/intel-analytics/BigDL). And do the following commands:
+Download scripts and dockerfiles from [here](https://github.com/intel-analytics/BigDL). And do the following commands:
 ```bash
 cd BigDL/ppml/
 ```
 
 1. Install SGX Driver
 
-    Please check if the current HW processor supports [SGX](https://www.intel.com/content/www/us/en/support/articles/000028173/processors/intel-core-processors.html). Then, enable SGX feature in BIOS. Note that after SGX is enabled, a portion of memory will be assigned to SGX (this memory cannot be seen/used by OS and other applications).
+    Please check if the current processor supports SGX from [here](https://www.intel.com/content/www/us/en/support/articles/000028173/processors/intel-core-processors.html). Then, enable SGX feature in BIOS. Note that after SGX is enabled, a portion of memory will be assigned to SGX (this memory cannot be seen/used by OS and other applications).
 
-    Check SGX driver with `ls /dev | grep sgx`. If SGX driver is not installed, please install [SGX DCAP driver](https://github.com/intel/SGXDataCenterAttestationPrimitives/tree/master/driver/linux):
+    Check SGX driver with `ls /dev | grep sgx`. If SGX driver is not installed, please install SGX Data Center Attestation Primitives driver from [here](https://github.com/intel/SGXDataCenterAttestationPrimitives/tree/master/driver/linux):
 
     ```bash
     cd scripts/
@@ -40,9 +40,9 @@ cd BigDL/ppml/
     cd ..
     ```
 
-2. Generate key for SGX enclave
+2. Generate the signing key for SGX Enclaves
 
-   Generate the enclave key using the command below, and keep it safely for future remote attestations and to start SGX enclaves more securely. It will generate a file `enclave-key.pem` in the current working directory, which will be the  enclave key. To store the key elsewhere, modify the output file path.
+   Generate the enclave key using the command below, keep it safely for future remote attestations and to start SGX Enclaves more securely. It will generate a file `enclave-key.pem` in the current working directory, which will be the enclave key. To store the key elsewhere, modify the output file path.
 
     ```bash
     cd scripts/
@@ -50,14 +50,14 @@ cd BigDL/ppml/
     cd ..
     ```
 
-3. Prepare keys for TLS with root permission (test only, need input security password for keys). Please also install jdk/openjdk and set the environment path of java path to get `keytool`.
+3. Prepare keys for TLS with root permission (test only, need input security password for keys). Please also install JDK/OpenJDK and set the environment path of the java path to get `keytool`.
 
     ```bash
     cd scripts/
     ./generate-keys.sh
     cd ..
     ```
-    When entering pass phrase or password, you could input the same password by yourself; and these passwords could also be used for the next step of generating password. Password should be longer than 6 bits and containing number and letter, and one sample password is "3456abcd". These passwords would be used for future remote attestations and to start SGX enclaves more securely. And This scripts will generate 6 files in `./ppml/scripts/keys` dir (you can replace them with your own TLS keys).
+    When entering the passphrase or password, you could input the same password by yourself; and these passwords could also be used for the next step of generating other passwords. Password should be longer than 6 bits and contain numbers and letters, and one sample password is "3456abcd". These passwords would be used for future remote attestations and to start SGX enclaves more securely. And This script will generate 6 files in `./ppml/scripts/keys` dir (you can replace them with your own TLS keys).
 
     ```bash
     keystore.jks
@@ -75,7 +75,7 @@ cd BigDL/ppml/
     ./generate-password.sh used_password_when_generate_keys
     cd ..
     ```
-    This scrips will generate 2 files in `./ppml/scripts/password` dir.
+    This script will generate 2 files in `./ppml/scripts/password` dir.
 
     ```bash
     key.txt
@@ -85,15 +85,15 @@ cd BigDL/ppml/
 
 #### 2.2.1 Prepare Docker Image
 
-Pull docker image from Dockerhub
+Pull Docker image from Dockerhub
 ```bash
-docker pull intelanalytics/bigdl-ppml-trusted-big-data-ml-scala-graphene:0.14.0-SNAPSHOT
+docker pull intelanalytics/bigdl-ppml-trusted-big-data-ml-scala-graphene:2.1.0-SNAPSHOT
 ```
 
-Alternatively, you can build docker image from Dockerfile (this will take some time):
+Alternatively, you can build Docker image from Dockerfile (this will take some time):
 
 ```bash
-cd trusted-big-data-ml/scala/docker-graphene
+cd trusted-big-data-ml/python/docker-graphene
 ./build-docker-image.sh
 ```
 
@@ -101,22 +101,22 @@ cd trusted-big-data-ml/scala/docker-graphene
 
 ##### 2.2.2.1 Start PPML Container
 
-Enter `BigDL/ppml/trusted-big-data-ml/scala/docker-graphene` dir.
+Enter `BigDL/ppml/trusted-big-data-ml/python/docker-graphene` dir.
 
 1. Copy `keys` and `password`
     ```bash
-    cd trusted-big-data-ml/scala/docker-graphene
-    # copy keys and password into current directory
+    cd trusted-big-data-ml/python/docker-graphene
+    # copy keys and password into the current directory
     cp -r ../.././../scripts/keys/ .
     cp -r ../.././../scripts/password/ .
     ```
 2. Prepare the data
-   To train a model with ppml in bigdl, you need to prepare the data first. The Docker image is taking lenet and mnist as example. <br>
+   To train a model with PPML in BigDL, you need to prepare the data first. The Docker image is taking lenet and mnist as examples. <br>
    You can download the MNIST Data from [here](http://yann.lecun.com/exdb/mnist/). Unzip all the files and put them in one folder(e.g. mnist). <br>
    There are four files. **train-images-idx3-ubyte** contains train images, **train-labels-idx1-ubyte** is train label file, **t10k-images-idx3-ubyte** has validation images    and **t10k-labels-idx1-ubyte** contains validation labels. For more detail, please refer to the download page. <br>
    After you decompress the gzip files, these files may be renamed by some decompress tools, e.g. **train-images-idx3-ubyte** is renamed to **train-images.idx3-ubyte**. Please change the name back before you run the example.  <br>
    
-3. To start the container, first modify the paths in deploy-local-spark-sgx.sh, and then run the following commands:
+3. To start the container, modify the paths in deploy-local-spark-sgx.sh, and then run the following commands:
     ```bash
     ./deploy-local-spark-sgx.sh
     sudo docker exec -it spark-local bash
@@ -124,16 +124,16 @@ Enter `BigDL/ppml/trusted-big-data-ml/scala/docker-graphene` dir.
     ./init.sh
     ```
     **ENCLAVE_KEY_PATH** means the absolute path to the "enclave-key.pem", according to the above commands, the path would be like "BigDL/ppml/scripts/enclave-key.pem". <br>
-    **DATA_PATH** means the absolute path to the data(like mnist) that would used later in the spark program. According to the above commands, the path would be like "BigDL/ppml/trusted-big-data-ml/scala/docker-graphene/mnist" <br>
-    **KEYS_PATH** means the absolute path to the keys you just created and copied to. According to the above commands, the path would be like "BigDL/ppml/trusted-big-data-ml/scala/docker-graphene/keys" <br>
+    **DATA_PATH** means the absolute path to the data(like mnist) that would use later in the spark program. According to the above commands, the path would be like "BigDL/ppml/trusted-big-data-ml/python/docker-graphene/mnist" <br>
+    **KEYS_PATH** means the absolute path to the keys you just created and copied to. According to the above commands, the path would be like "BigDL/ppml/trusted-big-data-ml/python/docker-graphene/keys" <br>
     **LOCAL_IP** means your local IP address. <br>
 
-##### 2.2.2.2 Run Your Spark Program with BigDL PPML on SGX
+##### 2.2.2.2 Run Your Spark Applications with BigDL PPML on SGX
 
-To run your pyspark program, first you need to prepare your own pyspark program and put it under the trusted directory in SGX  `/ppml/trusted-big-data-ml/work`. Then run with `ppml-spark-submit.sh` using the command:
+To run your PySpark application, you need to prepare your PySpark application and put it under the trusted directory in SGX  `/ppml/trusted-big-data-ml/work`. Then run with `bigdl-ppml-submit.sh` using the command:
 
 ```bash
-./ppml-spark-submit.sh work/YOUR_PROMGRAM.py | tee YOUR_PROGRAM-sgx.log
+./bigdl-ppml-submit.sh work/YOUR_PROMGRAM.py | tee YOUR_PROGRAM-sgx.log
 ```
 
 When the program finishes, check the results with the log `YOUR_PROGRAM-sgx.log`.
@@ -156,7 +156,7 @@ Open another terminal and check the log:
 sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/spark.local.pi.sgx.log | egrep "###|INFO|Pi"
 ```
 
-The result should look something like:
+The result should look something like this:
 
 >   Pi is roughly 3.1422957114785572
 
@@ -164,9 +164,9 @@ The result should look something like:
 
 This example shows how to run trusted Spark SQL (e.g.,  TPC-H queries).
 
-First, download and install [SBT](https://www.scala-sbt.org/download.html) and deploy a [HDFS](https://hadoop.apache.org/docs/r2.7.7/hadoop-project-dist/hadoop-common/ClusterSetup.html) for TPC-H dataset and output, then build the source codes with SBT and generate TPC-H dataset according to the [TPC-H example](https://github.com/intel-analytics/zoo-tutorials/tree/master/tpch-spark). After that, check if there is an  `spark-tpc-h-queries_2.11-1.0.jar` under `tpch-spark/target/scala-2.11`; if so, we have successfully packaged the project.
+First, download and install sbt from [here](https://www.scala-sbt.org/download.html) and deploy a Hadoop Distributed File System(HDFS) from [here](https://hadoop.apache.org/docs/r2.7.7/hadoop-project-dist/hadoop-common/ClusterSetup.html) for the Transaction Processing Performance Council Benchmark H (TPC-H) dataset and output, then build the source codes with SBT and generate the TPC-H dataset according to the TPC-H example from [here](https://github.com/intel-analytics/zoo-tutorials/tree/master/tpch-spark). After that, check if there is  `spark-tpc-h-queries_2.11-1.0.jar` under `tpch-spark/target/scala-2.11`; if so, we have successfully packaged the project.
 
-Copy the TPC-H package to container:
+Copy the TPC-H package to the container:
 
 ```bash
 docker cp tpch-spark/ spark-local:/ppml/trusted-big-data-ml/work
@@ -186,13 +186,13 @@ Open another terminal and check the log:
 sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/spark.local.tpc.h.sgx.log | egrep "###|INFO|finished"
 ```
 
-The result should look like:
+The result should look like this:
 
 >   ----------------22 finished--------------------
 
 ##### 2.2.2.3.3 Run Trusted Deep Learning
 
-This example shows how to run trusted deep learning (using an BigDL LetNet program).
+This example shows how to run trusted deep learning (using a BigDL LetNet program).
 
 First, download the MNIST Data from [here](http://yann.lecun.com/exdb/mnist/). Use `gzip -d` to unzip all the downloaded files (train-images-idx3-ubyte.gz, train-labels-idx1-ubyte.gz, t10k-images-idx3-ubyte.gz, t10k-labels-idx1-ubyte.gz) and put them into folder `/ppml/trusted-big-data-ml/work/data`.
 
@@ -211,7 +211,7 @@ or
 sudo docker logs spark-local | egrep "###|INFO"
 ```
 
-The result should look like:
+The result should look like this:
 
 ```bash
 ############# train optimized[P1182:T2:java] ---- end time: 310534 ms return from shim_write(...) = 0x1d
@@ -222,51 +222,180 @@ The result should look like:
 
 #### 2.2.3 Run Trusted Big Data and ML on Cluster
 
+WARNING: If you want spark standalone mode, please refer to [standalone/README.md](https://github.com/intel-analytics/BigDL/blob/main/ppml/trusted-big-data-ml/python/docker-graphene/standalone/README.md). But it is not recommended.
+
+Follow the guide below to run Spark on Kubernetes manually. Alternatively, you can also use Helm to set everything up automatically. See [Kubernetes/README.md](https://github.com/intel-analytics/BigDL/blob/main/ppml/trusted-big-data-ml/python/docker-graphene/kubernetes/README.md).
+
 ##### 2.2.3.1 Configure the Environment
 
-Prerequisite: [ssh login without password](http://www.linuxproblem.org/art_9.html) for all the nodes.
+1. Enter `BigDL/ppml/trusted-big-data-ml/python/docker-graphene` dir. Refer to the previous section about [preparing data, keys and passwords](#2221-start-ppml-container). Then run the following commands to generate your enclave key and add it to your Kubernetes cluster as a secret. 
+
+   ```bash
+   kubectl apply -f keys/keys.yaml
+   kubectl apply -f password/password.yaml
+   cd kubernetes
+   bash enclave-key-to-secret.sh
+   ```
+2. Create the [RBAC(Role-based access control)](https://spark.apache.org/docs/latest/running-on-kubernetes.html#rbac) :
+
+   ```bash
+   kubectl create serviceaccount spark
+   kubectl create clusterrolebinding spark-role --clusterrole=edit --serviceaccount=default:spark --namespace=default
+   ```
+
+3. Generate K8s config file, modify `YOUR_DIR` to the location you want to store the config:
+
+   ```bash
+   kubectl config view --flatten --minify > /YOUR_DIR/kubeconfig
+   ```
+
+4. Create K8s secret, the secret created `YOUR_SECRET` should be the same as the password you specified in step 1:
+
+   ```bash
+   kubectl create secret generic spark-secret --from-literal secret=YOUR_SECRET
+   ```
+
+##### 2.2.3.2  Start the client container
+
+Configure the environment variables in the following script before running it. Check [BigDL PPML SGX related configurations](https://github.com/intel-analytics/BigDL/tree/main/ppml/trusted-big-data-ml/python/docker-graphene#1-bigdl-ppml-sgx-related-configurations) for detailed memory configurations. Modify `YOUR_DIR` to the location you specify in section 2.2.3.1. Modify `$LOCAL_IP` to the IP address of your machine.
 
 ```bash
-nano environments.sh
+export K8S_MASTER=k8s://$( sudo kubectl cluster-info | grep 'https.*' -o -m 1 )
+echo The k8s master is $K8S_MASTER .
+export ENCLAVE_KEY=/YOUR_DIR/enclave-key.pem
+export DATA_PATH=/YOUR_DIR/data
+export KEYS_PATH=/YOUR_DIR/keys
+export SECURE_PASSWORD_PATH=/YOUR_DIR/password
+export KUBECONFIG_PATH=/YOUR_DIR/kubeconfig
+export LOCAL_IP=$LOCAL_IP
+export DOCKER_IMAGE=intelanalytics/bigdl-ppml-trusted-big-data-ml-python-graphene:2.1.0-SNAPSHOT
+sudo docker run -itd \
+    --privileged \
+    --net=host \
+    --name=spark-local-k8s-client \
+    --cpuset-cpus="0-4" \
+    --oom-kill-disable \
+    --device=/dev/sgx/enclave \
+    --device=/dev/sgx/provision \
+    -v /var/run/aesmd/aesm.socket:/var/run/aesmd/aesm.socket \
+    -v $ENCLAVE_KEY:/graphene/Pal/src/host/Linux-SGX/signer/enclave-key.pem \
+    -v $DATA_PATH:/ppml/trusted-big-data-ml/work/data \
+    -v $KEYS_PATH:/ppml/trusted-big-data-ml/work/keys \
+    -v $SECURE_PASSWORD_PATH:/ppml/trusted-big-data-ml/work/password \
+    -v $KUBECONFIG_PATH:/root/.kube/config \
+    -e RUNTIME_SPARK_MASTER=$K8S_MASTER \
+    -e RUNTIME_K8S_SERVICE_ACCOUNT=spark \
+    -e RUNTIME_K8S_SPARK_IMAGE=$DOCKER_IMAGE \
+    -e RUNTIME_DRIVER_HOST=$LOCAL_IP \
+    -e RUNTIME_DRIVER_PORT=54321 \
+    -e RUNTIME_DRIVER_CORES=1 \
+    -e RUNTIME_EXECUTOR_INSTANCES=1 \
+    -e RUNTIME_EXECUTOR_CORES=8 \
+    -e RUNTIME_EXECUTOR_MEMORY=1g \
+    -e RUNTIME_TOTAL_EXECUTOR_CORES=4 \
+    -e RUNTIME_DRIVER_CORES=4 \
+    -e RUNTIME_DRIVER_MEMORY=1g \
+    -e SGX_DRIVER_MEM=32g \
+    -e SGX_DRIVER_JVM_MEM=8g \
+    -e SGX_EXECUTOR_MEM=32g \
+    -e SGX_EXECUTOR_JVM_MEM=12g \
+    -e SGX_ENABLED=true \
+    -e SGX_LOG_LEVEL=error \
+    -e SPARK_MODE=client \
+    -e LOCAL_IP=$LOCAL_IP \
+    $DOCKER_IMAGE bash
 ```
-##### 2.2.3.2 Start Distributed Big Data and ML Platform
 
-First run the following command to start the service:
+##### 2.2.3.3 Init the client and run Spark applications on K8s
 
-```bash
-./deploy-distributed-standalone-spark.sh
-```
+1. Run `docker exec -it spark-local-k8s-client bash` to enter the container. Then run the following command to init the Spark local K8s client.
 
-Then run the following command to start the training:
+   ```bash
+   ./init.sh
+   ```
 
-```bash
-./start-distributed-spark-train-sgx.sh
-```
-##### 2.2.3.3  Stop Distributed Big Data and ML Platform
+2. We assume you have a working Network File System (NFS) configured for your Kubernetes cluster. Configure the `nfsvolumeclaim` on the last line to the name of the Persistent Volume Claim (PVC) of your NFS. Please prepare the following and put them in your NFS directory:
 
-First, stop the training:
+   - The data (in a directory called `data`)
+   - The kubeconfig file.
 
-```bash
-./stop-distributed-standalone-spark.sh
-```
+3. Run the following command to start Spark-Pi example. When the application runs in `cluster` mode, you can run ` kubectl get pod ` to get the name and status of your K8s pod(e.g., driver-xxxx). Then you can run ` kubectl logs -f driver-xxxx ` to get the output of your application.
 
-Then stop the service:
+   ```bash
+   #!/bin/bash
+   secure_password=`openssl rsautl -inkey /ppml/trusted-big-data-ml/work/password/key.txt -decrypt </ppml/trusted-big-data-ml/work/password/output.bin` && \
+   export TF_MKL_ALLOC_MAX_BYTES=10737418240 && \
+     export SPARK_LOCAL_IP=$LOCAL_IP && \
+     /opt/jdk8/bin/java \
+       -cp '/ppml/trusted-big-data-ml/work/spark-3.1.2/conf/:/ppml/trusted-big-data-ml/work/spark-3.1.2/jars/*' \
+       -Xmx8g \
+       org.apache.spark.deploy.SparkSubmit \
+       --master $RUNTIME_SPARK_MASTER \
+       --deploy-mode $SPARK_MODE \
+       --name spark-pi-sgx \
+       --conf spark.driver.host=$SPARK_LOCAL_IP \
+       --conf spark.driver.port=$RUNTIME_DRIVER_PORT \
+       --conf spark.driver.memory=$RUNTIME_DRIVER_MEMORY \
+       --conf spark.driver.cores=$RUNTIME_DRIVER_CORES \
+       --conf spark.executor.cores=$RUNTIME_EXECUTOR_CORES \
+       --conf spark.executor.memory=$RUNTIME_EXECUTOR_MEMORY \
+       --conf spark.executor.instances=$RUNTIME_EXECUTOR_INSTANCES \
+       --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark \
+       --conf spark.kubernetes.container.image=$RUNTIME_K8S_SPARK_IMAGE \
+       --conf spark.kubernetes.driver.podTemplateFile=/ppml/trusted-big-data-ml/spark-driver-template.yaml \
+       --conf spark.kubernetes.executor.podTemplateFile=/ppml/trusted-big-data-ml/spark-executor-template.yaml \
+       --conf spark.kubernetes.executor.deleteOnTermination=false \
+       --conf spark.network.timeout=10000000 \
+       --conf spark.executor.heartbeatInterval=10000000 \
+       --conf spark.python.use.daemon=false \
+       --conf spark.python.worker.reuse=false \
+       --conf spark.kubernetes.sgx.enabled=$SGX_ENABLED \
+       --conf spark.kubernetes.sgx.driver.mem=$SGX_DRIVER_MEM \
+       --conf spark.kubernetes.sgx.driver.jvm.mem=$SGX_DRIVER_JVM_MEM \
+       --conf spark.kubernetes.sgx.executor.mem=$SGX_EXECUTOR_MEM \
+       --conf spark.kubernetes.sgx.executor.jvm.mem=$SGX_EXECUTOR_JVM_MEM \
+       --conf spark.kubernetes.sgx.log.level=$SGX_LOG_LEVEL \
+       --conf spark.authenticate=true \
+       --conf spark.authenticate.secret=$secure_password \
+       --conf spark.kubernetes.executor.secretKeyRef.SPARK_AUTHENTICATE_SECRET="spark-secret:secret" \
+       --conf spark.kubernetes.driver.secretKeyRef.SPARK_AUTHENTICATE_SECRET="spark-secret:secret" \
+       --conf spark.authenticate.enableSaslEncryption=true \
+       --conf spark.network.crypto.enabled=true \
+       --conf spark.network.crypto.keyLength=128 \
+       --conf spark.network.crypto.keyFactoryAlgorithm=PBKDF2WithHmacSHA1 \
+       --conf spark.io.encryption.enabled=true \
+       --conf spark.io.encryption.keySizeBits=128 \
+       --conf spark.io.encryption.keygen.algorithm=HmacSHA1 \
+       --conf spark.ssl.enabled=true \
+       --conf spark.ssl.port=8043 \
+       --conf spark.ssl.keyPassword=$secure_password \
+       --conf spark.ssl.keyStore=/ppml/trusted-big-data-ml/work/keys/keystore.jks \
+       --conf spark.ssl.keyStorePassword=$secure_password \
+       --conf spark.ssl.keyStoreType=JKS \
+       --conf spark.ssl.trustStore=/ppml/trusted-big-data-ml/work/keys/keystore.jks \
+       --conf spark.ssl.trustStorePassword=$secure_password \
+       --conf spark.ssl.trustStoreType=JKS \
+       --class org.apache.spark.examples.SparkPi \
+       --verbose \
+       local:///ppml/trusted-big-data-ml/work/spark-3.1.2/examples/jars/spark-examples_2.12-3.1.2.jar 100 2>&1 | tee spark-pi-sgx-$SPARK_MODE.log
+   ```
 
-```bash
-./undeploy-distributed-standalone-spark.sh
-```
+You can run your own Spark application after changing `--class` and jar path.
+
+1. `local:///ppml/trusted-big-data-ml/work/spark-3.1.2/examples/jars/spark-examples_2.12-3.1.2.jar` => `your_jar_path`
+2. `--class org.apache.spark.examples.SparkPi` => `--class your_class_path`
 
 ### 2.3 Trusted Big Data Analytics and ML with Python
 
 #### 2.3.1 Prepare Docker Image
 
-Pull docker image from Dockerhub
+Pull Docker image from Dockerhub
 
 ```bash
-docker pull intelanalytics/bigdl-ppml-trusted-big-data-ml-python-graphene:0.14-SNAPSHOT
+docker pull intelanalytics/bigdl-ppml-trusted-big-data-ml-python-graphene:2.1.0-SNAPSHOT
 ```
 
-Alternatively, you can build docker image from Dockerfile (this will take some time):
+Alternatively, you can build Docker image from Dockerfile (this will take some time):
 
 ```bash
 cd ppml/trusted-big-data-ml/python/docker-graphene
@@ -279,16 +408,16 @@ cd ppml/trusted-big-data-ml/python/docker-graphene
 
 Enter `BigDL/ppml/trusted-big-data-ml/python/docker-graphene` directory.
 
-1. Copy `keys` and `password` to current directory
+1. Copy `keys` and `password` to the current directory
 
    ```bash
-   cd ppml/trusted-big-data-ml/scala/docker-graphene
-   # copy keys and password into current directory
+   cd ppml/trusted-big-data-ml/python/docker-graphene
+   # copy keys and password into the current directory
    cp -r ../keys .
    cp -r ../password .
    ```
 
-2. To start the container, first modify the paths in deploy-local-spark-sgx.sh, and then run the following commands:
+2. To start the container, modify the paths in deploy-local-spark-sgx.sh, and then run the following commands:
 
    ```bash
    ./deploy-local-spark-sgx.sh
@@ -297,17 +426,17 @@ Enter `BigDL/ppml/trusted-big-data-ml/python/docker-graphene` directory.
    ./init.sh
    ```
 
-##### 2.3.2.2 Run Your Pyspark Program with BigDL PPML on SGX
+##### 2.3.2.2 Run Your PySpark Applications with BigDL PPML on SGX
 
-To run your pyspark program, first you need to prepare your own pyspark program and put it under the trusted directory in SGX  `/ppml/trusted-big-data-ml/work`. Then run with `ppml-spark-submit.sh` using the command:
+To run your PySpark application, you need to prepare your PySpark application and put it under the trusted directory in SGX  `/ppml/trusted-big-data-ml/work`. Then run with `bigdl-ppml-submit.sh` using the command:
 
 ```bash
-./ppml-spark-submit.sh work/YOUR_PROMGRAM.py | tee YOUR_PROGRAM-sgx.log
+./bigdl-ppml-submit.sh work/YOUR_PROMGRAM.py | tee YOUR_PROGRAM-sgx.log
 ```
 
 When the program finishes, check the results with the log `YOUR_PROGRAM-sgx.log`.
 
-##### 2.3.2.3 Run Python and Pyspark Examples with BigDL PPML on SGX
+##### 2.3.2.3 Run Python and PySpark Examples with BigDL PPML on SGX
 
 ##### 2.3.2.3.1 Run Trusted Python Helloworld
 
@@ -325,7 +454,7 @@ Open another terminal and check the log:
 sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/test-helloworld-sgx.log | egrep "Hello World"
 ```
 
-The result should look something like:
+The result should look something like this:
 
 > Hello World
 
@@ -345,7 +474,7 @@ Open another terminal and check the log:
 sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/test-numpy-sgx.log | egrep "numpy.dot"
 ```
 
-The result should look something like:
+The result should look something like this:
 
 >  numpy.dot: 0.034211914986371994 sec
 
@@ -365,7 +494,7 @@ Open another terminal and check the log:
 sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/test-pi-sgx.log | egrep "roughly"
 ```
 
-The result should look something like:
+The result should look something like this:
 
 > Pi is roughly 3.146760
 
@@ -385,7 +514,7 @@ Open another terminal and check the log:
 sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/test-wordcount-sgx.log | egrep "print"
 ```
 
-The result should look something like:
+The result should look something like this:
 
 > print("Hello: 1
 >
@@ -409,7 +538,7 @@ Open another terminal and check the log:
 sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/test-sql-basic-sgx.log | egrep "Justin"
 ```
 
-The result should look something like:
+The result should look something like this:
 
 >| 19| Justin|
 >
@@ -443,7 +572,7 @@ Open another terminal and check the log:
 sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/test-bigdl-lenet-sgx.log | egrep "Accuracy"
 ```
 
-The result should look something like:
+The result should look something like this:
 
 > creating: createTop1Accuracy
 >
@@ -451,107 +580,11 @@ The result should look something like:
 >
 > 2021-06-18 01:46:20 INFO DistriOptimizer$:180 - [Epoch 2 60032/60000][Iteration 938][Wall Clock 845.747782s] Top1Accuracy is Accuracy(correct: 9696, count: 10000, accuracy: 0.9696)
 
-##### 2.3.2.3.7 Run Trusted Spark XGBoost Regressor
-
-This example shows how to run trusted Spark XGBoost Regressor.
-
-First, make sure that `Boston_Housing.csv` is under `work/data` directory or the same path in the `start-spark-local-xgboost-regressor-sgx.sh`. Replace the value of `RABIT_TRACKER_IP` with your own IP address in the script.
-
-Run the script to run trusted Spark XGBoost Regressor and it would take some time to show the final results:
-
-```bash
-bash work/start-scripts/start-spark-local-xgboost-regressor-sgx.sh
-```
-
-Open another terminal and check the log:
-
-```bash
-sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/test-bigdl-xgboost-regressor-sgx.log | egrep "prediction" -A19
-```
-
-The result should look something like:
-
-> | features|label| prediction|
->
-> +--------------------+-----+------------------+
->
-> |[41.5292,0.0,18.1...| 8.5| 8.51994514465332|
->
-> |[67.9208,0.0,18.1...| 5.0| 5.720333099365234|
->
-> |[20.7162,0.0,18.1...| 11.9|10.601168632507324|
->
-> |[11.9511,0.0,18.1...| 27.9| 26.19390106201172|
->
-> |[7.40389,0.0,18.1...| 17.2|16.112293243408203|
->
-> |[14.4383,0.0,18.1...| 27.5|25.952226638793945|
->
-> |[51.1358,0.0,18.1...| 15.0| 14.67484188079834|
->
-> |[14.0507,0.0,18.1...| 17.2|16.112293243408203|
->
-> |[18.811,0.0,18.1,...| 17.9| 17.42863655090332|
->
-> |[28.6558,0.0,18.1...| 16.3| 16.0191593170166|
->
-> |[45.7461,0.0,18.1...| 7.0| 5.300708770751953|
->
-> |[18.0846,0.0,18.1...| 7.2| 6.346951007843018|
->
-> |[10.8342,0.0,18.1...| 7.5| 6.571983814239502|
->
-> |[25.9406,0.0,18.1...| 10.4|10.235769271850586|
->
-> |[73.5341,0.0,18.1...| 8.8| 8.460335731506348|
->
-> |[11.8123,0.0,18.1...| 8.4| 9.193297386169434|
->
-> |[11.0874,0.0,18.1...| 16.7|16.174896240234375|
->
-> |[7.02259,0.0,18.1...| 14.2| 13.38729190826416|
-
-##### 2.3.2.3.8 Run Trusted Spark XGBoost Classifier
-
-This example shows how to run trusted Spark XGBoost Classifier.
-
-Before running the example, download the sample dataset from [pima-indians-diabetes](https://raw.githubusercontent.com/jbrownlee/Datasets/master/pima-indians-diabetes.data.csv) dataset. After downloading the dataset, make sure that `pima-indians-diabetes.data.csv` is under `work/data` directory or the same path in the `start-spark-local-xgboost-classifier-sgx.sh`. Replace `path_of_pima_indians_diabetes_csv` with your path of `pima-indians-diabetes.data.csv`  and the value of `RABIT_TRACKER_IP` with your own IP address in the script.
-
-Run the script to run trusted Spark XGBoost Classifier and it would take some time to show the final results:
-
-```bash
-bash start-spark-local-xgboost-classifier-sgx.sh
-```
-
-Open another terminal and check the log:
-
-```bash
-sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/test-xgboost-classifier-sgx.log | egrep "prediction" -A7
-```
-
-The result should look something like:
-
-> | f1|  f2| f3| f4|  f5| f6|  f7| f8|label|    rawPrediction|     probability|prediction|
->
-> +----+-----+----+----+-----+----+-----+----+-----+--------------------+--------------------+----------+
->
-> |11.0|138.0|74.0|26.0|144.0|36.1|0.557|50.0| 1.0|[-0.8209581375122...|[0.17904186248779...|    1.0|
->
-> | 3.0|106.0|72.0| 0.0| 0.0|25.8|0.207|27.0| 0.0|[-0.0427864193916...|[0.95721358060836...|    0.0|
->
-> | 6.0|117.0|96.0| 0.0| 0.0|28.7|0.157|30.0| 0.0|[-0.2336160838603...|[0.76638391613960...|    0.0|
->
-> | 2.0| 68.0|62.0|13.0| 15.0|20.1|0.257|23.0| 0.0|[-0.0315906107425...|[0.96840938925743...|    0.0|
->
-> | 9.0|112.0|82.0|24.0| 0.0|28.2|1.282|50.0| 1.0|[-0.7087597250938...|[0.29124027490615...|    1.0|
->
-> | 0.0|119.0| 0.0| 0.0| 0.0|32.4|0.141|24.0| 1.0|[-0.4473398327827...|[0.55266016721725...|    0.0|
-
-##### 2.3.2.3.9 Run Trusted Spark Orca Data
+##### 2.3.2.3.7 Run Trusted Spark Orca Data
 
 This example shows how to run trusted Spark Orca Data.
 
-Before running the example, download the [NYC Taxi](https://raw.githubusercontent.com/numenta/NAB/master/data/realKnownCause/nyc_taxi.csv) dataset in Numenta Anoomaly Benchmark for demo. After downloading the dataset, make sure that `nyc_taxi.csv` is under `work/data` directory or the same path in the `start-spark-local-orca-data-sgx.sh`. Replace  `path_of_nyc_taxi_csv` with your path of `nyc_taxi.csv` in the script.
+Before running the example, download the NYC Taxi dataset in Numenta Anomaly Benchmark from [here](https://raw.githubusercontent.com/numenta/NAB/master/data/realKnownCause/nyc_taxi.csv) for demo. After downloading the dataset, make sure that `nyc_taxi.csv` is under `work/data` directory or the same path in the `start-spark-local-orca-data-sgx.sh`. Replace  `path_of_nyc_taxi_csv` with your path of `nyc_taxi.csv` in the script.
 
 Run the script to run trusted Spark Orca Data and it would take some time to show the final results:
 
@@ -565,7 +598,7 @@ Open another terminal and check the log:
 sudo docker exec -it spark-local cat /ppml/trusted-big-data-ml/test-orca-data-sgx.log | egrep -a "INFO data|Stopping" -A10
 ```
 
-The result should contain the content look like:
+The result should contain the content look like this:
 
 >INFO data collected: [        timestamp value
 >
@@ -617,11 +650,11 @@ The result should contain the content look like:
 >
 >Stopping orca context
 
-##### 2.3.2.3.10 Run Trusted Spark Orca Learn Tensorflow Basic Text Classification
+##### 2.3.2.3.8 Run Trusted Spark Orca Tensorflow Text Classification
 
-This example shows how to run trusted Spark Orca learn Tensorflow basic text classification.
+This example shows how to run Trusted Spark Orca Tensorflow text classification.
 
-Run the script to run trusted Spark Orca learn Tensorflow basic text classification and it would take some time to show the final results. To run this example in standalone mode, replace `-e SGX_MEM_SIZE=32G \` with `-e SGX_MEM_SIZE=64G \` in `start-distributed-spark-driver.sh`
+Run the script to run Trusted Spark Orca Tensorflow text classification and it would take some time to show the final results. To run this example in standalone mode, replace `-e SGX_MEM_SIZE=32G \` with `-e SGX_MEM_SIZE=64G \` in `start-distributed-spark-driver.sh`
 
 ```bash
 bash start-spark-local-orca-tf-text.sh
@@ -641,7 +674,7 @@ The result should be similar to:
 
 ##### 2.3.3.1 Configure the Environment
 
-Prerequisite: passwordless ssh login to all the nodes needs to be properly set up first.
+Prerequisite: [no password ssh login](http://www.linuxproblem.org/art_9.html) to all the nodes needs to be properly set up first.
 
 ```bash
 nano environments.sh
@@ -649,7 +682,7 @@ nano environments.sh
 
 ##### 2.3.3.2 Start Distributed Big Data and ML Platform
 
-First run the following command to start the service:
+First, run the following command to start the service:
 
 ```bash
 ./deploy-distributed-standalone-spark.sh
@@ -661,7 +694,7 @@ Then start the service:
 ./start-distributed-spark-driver.sh
 ```
 
-After that, you can run previous examples on cluster by replacing `--master 'local[4]'` in the start scripts with
+After that, you can run previous examples on the cluster by replacing `--master 'local[4]'` in the start scripts with
 
 ```bash
 --master 'spark://your_master_url' \
@@ -685,27 +718,27 @@ Then stop the service:
 
 ## 3. Trusted Realtime Compute and ML
 
-With the trusted realtime compute and ML/DL support, users can run standard Flink stream processing and distributed DL model inference (using [Cluster Serving](https://www.usenix.org/conference/opml20/presentation/song)) in a secure and trusted fashion. In this feature, both [Graphene](https://github.com/oscarlab/graphene) and [Occlum](https://github.com/occlum/occlum) are supported, users can choose one of them as LibOS layer.
+With the Trusted Realtime Compute and ML/DL support, users can run standard Flink stream processing and distributed DL model inference (using Cluster Serving in a secure and trusted fashion. In this feature, both Graphene and Occlum are supported, users can choose one of them as LibOS layer.
 
 ### 3.1 Prerequisite
 
-Please refer to [Section 2.1 Prerequisite](#prerequisite). For Occlum backend, if your kernel version is below 5.11, please install [enable_rdfsbase](https://github.com/occlum/enable_rdfsbase).
+Please refer to [Section 2.1 Prerequisite](#prerequisite). For the Occlum backend, if your kernel version is below 5.11, please install enable_rdfsbase from [here](https://github.com/occlum/enable_rdfsbase).
 
 ### 3.2 Prepare Docker Image
 
-Pull docker image from Dockerhub
+Pull Docker image from Dockerhub
 
 ```bash
 # For Graphene
-docker pull intelanalytics/bigdl-ppml-trusted-realtime-ml-scala-graphene:0.14.0-SNAPSHOT
+docker pull intelanalytics/bigdl-ppml-trusted-realtime-ml-scala-graphene:2.1.0-SNAPSHOT
 ```
 
 ```bash
 # For Occlum
-docker pull intelanalytics/bigdl-ppml-trusted-realtime-ml-scala-occlum:0.14.0-SNAPSHOT
+docker pull intelanalytics/bigdl-ppml-trusted-realtime-ml-scala-occlum:2.1.0-SNAPSHOT
 ```
 
-Also, you can build docker image from Dockerfile (this will take some time).
+Also, you can build Docker image from Dockerfile (this will take some time).
 
 ```bash
 # For Graphene
@@ -748,9 +781,9 @@ cd ${FLINK_HOME}
 ./bin/flink run ./examples/batch/WordCount.jar
 ```
 
-If Jobmanager is not running on current node, please add `-m ${FLINK_JOB_MANAGER_IP}`.
+If Jobmanager is not running on the current node, please add `-m ${FLINK_JOB_MANAGER_IP}`.
 
-The result should look like:
+The result should look like this:
 
 ```bash
 (a,5)    
@@ -769,6 +802,7 @@ The result should look like:
 (bodkin,1) 
 (bourn,1)  
 ```
+
 #### 3.3.4 Run Trusted Cluster Serving
 
 Start Cluster Serving as follows:
@@ -777,7 +811,7 @@ Start Cluster Serving as follows:
 ./start-local-cluster-serving.sh
 ```
 
-After all services are ready, you can directly push inference requests int queue with [Restful API](https://analytics-zoo.github.io/master/#ClusterServingGuide/ProgrammingGuide/#restful-api). Also, you can push image/input into queue with Python API
+After all cluster serving services are ready, you can directly push inference requests into the queue with [Restful API](https://analytics-zoo.github.io/master/#ClusterServingGuide/ProgrammingGuide/#restful-api). Also, you can push image/input into the queue with Python API
 
 ```python
 from bigdl.serving.client import InputQueue
@@ -785,7 +819,7 @@ input_api = InputQueue()
 input_api.enqueue('my-image1', user_define_key={"path": 'path/to/image1'})
 ```
 
-Cluster Serving service is a long running service in container, you can stop it as follows:
+Cluster Serving service is a long-running service in containers, you can stop it as follows:
 
 ```bash
 docker stop trusted-cluster-serving-local

@@ -29,7 +29,11 @@ object BlockManagerWrapper {
   def putBytes( blockId: BlockId,
                 bytes: ByteBuffer,
                 level: StorageLevel): Unit = {
-    require(bytes != null, "Bytes is null")
+    if (bytes == null) {
+      //     scalastyle:off
+      throw new IllegalArgumentException("Bytes is null")
+      //     scalastyle:on
+    }
     putBytesFn(blockId, new ChunkedByteBuffer(bytes), level)
   }
 

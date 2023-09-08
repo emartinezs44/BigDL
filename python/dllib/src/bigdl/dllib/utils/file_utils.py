@@ -13,15 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from bigdl.dllib.utils.common import Sample as BSample, JTensor as BJTensor,\
-    JavaCreator, _get_gateway, _py2java, _java2py
-import numpy as np
+
+import functools
+import glob
 import os
+import subprocess
 import tempfile
 import uuid
-import functools
-
 from urllib.parse import urlparse
+
+import numpy as np
+
+from bigdl.dllib.utils.common import Sample as BSample, JTensor as BJTensor,\
+    JavaCreator, _get_gateway, _py2java, _java2py
+from bigdl.dllib.utils.log4Error import *
 
 
 def convert_to_safe_path(input_path, follow_symlinks=True):
@@ -38,7 +43,7 @@ def to_list_of_numpy(elements):
     elif np.isscalar(elements):
         return [np.array(elements)]
     elif not isinstance(elements, list):
-        raise ValueError("Wrong type: %s" % type(elements))
+        invalidInputError(False, "Wrong type: %s" % type(elements))
 
     results = []
     for element in elements:
@@ -47,7 +52,7 @@ def to_list_of_numpy(elements):
         elif isinstance(element, np.ndarray):
             results.append(element)
         else:
-            raise ValueError("Wrong type: %s" % type(element))
+            invalidInputError(False, "Wrong type: %s" % type(element))
 
     return results
 
@@ -56,7 +61,17 @@ def get_file_list(path, recursive=False):
     return callZooFunc("float", "listPaths", path, recursive)
 
 
+def exists(path):
+    return callZooFunc("float", "exists", path)
+
+
+def mkdirs(path):
+    callZooFunc("float", "mkdirs", path)
+
+
 def is_local_path(path):
+    if path.startswith("/dbfs"):
+        return False
     parse_result = urlparse(path)
     return len(parse_result.scheme.lower()) == 0 or parse_result.scheme.lower() == "file"
 
@@ -133,12 +148,97 @@ def enable_multi_fs_load(load_func):
     return multi_fs_load
 
 
+def enable_hdfs_load(load_func):
+
+    @functools.wraps(load_func)
+    def multi_fs_load(path, *args, **kwargs):
+        if is_local_path(path):
+            return load_func(path, *args, **kwargs)
+        else:
+            file_name = str(uuid.uuid1())
+            file_name = append_suffix(file_name, path.strip("/").split("/")[-1])
+            temp_path = os.path.join(tempfile.gettempdir(), file_name)
+            classpath = subprocess.Popen(["hadoop", "classpath", "--glob"],
+                                         stdout=subprocess.PIPE).communicate()[0]
+            os.environ["CLASSPATH"] = classpath.decode("utf-8")
+            import pyarrow.fs as pafs
+            import pyarrow as pa
+            hdfs = pa.hdfs.connect()
+            if not hdfs.isfile(path):
+                os.mkdir(temp_path)
+            pafs.copy_files(path, temp_path)
+            try:
+                return load_func(temp_path, *args, **kwargs)
+            finally:
+                if os.path.isdir(temp_path):
+                    import shutil
+                    shutil.rmtree(temp_path)
+                else:
+                    os.remove(temp_path)
+
+    return multi_fs_load
+
+
 def get_remote_file_to_local(remote_path, local_path, over_write=False):
     callZooFunc("float", "getRemoteFileToLocal", remote_path, local_path, over_write)
 
 
+def get_remote_dir_to_local(remote_dir, local_dir):
+    # get remote file lists
+    file_list = get_file_list(remote_dir)
+    # get remote files to local
+    [get_remote_file_to_local(file, os.path.join(local_dir, os.path.basename(file)))
+     for file in file_list]
+
+
+def get_remote_files_with_prefix_to_local(remote_path_prefix, local_dir):
+    remote_dir = os.path.dirname(remote_path_prefix)
+    prefix = os.path.basename(remote_path_prefix)
+    # get remote file lists
+    file_list = get_file_list(remote_dir)
+    file_list = [file for file in file_list if os.path.basename(file).startswith(prefix)]
+    # get remote files to local
+    [get_remote_file_to_local(file, os.path.join(local_dir, os.path.basename(file)))
+     for file in file_list]
+
+
+def get_remote_dir_tree_to_local(remote_dir, local_dir):
+    if os.path.exists(local_dir):
+        os.makedirs(local_dir)
+    # get remote file lists
+    file_list = get_file_list(remote_dir, recursive=True)
+    for file in file_list:
+        local_subdir = os.path.join(local_dir, os.path.dirname(file)[len(remote_dir)+1:])
+        filename = os.path.basename(file)
+        if not os.path.exists(local_subdir):
+            os.makedirs(local_subdir)
+        get_remote_file_to_local(file, os.path.join(local_subdir, filename))
+
+
 def put_local_file_to_remote(local_path, remote_path, over_write=False):
     callZooFunc("float", "putLocalFileToRemote", local_path, remote_path, over_write)
+
+
+def put_local_files_with_prefix_to_remote(local_path_prefix, remote_dir, over_write=False):
+    # get local file lists
+    file_list = glob.glob(local_path_prefix + "*")
+    # get remote files to local
+    [put_local_file_to_remote(file, os.path.join(remote_dir, os.path.basename(file)),
+                              over_write=over_write)
+     for file in file_list]
+
+
+def put_local_dir_tree_to_remote(local_dir, remote_dir, over_write=False):
+    if not exists(remote_dir):
+        mkdirs(remote_dir)
+    for dirpath, dirnames, filenames in os.walk(local_dir):
+        for d in dirnames:
+            remote_subdir = os.path.join(remote_dir, dirpath[len(local_dir)+1:], d)
+            if not exists(remote_subdir):
+                mkdirs(remote_subdir)
+        for f in filenames:
+            remote_file = os.path.join(remote_dir, dirpath[len(local_dir)+1:], f)
+            put_local_file_to_remote(os.path.join(dirpath, f), remote_file, over_write=over_write)
 
 
 def set_core_number(num):
@@ -161,10 +261,10 @@ def callZooFunc(bigdl_type, name, *args):
             error = e
             if not ("does not exist" in str(e)
                     and "Method {}".format(name) in str(e)):
-                raise e
+                invalidOperationError(False, str(e), cause=e)
         else:
             return result
-    raise error
+    invalidOperationError(False, str(error), cause=error)
 
 
 class JTensor(BJTensor):
@@ -179,8 +279,8 @@ class JTensor(BJTensor):
         """
         if a_ndarray is None:
             return None
-        assert isinstance(a_ndarray, np.ndarray), \
-            "input should be a np.ndarray, not %s" % type(a_ndarray)
+        invalidInputError(isinstance(a_ndarray, np.ndarray),
+                          "input should be a np.ndarray, not %s" % type(a_ndarray))
         return cls(a_ndarray,
                    a_ndarray.shape,
                    bigdl_type)

@@ -18,7 +18,7 @@ package org.apache.spark.rdd
 
 import java.io.{IOException, ObjectOutputStream}
 
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{LogManager, Logger}
 import org.apache.spark.util.Utils
 import org.apache.spark.{Partition, SparkContext}
 
@@ -34,7 +34,7 @@ object ZippedPartitionsWithLocalityRDD {
       sc, sc.clean(f), rdd1, rdd2, preservesPartitioning)
   }
 
-  val logger: Logger = Logger.getLogger(getClass)
+  val logger: Logger = LogManager.getLogger(getClass)
 }
 
 /**
@@ -64,10 +64,16 @@ class ZippedPartitionsWithLocalityRDD[A: ClassTag, B: ClassTag, V: ClassTag](
   extends ZippedPartitionsRDD2[A, B, V](sc, _f, _rdd1, _rdd2, preservesPartitioning) {
 
   override def getPartitions: Array[Partition] = {
-    require(rdds.length == 2, "this is only for 2 rdd zip")
+    if (rdds.length != 2) {
+      //     scalastyle:off
+      throw new IllegalArgumentException("this is only for 2 rdd zip")
+      //     scalastyle:on
+    }
     val numParts = rdds.head.partitions.length
     if (!rdds.forall(rdd => rdd.partitions.length == numParts)) {
+      //     scalastyle:off
       throw new IllegalArgumentException("Can't zip RDDs with unequal numbers of partitions")
+      //     scalastyle:on
     }
 
     val candidateLocs = new ArrayBuffer[(Int, Seq[String])]()
@@ -103,8 +109,12 @@ class ZippedPartitionsWithLocalityRDD[A: ClassTag, B: ClassTag, V: ClassTag](
       }
     }
 
-    require(nonmatchPartitionId.size == candidateLocs.size,
-      "unmatched partition size should be the same with candidateLocs size")
+    if (nonmatchPartitionId.size != candidateLocs.size) {
+      //     scalastyle:off
+      throw new IllegalArgumentException("unmatched partition size should be the same" +
+        "with candidateLocs size")
+      //     scalastyle:on
+    }
     nonmatchPartitionId.foreach { i =>
       val locs = rdds(0).context.getPreferredLocs(rdds(0), i).map(_.toString).distinct
       val matchPartition = candidateLocs.remove(0)

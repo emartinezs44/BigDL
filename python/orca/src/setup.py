@@ -18,15 +18,28 @@
 
 import os
 import sys
-from shutil import copyfile, copytree, rmtree
 import fnmatch
+from shutil import copyfile, copytree, rmtree
 from setuptools import setup
+
+long_description = '''
+BigDL Orca helps to seamlessly scale out TensorFlow and PyTorch pipelines 
+for distributed Big Data.
+
+See [here](https://bigdl.readthedocs.io/en/latest/doc/Orca/Overview/orca.html) 
+for more information.
+'''
 
 TEMP_PATH = "bigdl/share/orca"
 bigdl_home = os.path.abspath(__file__ + "/../../../..")
 exclude_patterns = ["*__pycache__*", "*ipynb_checkpoints*"]
 
 VERSION = open(os.path.join(bigdl_home, 'python/version.txt'), 'r').read().strip()
+
+RAY_DEP = ['ray[default]==1.9.2', 'aiohttp==3.8.1', 'async-timeout==4.0.1', 'aioredis==1.3.1',
+           'hiredis==2.0.0', 'setproctitle', 'psutil', 'prometheus-client==0.11.0',
+           'protobuf==3.19.5']
+AUTOML_DEP = RAY_DEP + ['ray[tune]==1.9.2', 'scikit-learn', 'tensorboard']
 
 building_error_msg = """
 If you are packing python API from BigDL source, you must build BigDL first
@@ -59,7 +72,8 @@ def init_env():
         if os.path.exists(TEMP_PATH):
             rmtree(TEMP_PATH)
         copytree(dist_source, TEMP_PATH)
-        copyfile(bigdl_home + "/python/orca/src/bigdl/orca/automl/__init__.py", TEMP_PATH + "/__init__.py")
+        copyfile(bigdl_home + "/python/orca/src/bigdl/orca/automl/__init__.py",
+                 TEMP_PATH + "/__init__.py")
     else:
         print("Do nothing for release installation")
 
@@ -78,23 +92,26 @@ def get_bigdl_packages():
             print("including", package)
     return bigdl_packages
 
-
+# The requirement list contains the main dependencies for users of orca. This list
+# should be carefully curated. If you change it, please reflect
+# the change in the matching file of python/requirements/orca.
 def setup_package():
     metadata = dict(
         name='bigdl-orca',
         version=VERSION,
         description='Seamlessly scale out TensorFlow and PyTorch for Big Data (using Spark & Ray)',
+        long_description=long_description,
+        long_description_content_type="text/markdown",
         author='BigDL Authors',
         author_email='bigdl-user-group@googlegroups.com',
         license='Apache License, Version 2.0',
-        url='https://github.com/intel-analytics/analytics-zoo',
+        url='https://github.com/intel-analytics/BigDL',
         packages=get_bigdl_packages(),
-        install_requires=['conda-pack==0.3.1', 'packaging', 'filelock',
-                          'bigdl-tf==0.14.0.dev1', 'bigdl-math==0.14.0.dev1', 'bigdl-dllib=='+VERSION],
-        extras_require={'ray': ['ray==1.2.0', 'psutil', 'aiohttp==3.7.0', 'aioredis==1.1.0',
-                                'setproctitle', 'hiredis==1.1.0', 'async-timeout==3.0.1'],
-                        'automl': ['aiohttp==3.7.4', 'aioredis==1.3.1',
-                                   'ray[tune]==1.2.0', 'scikit-learn', 'tensorboard', 'xgboost']
+        install_requires=['packaging', 'filelock',
+                          'bigdl-tf==2.3.0.dev0', 'bigdl-math==2.3.0.dev0',
+                          'bigdl-dllib=='+VERSION, 'pyzmq'],
+        extras_require={'ray': RAY_DEP,
+                        'automl': AUTOML_DEP,
                         },
         dependency_links=['https://d3kbcqa49mib13.cloudfront.net/spark-2.0.0-bin-hadoop2.7.tgz'],
         include_package_data=True,

@@ -29,7 +29,7 @@ import com.intel.analytics.bigdl.dllib.optim
 import com.intel.analytics.bigdl.dllib._
 import com.intel.analytics.bigdl.dllib.nn.Graph._
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
-import com.intel.analytics.bigdl.dllib.nn.keras.{KerasLayer, KerasLayerSerializable}
+import com.intel.analytics.bigdl.dllib.nn.internal.{KerasLayer, KerasLayerSerializable}
 import com.intel.analytics.bigdl.dllib.nn.mkldnn.MklDnnModule
 import com.intel.analytics.bigdl.dllib.nn.{Container, Graph, Module, StaticGraph, Sequential => TSequential}
 import com.intel.analytics.bigdl.dllib.optim.DistriOptimizer.{Cache, CacheV1}
@@ -57,11 +57,9 @@ import com.intel.analytics.bigdl.dllib.net.NetUtils
 // import com.intel.analytics.bigdl.dllib.Net.TorchModel
 import com.intel.analytics.bigdl.dllib.estimator.{AbstractEstimator, ConstantClipping, GradientClipping, L2NormClipping}
 // import com.intel.analytics.zoo.tfpark.{TFTrainingHelper, TFTrainingHelperV2}
-import org.apache.commons.lang.exception.ExceptionUtils
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.log4j.Logger
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.rdd.{RDD, ZippedPartitionsWithLocalityRDD}
 
@@ -154,23 +152,36 @@ class Model[T: ClassTag] private (private val _inputs : Seq[ModuleNode[T]],
 
   override def summary(
                         lineLength: Int = 120,
-                        positions: Array[Double] = Array(.33, .55, .67, 1)): Unit = {
-    println("Model Summary:")
-    KerasUtils.printSplitLine('-', lineLength)
+                        positions: Array[Double] = Array(.33, .55, .67, 1),
+                        needPrint: Boolean = true): String = {
+    val summaryBuf = ArrayBuffer[String]()
+    summaryBuf.append("Model Summary:")
+    KerasUtils.printSplitLine('-', lineLength, summaryBuf)
+
     val toDisplay = Array("Layer (type)", "Output Shape", "Param #", "Connected to")
-    KerasUtils.printRow(toDisplay, lineLength, positions, splitChar = '=')
+    KerasUtils.printRow(toDisplay, lineLength, positions, splitChar = '=',
+      summaryBuf = summaryBuf)
     val nodes = labor.asInstanceOf[StaticGraph[T]].getSortedForwardExecutions()
     var totalParams = 0
     var trainableParams = 0
     for (node <- nodes) {
-      val (total, trainable) = KerasUtils.printNodeSummary(node, lineLength, positions)
+      val (total, trainable) = KerasUtils.printNodeSummary(node, lineLength, positions,
+        summaryBuf = summaryBuf)
       totalParams += total
       trainableParams += trainable
     }
-    println("Total params: " + "%,d".format(totalParams))
-    println("Trainable params: " + "%,d".format(trainableParams))
-    println("Non-trainable params: " + "%,d".format(totalParams - trainableParams))
-    KerasUtils.printSplitLine('-', lineLength)
+    val msgTotal = "Total params: " + "%,d".format(totalParams)
+    summaryBuf.append(msgTotal)
+    val msgTrain = "Trainable params: " + "%,d".format(trainableParams)
+    summaryBuf.append(msgTrain)
+    val msgNonTrain = "Non-trainable params: " + "%,d".format(totalParams - trainableParams)
+    summaryBuf.append(msgNonTrain)
+    KerasUtils.printSplitLine('-', lineLength, summaryBuf)
+    val res = summaryBuf.mkString("\n")
+    if (needPrint) {
+      InternalDistriOptimizer.logger.info(res)
+    }
+    return res
   }
 }
 
@@ -276,7 +287,7 @@ object Model extends KerasLayerSerializable {
     val labor = context.moduleData.module.
       asInstanceOf[KerasLayer[Activity, Activity, T]].labor
     val subModule = ModuleSerializer.serialize(SerializeContext(ModuleData(labor,
-      new ArrayBuffer[String](), new ArrayBuffer[String]()), context.storages,
+      Seq[String](), Seq[String]()), context.storages,
       context.storageType, _copyWeightAndBias))
     builder.addSubModules(subModule.bigDLModule)
   }
@@ -292,5 +303,4 @@ object Model extends KerasLayerSerializable {
     val tGraph = subModules(0).asInstanceOf[StaticGraph[T]]
     Model(tGraph.inputs.toArray, new GraphRef(tGraph).getOutputs().toArray)
   }
-
 }

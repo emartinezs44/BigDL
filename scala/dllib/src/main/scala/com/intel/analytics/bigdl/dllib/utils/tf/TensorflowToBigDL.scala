@@ -29,7 +29,7 @@ import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity, 
 import com.intel.analytics.bigdl.dllib.nn.tf._
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.utils.tf.FullConnectionTF.getOrSetTensor
-import com.intel.analytics.bigdl.dllib.utils.{DirectedGraph, Node, T}
+import com.intel.analytics.bigdl.dllib.utils.{DirectedGraph, Log4Error, Node, T}
 import com.intel.analytics.bigdl.dllib.utils.tf.TensorflowToBigDL._
 
 import scala.collection.mutable.ArrayBuffer
@@ -92,7 +92,7 @@ trait TensorflowToBigDL {
   }
 
   protected def getIntList(attrMap: util.Map[String, AttrValue], key: String): Seq[Int] = {
-    attrMap.get(key).getList.getIList.asScala.map(_.toInt)
+    attrMap.get(key).getList.getIList.asScala.map(_.toInt).toSeq
   }
 
   protected def getBoolean(attrMap: util.Map[String, AttrValue], key: String): Boolean = {
@@ -137,7 +137,8 @@ object TensorflowToBigDL {
    * @param pattern
    */
   def registerPattern(pattern: TensorflowToBigDL): Unit = {
-    require(pattern.topology.reverse == true, "the topology should be a reversed graph")
+    Log4Error.invalidInputError(pattern.topology.reverse == true,
+      "the topology should be a reversed graph")
     patternList.append(pattern)
     sortPattern()
   }
@@ -201,8 +202,9 @@ object TensorflowToBigDL {
       return Tensor(Storage(tmp), 1, shape)
     }
 
-    throw new UnsupportedOperationException(
+    Log4Error.invalidOperationError(false,
       s"Not support load tensorflow tensor when type is ${tfTensor.getDtype}")
+    null
   }
 
   private var patternList : ArrayBuffer[TensorflowToBigDL] = {
@@ -334,7 +336,7 @@ object Conv1D extends TensorflowToBigDL {
     val attributes = convNode.element.getAttrMap
     val format = getString(attributes, "data_format")
     val strideList = getIntList(attributes, "strides")
-    require(strideList.head == 1, s"not support strides on batch")
+    Log4Error.invalidInputError(strideList.head == 1, s"not support strides on batch")
 
     val strideW = format match {
       case "NHWC" =>
@@ -342,7 +344,8 @@ object Conv1D extends TensorflowToBigDL {
       case "NCHW" =>
         strideList(3)
       case _ =>
-        throw new IllegalArgumentException(s"not supported data format: $format")
+        Log4Error.invalidOperationError(false, s"not supported data format: $format")
+        0
     }
 
     val biasNode = tfGraph.source.prevNodes(1).prevNodes.head.element
@@ -360,7 +363,7 @@ object Conv1D extends TensorflowToBigDL {
     gradWeights.resizeAs(weights)
 
     if (attributes.get("padding").getS.toString(Charset.defaultCharset()) == "SAME") {
-      throw new IllegalArgumentException("SAME padding is not supported")
+      Log4Error.invalidOperationError(false, "SAME padding is not supported")
     }
 
     val tconv = TemporalConvolution[T](
@@ -413,12 +416,12 @@ object Conv2DWithoutBias extends TensorflowToBigDL{
         (0, 0)
       }
     val strideList = getIntList(attributes, "strides")
-    require(strideList.head == 1, s"not support strides on batch")
+    Log4Error.invalidInputError(strideList.head == 1, s"not support strides on batch")
 
     val format = getString(attributes, "data_format")
     val conv = format match {
       case "NHWC" =>
-        require(strideList(3) == 1, s"not support strides on depth")
+        Log4Error.invalidInputError(strideList(3) == 1, s"not support strides on depth")
         val strideW = strideList(1)
         val strideH = strideList(2)
         val weightNode = tfGraph.source.prevNodes(1).prevNodes.head.element
@@ -438,7 +441,7 @@ object Conv2DWithoutBias extends TensorflowToBigDL{
         )
 
       case "NCHW" =>
-        require(strideList(1) == 1, s"not support strides on depth")
+        Log4Error.invalidInputError(strideList(1) == 1, s"not support strides on depth")
         val strideW = strideList(2)
         val strideH = strideList(3)
         val weightNode = tfGraph.source.prevNodes(1).prevNodes.head.element
@@ -458,7 +461,7 @@ object Conv2DWithoutBias extends TensorflowToBigDL{
           withBias = false
         )
       case _ =>
-        throw new IllegalArgumentException(s"not supported data format: $format")
+        Log4Error.invalidOperationError(false, s"not supported data format: $format")
     }
     conv.asInstanceOf[AbstractModule[Activity, Activity, T]]
   }
@@ -490,12 +493,12 @@ object Conv2D extends TensorflowToBigDL{
         (0, 0)
       }
     val strideList = getIntList(attributes, "strides")
-    require(strideList.head == 1, s"not support strides on batch")
+    Log4Error.invalidInputError(strideList.head == 1, s"not support strides on batch")
 
     val format = getString(attributes, "data_format")
     val conv = format match {
       case "NHWC" =>
-        require(strideList(3) == 1, s"not support strides on depth")
+        Log4Error.invalidInputError(strideList(3) == 1, s"not support strides on depth")
         val strideW = strideList(1)
         val strideH = strideList(2)
         val biasNode = tfGraph.source.prevNodes(1).prevNodes.head.element
@@ -517,7 +520,7 @@ object Conv2D extends TensorflowToBigDL{
           initGradBias = gradBias, format = DataFormat.NHWC)
 
       case "NCHW" =>
-        require(strideList(1) == 1, s"not support strides on depth")
+        Log4Error.invalidInputError(strideList(1) == 1, s"not support strides on depth")
         val strideW = strideList(2)
         val strideH = strideList(3)
         val biasNode = tfGraph.source.prevNodes(1).prevNodes.head.element
@@ -540,7 +543,7 @@ object Conv2D extends TensorflowToBigDL{
           initGradWeight = gradWeights,
           initGradBias = gradBias, format = DataFormat.NCHW)
       case _ =>
-        throw new IllegalArgumentException(s"not supported data format: $format")
+        Log4Error.invalidOperationError(false, s"not supported data format: $format")
     }
     conv.asInstanceOf[AbstractModule[Activity, Activity, T]]
   }
@@ -571,10 +574,10 @@ object Conv2D2 extends TensorflowToBigDL{
     val attributes = tfGraph.source.prevNodes(0).element.getAttrMap
     val strideList = getIntList(attributes, "strides")
     val format = getString(attributes, "data_format")
-    require(strideList.head == 1, s"not support strides on batch")
-    require(format == "NCHW", "NCHW should be used for this sub-graph")
+    Log4Error.invalidInputError(strideList.head == 1, s"not support strides on batch")
+    Log4Error.invalidInputError(format == "NCHW", "NCHW should be used for this sub-graph")
 
-    require(strideList(1) == 1, s"not support strides on depth")
+    Log4Error.invalidInputError(strideList(1) == 1, s"not support strides on depth")
     val (strideH, strideW) = (strideList(2), strideList(3))
 
     val biasNode = tfGraph.source.prevNodes(1).prevNodes(0).prevNodes.head.element

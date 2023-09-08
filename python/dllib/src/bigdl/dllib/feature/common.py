@@ -21,6 +21,8 @@ from pyspark.serializers import CloudPickleSerializer
 import sys
 import math
 import warnings
+from bigdl.dllib.utils.log4Error import *
+
 
 if sys.version >= '3':
     long = int
@@ -127,8 +129,8 @@ class ChainedPreprocessing(Preprocessing):
 
     def __init__(self, transformers, bigdl_type="float"):
         for transfomer in transformers:
-            assert isinstance(transfomer, Preprocessing), \
-                str(transfomer) + " should be subclass of Preprocessing "
+            invalidInputError(isinstance(transfomer, Preprocessing),
+                              f"{str(transfomer)} should be subclass of Preprocessing ")
 
         super(ChainedPreprocessing, self).__init__(bigdl_type, transformers)
 
@@ -394,8 +396,8 @@ class FeatureSet(DataSet):
                                  True, features, labels)
             return cls(jvalue=jvalue)
         else:
-            raise ValueError("Unsupported dataloader type, please pass pytorch dataloader" +
-                             " or a function to create pytorch dataloader.")
+            invalidInputError(False, "Unsupported dataloader type, please pass pytorch dataloader" +
+                              " or a function to create pytorch dataloader.")
 
     def transform(self, transformer):
         """

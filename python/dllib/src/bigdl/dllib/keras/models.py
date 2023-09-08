@@ -19,12 +19,19 @@ import sys
 from bigdl.dllib.utils.utils import remove_batch
 from .engine.topology import KerasNet
 from bigdl.dllib.utils.common import to_list
+from bigdl.dllib.utils.log4Error import *
 from bigdl.dllib.utils.file_utils import callZooFunc
 from bigdl.dllib.utils.bigdl_export import keras_export
 
 if sys.version >= '3':
     long = int
     unicode = str
+
+
+def load_model(model_path, bigdl_type="float"):
+    from bigdl.dllib.net import Net
+    model = Net.load(model_path, bigdl_type=bigdl_type)
+    return model
 
 
 @keras_export('bigdl.dllib.keras.Model')
@@ -109,7 +116,7 @@ class Sequential(KerasNet):
         if (isinstance(model, Lambda)):
             if not self.is_built():
                 if not model.input_shape:
-                    raise Exception("You should specify inputShape for the first layer")
+                    invalidInputError(False, "You should specify inputShape for the first layer")
                 input_shapes = model.input_shape
             else:
                 input_shapes = self.get_output_shape()

@@ -25,9 +25,9 @@ import com.intel.analytics.bigdl.dllib.models.resnet.{Utils => ResNetUtils}
 import com.intel.analytics.bigdl.dllib.nn.Module
 import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.dllib.optim.{Top1Accuracy, Top5Accuracy, ValidationMethod, ValidationResult}
-import com.intel.analytics.bigdl.dllib.utils.{Engine}
-import com.intel.analytics.bigdl.dllib.utils.LoggerFilter
-import org.apache.log4j.{Level, Logger}
+import com.intel.analytics.bigdl.dllib.utils.{Engine, Log4Error, LoggerFilter, TestUtils}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
@@ -48,7 +48,8 @@ class QuantizationSpec extends FlatSpec with Matchers with BeforeAndAfter{
     fp32.zip(int8).foreach{ r =>
       val a1 = r._1._1.result()._1
       val a2 = r._2._1.result()._1
-      require(Math.abs(a1 - a2) < 0.01, s"accuracy of quantized model seems wrong")
+      TestUtils.conditionFailTest(Math.abs(a1 - a2) < 0.01,
+        s"accuracy of quantized model seems wrong")
     }
   }
 
@@ -63,7 +64,9 @@ class QuantizationSpec extends FlatSpec with Matchers with BeforeAndAfter{
       case "resnet" =>
         sc.parallelize(ResNetUtils.loadTest(folder), partitionNum)
 
-      case _ => throw new UnsupportedOperationException(s"unknown model: $model")
+      case _ =>
+        Log4Error.invalidInputError(false, s"unknown model: $model", "only support lenet, resnet")
+        null
     }
   }
 
@@ -79,12 +82,15 @@ class QuantizationSpec extends FlatSpec with Matchers with BeforeAndAfter{
         BytesToBGRImg() -> BGRImgNormalizer(Cifar10DataSet.trainMean,
           Cifar10DataSet.trainStd) -> BGRImgToSample()
 
-      case _ => throw new UnsupportedOperationException(s"unknown model: $model")
+      case _ =>
+        Log4Error.invalidInputError(false, s"unknown model: $model",
+          "only support lenet, resnet")
+        null
     }
   }
 
   LoggerFilter.redirectSparkInfoLogs()
-  Logger.getLogger("com.intel.analytics.bigdl.dllib.optim").setLevel(Level.INFO)
+  Configurator.setLevel("com.intel.analytics.bigdl.dllib.optim", Level.INFO)
 
   "Quantize LeNet5" should "generate the same top1 accuracy" in {
     val lenetFP32Model = System.getenv("lenetfp32model")

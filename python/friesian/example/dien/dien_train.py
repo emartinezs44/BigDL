@@ -27,6 +27,7 @@ from bigdl.orca.data.file import exists, makedirs
 from bigdl.orca.learn.tf.estimator import Estimator
 from bigdl.orca import init_orca_context, stop_orca_context
 from model import *
+from bigdl.dllib.utils.log4Error import *
 
 
 EMBEDDING_DIM = 18
@@ -82,9 +83,9 @@ def load_dien_data(data_dir):
     tbl = tbl.append_column("rank1", rank().over(windowSpec1))
     tbl = tbl.filter(col('rank1') == 1)
     train_data, test_data = tbl.split([0.8, 0.2], seed=1)
-    usertbl = FeatureTable.read_parquet(data_dir + "/user_index/*")
-    itemtbl = FeatureTable.read_parquet(data_dir + "/item_index/*")
-    cattbl = FeatureTable.read_parquet(data_dir + "/category_index/*")
+    usertbl = FeatureTable.read_parquet(data_dir + "/user.parquet")
+    itemtbl = FeatureTable.read_parquet(data_dir + "/item.parquet")
+    cattbl = FeatureTable.read_parquet(data_dir + "/category.parquet")
     n_uid = usertbl.get_stats("id", "max")["id"] + 1
     n_mid = itemtbl.get_stats("id", "max")["id"] + 1
     n_cat = cattbl.get_stats("id", "max")["id"] + 1
@@ -107,8 +108,8 @@ if __name__ == '__main__':
                         help='The executor core number.')
     parser.add_argument('--executor_memory', type=str, default="160g",
                         help='The executor memory.')
-    parser.add_argument('--num_executor', type=int, default=8,
-                        help='The number of executor.')
+    parser.add_argument('--num_executors', type=int, default=8,
+                        help='The number of executors.')
     parser.add_argument('--driver_cores', type=int, default=4,
                         help='The driver core number.')
     parser.add_argument('--driver_memory', type=str, default="36g",
@@ -128,17 +129,21 @@ if __name__ == '__main__':
         init_orca_context("local", cores=args.executor_cores, memory=args.executor_memory)
     elif args.cluster_mode == "standalone":
         init_orca_context("standalone", master=args.master,
-                          cores=args.executor_cores, num_nodes=args.num_executor,
+                          cores=args.executor_cores, num_nodes=args.num_executors,
                           memory=args.executor_memory,
                           driver_cores=args.driver_cores, driver_memory=args.driver_memory,
                           init_ray_on_spark=False)
     elif args.cluster_mode == "yarn":
         init_orca_context("yarn-client", cores=args.executor_cores,
-                          num_nodes=args.num_executor, memory=args.executor_memory,
+                          num_nodes=args.num_executors, memory=args.executor_memory,
                           driver_cores=args.driver_cores, driver_memory=args.driver_memory,
                           init_ray_on_spark=False)
     elif args.cluster_mode == "spark-submit":
         init_orca_context("spark-submit")
+    else:
+        invalidInputError(False,
+                          "cluster_mode should be one of 'local', 'yarn', 'standalone' and"
+                          " 'spark-submit', but got " + args.cluster_mode)
 
     train_data, test_data, n_uid, n_mid, n_cat = load_dien_data(args.data_dir)
 

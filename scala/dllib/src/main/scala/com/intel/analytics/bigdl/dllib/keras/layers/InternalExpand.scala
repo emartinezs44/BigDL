@@ -19,7 +19,7 @@ package com.intel.analytics.bigdl.dllib.keras.layers.internal
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.AbstractModule
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.{T, Table}
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, T, Table}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -34,7 +34,7 @@ private[bigdl] class InternalExpand[T: ClassTag](tgtSizes: Array[Int])
   (implicit ev: TensorNumeric[T]) extends AbstractModule[Tensor[T], Tensor[T], T] {
 
   override def updateOutput(input: Tensor[T]): Tensor[T] = {
-    require(tgtSizes.length == input.dim(),
+    Log4Error.invalidInputError(tgtSizes.length == input.dim(),
       s"the number of dimensions provided must equal ${input.dim()}")
     val tensorDim = input.dim()
     val tensorStride = input.stride()
@@ -47,10 +47,9 @@ private[bigdl] class InternalExpand[T: ClassTag](tgtSizes: Array[Int])
           tensorSize(i) = tgtSizes(i)
           tensorStride(i) = 0
         } else if (tensorSize(i) != tgtSizes(i)) {
-          throw new UnsupportedOperationException(
-            "incorrect size: only supporting singleton expansion (size=1)," +
-              s"tensorSize: ${tensorSize.mkString(" ")}  " +
-              s"tgtSize: ${tgtSizes.mkString(" ")}")
+          Log4Error.invalidInputError(false, s"incorrect size: only supporting singleton " +
+            s"expansion (size=1), tensorSize: ${tensorSize.mkString(" ")}. " +
+            s"tgtSize: ${tgtSizes.mkString(" ")}")
         }
       }
       i += 1

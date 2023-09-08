@@ -1,6 +1,6 @@
 #!/usr/bin/python3
-from zoo.serving.client import InputQueue, OutputQueue
-from zoo.common.encryption_utils import encrypt_with_AES_GCM
+from bigdl.serving.client import InputQueue, OutputQueue
+from bigdl.common.encryption_utils import encrypt_with_AES_GCM
 import os
 import cv2
 import json
@@ -22,7 +22,7 @@ def main(args):
         raise EOFError("Please make sure that image push number can be divided by multi-process number")
     redis_args = {}
     with open(args.config_path) as file:
-        config = yaml.full_load(file)
+        config = yaml.safe_load(file)
     redis_url = config.get('redisUrl')
     if redis_url:
         host = redis_url.split(':')[0]

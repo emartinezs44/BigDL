@@ -17,11 +17,14 @@ import os
 import pandas as pd
 import pytest
 
-from bigdl.orca.test_zoo_utils import ZooTestCase
+from unittest import TestCase
 from bigdl.chronos.data.utils.public_dataset import PublicDataset
+from ... import op_torch, op_tf2
 
 
-class TestPublicDataset(ZooTestCase):
+@op_torch
+@op_tf2
+class TestPublicDataset(TestCase):
     def setup_method(self, method):
         pass
 
@@ -33,7 +36,7 @@ class TestPublicDataset(ZooTestCase):
         path = '~/.chronos/dataset/'
 
         # illegle input.
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             PublicDataset(name, path, redownload=False).get_public_data(chunk_size='1024')
 
     def test_get_nyc_taxi(self):
@@ -63,7 +66,8 @@ class TestPublicDataset(ZooTestCase):
                                                                   if x.endswith("Mbps")
                                                                   else float(x[:-4])*1000)
 
-            tsdata = public_data.get_tsdata(target_col=['AvgRate', 'total'], dt_col='StartTime')
+            tsdata = public_data.get_tsdata(target_col=['AvgRate', 'total'],
+                                            dt_col='StartTime', repair=False)
             assert tsdata.df.shape == (8760, 5)
             assert set(tsdata.df.columns) == {'StartTime', 'EndTime', 'AvgRate', 'total', 'id'}
             tsdata._check_basic_invariants()
@@ -82,7 +86,29 @@ class TestPublicDataset(ZooTestCase):
             public_data.df.time_step = pd.to_datetime(public_data.df.time_step,
                                                       unit='s',
                                                       origin=pd.Timestamp('2018-01-01'))
-            tsdata = public_data.get_tsdata(dt_col='time_step', target_col='cpu_usage')
+            tsdata = public_data.get_tsdata(dt_col='time_step', target_col='cpu_usage',
+                                            repair=False)
             assert tsdata.df.shape == (61570, 4)
             assert set(tsdata.df.columns) == {'time_step', 'cpu_usage', 'mem_usage', 'id'}
             tsdata._check_basic_invariants()
+
+    def test_get_uci_electricity(self):
+        name = 'uci_electricity'
+        path = '~/.chronos/dataset'
+        if os.environ.get('FTP_URI', None):
+            file_url = f"{os.getenv('FTP_URI')}/analytics-zoo-data/apps/ElectricityLD/uci_electricity_data.csv"
+            public_data = PublicDataset(name, path, redownload=False, with_split=False)
+            df = pd.read_csv(file_url,
+                             delimiter=';',
+                             parse_dates=['Unnamed: 0'],
+                             nrows=10000,
+                             low_memory=False)
+            public_data.df = pd.melt(df,
+                                     id_vars=['Unnamed: 0'],
+                                     value_vars=df.T.index[1:])\
+                               .rename(columns={'Unnamed: 0': 'timestamp',
+                                                'variable': 'id'})
+            tsdata = public_data.get_tsdata(dt_col='timestamp',
+                                            target_col='value',
+                                            id_col='id')
+            assert set(tsdata.df.columns) == {'id', 'timestamp', 'value'}

@@ -19,11 +19,10 @@ from pmdarima.arima import ARIMA
 from pmdarima.arima import ndiffs
 from pmdarima.arima import nsdiffs
 
-from bigdl.orca.automl.metrics import Evaluator
-from bigdl.orca.automl.model.abstract import BaseModel, ModelBuilder
+from bigdl.chronos.metric.forecast_metrics import Evaluator
 
 
-class ARIMAModel(BaseModel):
+class ARIMAModel:
 
     def __init__(self):
         """
@@ -48,6 +47,7 @@ class ARIMAModel(BaseModel):
         Q = config.get('Q', 1)
         m = config.get('m', 7)
         self.metric = config.get('metric', self.metric)
+        self.metric_func = config.get('metric_func', None)
 
         order = (p, d, q)
         if not self.seasonal:
@@ -77,8 +77,16 @@ class ARIMAModel(BaseModel):
             self.model_init = True
 
         self.model.fit(data)
-        val_metric = self.evaluate(x=None, target=validation_data, metrics=[self.metric])[0].item()
-        return {self.metric: val_metric}
+        if self.metric_func:
+            val_metric = self.evaluate(x=None, target=validation_data,
+                                       metrics=[self.metric_func])[0].item()
+        else:
+            val_metric = self.evaluate(x=None, target=validation_data,
+                                       metrics=[self.metric])[0].item()
+        if self.metric_func:
+            return {self.metric_func.__name__: val_metric}
+        else:
+            return {self.metric: val_metric}
 
     def predict(self, x=None, horizon=24, update=False, rolling=False):
         """
@@ -90,12 +98,16 @@ class ARIMAModel(BaseModel):
         :param rolling: whether to use rolling prediction
         :return: predicted result of length horizon
         """
+        from bigdl.nano.utils.log4Error import invalidInputError
         if x is not None:
-            raise ValueError("x should be None")
+            invalidInputError(False, "x should be None")
         if update and not rolling:
-            raise Exception("We don't support updating model without rolling prediction currently")
+            invalidInputError(False,
+                              "We don't support updating model without"
+                              " rolling prediction currently")
         if self.model is None:
-            raise Exception("Needs to call fit_eval or restore first before calling predict")
+            invalidInputError(False,
+                              "Needs to call fit_eval or restore first before calling predict")
 
         if not update and not rolling:
             forecasts = self.model.predict(n_periods=horizon)
@@ -125,24 +137,32 @@ class ARIMAModel(BaseModel):
         :param target: target for evaluation.
         :param x: ARIMA predicts the horizon steps foreward from the training data.
             So x should be None as it is not used.
-        :param metrics: a list of metrics in string format
+        :param metrics: a list of metrics in string format or callable function with format
+               it signature should be func(y_true, y_pred), where y_true and y_pred are numpy
+               ndarray. The function should return a float value as evaluation result.
         :param rolling: whether to use rolling prediction
         :return: a list of metric evaluation results
         """
+        from bigdl.nano.utils.log4Error import invalidInputError
         if x is not None:
-            raise ValueError("We don't support input x currently")
+            invalidInputError(False,
+                              "We don't support input x currently")
         if target is None:
-            raise ValueError("Input invalid target of None")
+            invalidInputError(False,
+                              "Input invalid target of None")
         if self.model is None:
-            raise Exception("Needs to call fit_eval or restore first before calling evaluate")
+            invalidInputError(False,
+                              "Needs to call fit_eval or restore first before calling evaluate")
 
         forecasts = self.predict(horizon=len(target), rolling=rolling)
 
-        return [Evaluator.evaluate(m, target, forecasts) for m in metrics]
+        return Evaluator.evaluate(metrics, target, forecasts, aggregate="mean")
 
     def save(self, checkpoint_file):
+        from bigdl.nano.utils.log4Error import invalidInputError
         if self.model is None:
-            raise Exception("Needs to call fit_eval or restore first before calling save")
+            invalidInputError(False,
+                              "Needs to call fit_eval or restore first before calling save")
         with open(checkpoint_file, 'wb') as fout:
             pickle.dump(self.model, fout)
 
@@ -152,7 +172,7 @@ class ARIMAModel(BaseModel):
         self.model_init = True
 
 
-class ARIMABuilder(ModelBuilder):
+class ARIMABuilder:
 
     def __init__(self, **arima_config):
         """

@@ -29,7 +29,7 @@ import com.intel.analytics.bigdl.dllib.optim
 import com.intel.analytics.bigdl.dllib._
 import com.intel.analytics.bigdl.dllib.nn.Graph._
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
-import com.intel.analytics.bigdl.dllib.nn.keras.{KerasLayer, KerasLayerSerializable}
+import com.intel.analytics.bigdl.dllib.nn.internal.{KerasLayer, KerasLayerSerializable}
 import com.intel.analytics.bigdl.dllib.nn.mkldnn.MklDnnModule
 import com.intel.analytics.bigdl.dllib.nn.{Container, Graph, Module, StaticGraph, Sequential => TSequential}
 import com.intel.analytics.bigdl.dllib.optim.DistriOptimizer.{Cache, CacheV1}
@@ -43,9 +43,8 @@ import com.intel.analytics.bigdl.dllib.utils._
 import com.intel.analytics.bigdl.dllib.utils.serializer.{DeserializeContext, ModuleData, ModuleSerializer, SerializeContext}
 import com.intel.analytics.bigdl.dllib.visualization.{TrainSummary, ValidationSummary}
 import com.intel.analytics.bigdl.dllib.optim.ZooTrigger
-import com.intel.analytics.bigdl.dllib.feature.{DiskFeatureSet, DistributedFeatureSet, FeatureSet}
-import com.intel.analytics.bigdl.dllib.feature.image.ImageSet
-import com.intel.analytics.bigdl.dllib.feature.dataset
+import com.intel.analytics.bigdl.dllib.feature._
+import com.intel.analytics.bigdl.dllib.feature.image._
 import com.intel.analytics.bigdl.dllib.feature.text._
 import com.intel.analytics.bigdl.dllib.keras.{Net, Predictable}
 import com.intel.analytics.bigdl.dllib.keras.autograd.{Lambda, Variable}
@@ -54,16 +53,20 @@ import com.intel.analytics.bigdl.dllib.keras.layers.Input
 import com.intel.analytics.bigdl.dllib.keras.layers.utils._
 import com.intel.analytics.bigdl.dllib.keras.Model
 import com.intel.analytics.bigdl.dllib.net.NetUtils
-// import com.intel.analytics.bigdl.dllib.Net.TorchModel
-import com.intel.analytics.bigdl.dllib.estimator.{AbstractEstimator, ConstantClipping, GradientClipping, L2NormClipping}
-// import com.intel.analytics.zoo.tfpark.{TFTrainingHelper, TFTrainingHelperV2}
-import org.apache.commons.lang.exception.ExceptionUtils
+import com.intel.analytics.bigdl.dllib.estimator.{AbstractEstimator}
+import com.intel.analytics.bigdl.dllib.feature.common._
+import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.ImageFeature
+import com.intel.analytics.bigdl.dllib.nnframes.NNImageSchema
 import org.apache.commons.lang3.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
 import org.apache.spark.{SparkContext, TaskContext}
 import org.apache.spark.rdd.{RDD, ZippedPartitionsWithLocalityRDD}
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.ml.VectorCompatibility
+import org.apache.spark.ml.feature.VectorAssembler
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
@@ -71,12 +74,12 @@ import scala.reflect.ClassTag
 import scala.language.implicitConversions
 
 abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: TensorNumeric[T])
-  extends KerasLayer[Activity, Activity, T] with Net with Predictable[T] {
+  extends KerasLayer[Activity, Activity, T] with Net with Predictable[T] with VectorCompatibility {
 
   protected val module: Module[T] = this
 
   def getSubModules(): List[AbstractModule[Activity, Activity, T]] = {
-    require(this.labor.isInstanceOf[Container[Activity, Activity, T]],
+    Log4Error.invalidOperationError(this.labor.isInstanceOf[Container[Activity, Activity, T]],
       s"labor should be a container, but we got: $this")
     this.labor.asInstanceOf[Container[Activity, Activity, T]].modules.toList
   }
@@ -112,8 +115,9 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
           dataset = distriFeatureSet.toDistributed(),
           criterion = this.criterion)
       case _ =>
-        throw new IllegalArgumentException(s"Unsupported DataSet type ${x.getClass.getName}," +
+        Log4Error.unKnowExceptionError(false, s"Unsupported DataSet type ${x.getClass.getName}," +
           s" excepted LocalDataSet, DistributedDataSet and DistributedFeatureSet.")
+        null
     }
 
     if (this.checkpointPath != null) {
@@ -312,7 +316,9 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    */
   private def toDataSet(x: RDD[Sample[T]], batchSize: Int,
     featurePaddingParam: PaddingParam[T] = null,
-    labelPaddingParam: PaddingParam[T] = null): DataSet[MiniBatch[T]] = {
+    labelPaddingParam: PaddingParam[T] = null,
+    shuffleData: Boolean = true,
+    groupSize: Int = 1): DataSet[MiniBatch[T]] = {
     val _featurePaddingParam = if (featurePaddingParam != null) {
       Some(featurePaddingParam)
     } else None
@@ -320,8 +326,8 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
       Some(labelPaddingParam)
     } else None
 
-    if (x != null) DataSet.rdd(x) -> SampleToMiniBatch[T](batchSize, _featurePaddingParam,
-      _labelPaddingParam)
+    if (x != null) DataSet.rdd(x, shuffleData = shuffleData, groupSize = groupSize) ->
+      SampleToMiniBatch[T](batchSize, _featurePaddingParam, _labelPaddingParam)
     else null
   }
 
@@ -354,11 +360,12 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
       x: DataSet[MiniBatch[T]],
       nbEpoch: Int,
       validationData: DataSet[MiniBatch[T]])(implicit ev: TensorNumeric[T]): Unit = {
-    require(this.optimMethod != null && this.criterion != null,
+    Log4Error.invalidInputError(this.optimMethod != null && this.criterion != null,
       "compile must be called before fit")
     this.internalOptimizer = this.getOrCreateOptimizer(x)
     if (validationData != null) {
-      require(this.vMethods != null, "Validation metrics haven't been set yet")
+      Log4Error.invalidInputError(this.vMethods != null,
+        "Validation metrics haven't been set yet")
       if (this.tensorBoardLogDir != null && this.tensorBoardAppName != null) {
         this.validationSummary = ValidationSummary(tensorBoardLogDir, tensorBoardAppName)
         internalOptimizer.setValidationSummary(this.validationSummary)
@@ -435,10 +442,14 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
       nbEpoch: Int = 10,
       validationData: RDD[Sample[T]] = null,
       featurePaddingParam: PaddingParam[T] = null,
-      labelPaddingParam: PaddingParam[T] = null)(implicit ev: TensorNumeric[T]): Unit = {
+      labelPaddingParam: PaddingParam[T] = null,
+      shuffleData: Boolean = true,
+      groupSize: Int = 1)(implicit ev: TensorNumeric[T]): Unit = {
     KerasUtils.validateBatchSize(batchSize)
-    val trainData = toDataSet(x, batchSize, featurePaddingParam, labelPaddingParam)
-    val valData = toDataSet(validationData, batchSize, featurePaddingParam, labelPaddingParam)
+    val trainData = toDataSet(x, batchSize, featurePaddingParam, labelPaddingParam,
+      shuffleData, groupSize)
+    val valData = toDataSet(validationData, batchSize, featurePaddingParam, labelPaddingParam,
+      shuffleData, groupSize)
     this.fit(trainData, nbEpoch, valData)
 
     releaseDataSets(Array(trainData, valData))
@@ -470,6 +481,134 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
       batchSize: Int,
       nbEpoch: Int)(implicit ev: TensorNumeric[T]): Unit = {
     this.fit(x, batchSize, nbEpoch, null)
+  }
+
+  private def getDataSet(
+      dataFrame: DataFrame,
+      batchSize: Int,
+      featureCols: Array[String],
+      labelCols: Array[String]): FeatureSet[MiniBatch[T]] = {
+    val featureColIndexs = featureCols.map {f => dataFrame.schema.fieldIndex(f)}
+    val labelColIndexs = labelCols.map {f => dataFrame.schema.fieldIndex(f)}
+    var featureSizes: Array[Array[Int]] = null
+    var labelSizes: Array[Array[Int]] = null
+
+    val featureFunc = if (featureCols.length == 1) {
+      val featureType = dataFrame.schema(featureCols.head).dataType
+      unwrapVectorAsNecessary(featureType)
+    } else {
+      val row = dataFrame.take(1).head
+      featureSizes = featureCols.map {f =>
+        val colType = dataFrame.schema(f).dataType
+        if (colType.typeName.contains("vector")) {
+          val idx = dataFrame.schema.fieldIndex(f)
+          val seq = getVectorSeq(row, colType, idx)
+          Array(seq.size)
+        } else {
+          Array(1)
+        }
+      }
+
+      val colTypes = dataFrame.schema.fields.map(f => f.dataType)
+      extractFeaturesFromRow(colTypes)
+    }
+
+    val labelFunc: (Row) => Option[Any] = if (labelCols.length == 1) {
+      val lci = dataFrame.schema.fieldIndex(labelCols.head)
+      val labelFunc = unwrapVectorAsNecessary(dataFrame.schema(labelCols.head).dataType)
+      (row: Row) => Some(labelFunc(row, Array(lci)))
+    } else {
+      labelSizes = labelCols.map {f => Array(1)}
+
+      val colTypes = dataFrame.schema.fields.map(f => f.dataType)
+      val labelFunc = extractFeaturesFromRow(colTypes)
+      (row: Row) => Some(labelFunc(row, labelColIndexs))
+    }
+
+    val featureAndLabel = dataFrame.rdd.map { row =>
+      val features = featureFunc(row, featureColIndexs)
+      val labels = labelFunc(row)
+      (features, labels)
+    }
+
+    val featurePreprocessing = if (featureCols.size == 1) {
+      SeqToTensor()
+    } else {
+      SeqToMultipleTensors(featureSizes)
+    }
+
+    val preprocessing = if (labelCols.size == 1) {
+      FeatureLabelPreprocessing(featurePreprocessing, ScalarToTensor())
+        .asInstanceOf[Preprocessing[(Any, Option[Any]), Sample[T]]]
+    } else {
+      FeatureLabelsPreprocessing(featurePreprocessing, SeqToMultipleTensors(labelSizes))
+        .asInstanceOf[Preprocessing[(Any, Option[Any]), Sample[T]]]
+    }
+
+    val initialDataSet = FeatureSet.rdd(featureAndLabel).transform(preprocessing)
+
+    initialDataSet.transform(SampleToMiniBatch[T](batchSize))
+  }
+
+  def fit(
+      x: DataFrame,
+      batchSize: Int,
+      nbEpoch: Int,
+      featureCols: Array[String],
+      labelCols: Array[String],
+      valX: DataFrame)(implicit ev: TensorNumeric[T]): Unit = {
+    val trainingData = getDataSet(x, batchSize, featureCols, labelCols).toDataSet()
+    val valData = if (valX != null) {
+      getDataSet(valX, batchSize, featureCols, labelCols).toDataSet()
+    } else null
+
+    this.fit(trainingData, nbEpoch, valData)
+  }
+
+  def fit(
+      x: DataFrame,
+      batchSize: Int,
+      nbEpoch: Int,
+      featureCols: Array[String],
+      labelCols: Array[String])(implicit ev: TensorNumeric[T]): Unit = {
+    this.fit(x, batchSize, nbEpoch, featureCols, labelCols, null)
+  }
+
+  def fit(
+   x: DataFrame,
+   batchSize: Int,
+   nbEpoch: Int,
+   labelCols: Array[String],
+   transform: ImageProcessing,
+   valX: DataFrame)(implicit ev: TensorNumeric[T]): Unit = {
+    val trainData = df2ImageSet(x, labelCols, transform)
+    val targetKeys = if (labelCols.length > 1) {
+      (0 until labelCols.size).toList.map("l" + _).toArray
+    } else {
+      Array(ImageFeature.label)
+    }
+
+    val transformer2 = ImageMatToTensor[Float]() ->
+      ImageSetToSample[Float](targetKeys = targetKeys)
+
+    trainData.transform(transformer2)
+
+    val valData = if (valX != null) {
+      val valSet = df2ImageSet(valX, labelCols, transform)
+      valSet.transform(transformer2)
+      valSet
+    } else null
+
+    this.fit(trainData, batchSize, nbEpoch, valData)
+  }
+
+  def fit(
+     x: DataFrame,
+     batchSize: Int,
+     nbEpoch: Int,
+     labelCols: Array[String],
+     transform: ImageProcessing)(implicit ev: TensorNumeric[T]): Unit = {
+    this.fit(x, batchSize, nbEpoch, labelCols, transform, null)
   }
 
   /**
@@ -511,7 +650,8 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
       x: RDD[Sample[T]],
       batchSize: Int)
       (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
-    require(this.vMethods != null, "Evaluation metrics haven't been set yet")
+    Log4Error.invalidInputError(this.vMethods != null,
+      "Evaluation metrics haven't been set yet")
     this.evaluate(x, this.vMethods, Some(batchSize))
   }
 
@@ -522,7 +662,8 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    */
   def evaluate(x: LocalDataSet[MiniBatch[T]])
       (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
-    require(this.vMethods != null, "Evaluation metrics haven't been set yet")
+    Log4Error.invalidInputError(this.vMethods != null,
+      "Evaluation metrics haven't been set yet")
     this.evaluate(x, this.vMethods)
   }
 
@@ -536,8 +677,28 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
       x: ImageSet,
       batchSize: Int)
       (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
-    require(this.vMethods != null, "Evaluation metrics haven't been set yet")
+    Log4Error.invalidInputError(this.vMethods != null,
+      "Evaluation metrics haven't been set yet")
     evaluateImage(x.toImageFrame(), this.vMethods, Some(batchSize))
+  }
+
+  def evaluate(
+    x: DataFrame,
+    labelCols: Array[String],
+    transform: ImageProcessing,
+    batchSize: Int)
+  (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
+    val rdd = df2ImageSet(x, labelCols, transform)
+    val targetKeys = if (labelCols.length > 1) {
+      (0 until labelCols.size).toList.map("l" + _).toArray
+    } else {
+      Array(ImageFeature.label)
+    }
+
+    val transformer2 = ImageMatToTensor[Float]() ->
+      ImageSetToSample[Float](targetKeys = targetKeys)
+    rdd.transform(transformer2)
+    this.evaluate(rdd, batchSize)
   }
 
   /**
@@ -549,7 +710,9 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
   def evaluate(
       x: TextSet,
       batchSize: Int): Array[(ValidationResult, ValidationMethod[T])] = {
-    require(this.vMethods != null, "Evaluation metrics haven't been set yet")
+    Log4Error.invalidInputError(this.vMethods != null,
+
+      "Evaluation metrics haven't been set yet")
     x match {
       case distributed: DistributedTextSet =>
         val rdd = distributed.rdd.map(_.getSample).filter(_ != null)
@@ -560,7 +723,19 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
     }
   }
 
-  def toModel(): Model[T]
+  def evaluate(
+     x: DataFrame,
+     batchSize: Int,
+     featureCols: Array[String],
+     labelCols: Array[String]): Array[(ValidationResult, ValidationMethod[T])] = {
+    Log4Error.invalidInputError(this.vMethods != null,
+      "Evaluation metrics haven't been set yet")
+    val valX = getDataSet(x, batchSize, featureCols, labelCols).toDataSet()
+    val xRDD = valX.toDistributed().data(false)
+    evaluate(xRDD, this.vMethods)
+  }
+
+  def toModel(): keras.Model[T]
 
 // uncomment when migrating TFNet
 //  /**
@@ -610,7 +785,8 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    */
   def summary(
       lineLength: Int = 120,
-      positions: Array[Double] = Array(.33, .55, .67, 1)): Unit
+      positions: Array[Double] = Array(.33, .55, .67, 1),
+      needPrint: Boolean = true): String
 }
 
 object InternalOptimizer {
@@ -833,7 +1009,8 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
     logger.info(s"${model} isTorch is ${model.isPyTorch()}")
     val torchOptimize = model.isPyTorch()
     val modelPerExecutor = if (torchOptimize) {
-      require(EngineRef.getEngineType() != MklDnn, "torch model shouldn't use MKLDNN engine.")
+      Log4Error.invalidInputError(EngineRef.getEngineType() != MklDnn,
+        "torch model shouldn't use MKLDNN engine.")
       val numOmpThread = distDataset.originRDD().sparkContext
         .getConf.get("spark.executorEnv.OMP_NUM_THREADS").toInt
       logger.info(s"torch model will use ${numOmpThread} OMP threads.")
@@ -855,7 +1032,8 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
       parameterSplits = if (optimMethods.size != 1) {
         val p = optimMethods.map { case (subModuleName, optimMethod) =>
           val subModule = trainingModel(subModuleName)
-          require(subModule.isDefined, s"Optimizer couldn't find $subModuleName in $model")
+          Log4Error.invalidOperationError(subModule.isDefined,
+            s"Optimizer couldn't find $subModuleName in $model")
           val subModuleWeights = InternalOptimizerUtil
             .getParametersFromModel(subModule.get)._1
           (subModuleName, subModuleWeights)
@@ -863,7 +1041,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
         val sortedWeights = p.values.toArray.sortWith(
           (a, b) => a.storageOffset() < b.storageOffset())
         val compactWeights = Module.isCompact(sortedWeights)
-        require(modelParameters._1 == compactWeights,
+        Log4Error.invalidOperationError(modelParameters._1 == compactWeights,
           s"InternDistriOptimizer: All subModules should have an OptimMethod.")
         p.map { case (subModuleName, weights) =>
           (subModuleName, (weights.storageOffset(), weights.nElement()))
@@ -871,8 +1049,9 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
       } else if (optimMethods.contains(trainingModel.getName())) {
         Map(trainingModel.getName() -> (1, modelParameters._1.nElement()))
       } else {
-        throw new IllegalArgumentException(s"${trainingModel.getName()} doesn't " +
+        Log4Error.unKnowExceptionError(false, s"${trainingModel.getName()} doesn't " +
           s"have corresponding OptimMethod")
+        null
       }
 
       // TODO: Enable LarsSGD
@@ -930,9 +1109,9 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
         retryNum = Int.MaxValue
       } catch {
         case e: IllegalArgumentException =>
-          throw e
+          Log4Error.invalidOperationError(false, e.getMessage, cause = e)
         case t: Throwable =>
-          DistriOptimizer.logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+//          DistriOptimizer.logger.error("Error: " + ExceptionUtils.getStackTrace(t))
           if (checkpointPath.isDefined) {
             /* To avoid retry number is used up by first few exceptions, we count time here.
              * If exception exceeds maxRetry times in maxRetry*retryTimeInterval seconds,
@@ -941,7 +1120,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
             if (System.nanoTime() - lastFailureTimestamp < maxRetry * retryTimeInterval * 1e9) {
               retryNum += 1
               if (retryNum == maxRetry) {
-                throw t
+                Log4Error.invalidOperationError(false, t.getMessage, cause = t)
               }
             } else {
               retryNum = 1
@@ -954,7 +1133,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
             cachedModels.unpersist()
             val newModel = if (modelFile != null) {
               DistriOptimizer.logger.info("Model recover from last snapshot")
-              Module.load[T](modelFile)
+              Module.loadModule[T](modelFile)
             } else {
               DistriOptimizer.logger.info("Model recover from origin model")
               trainingModel
@@ -979,7 +1158,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
             cachedModels = modelsAndBroadcast._1
             modelBroadcast = modelsAndBroadcast._2
           } else {
-            throw t
+            Log4Error.invalidOperationError(false, t.getMessage, cause = t)
           }
       }
     }
@@ -1004,7 +1183,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
 
 
   def setNumOfSlice(numOfSlice: Int): this.type = {
-    require(numOfSlice >= 0, s"excepted numOfSlice >= 0," +
+    Log4Error.invalidInputError(numOfSlice >= 0, s"excepted numOfSlice >= 0," +
       s" but got $numOfSlice")
     this.numSlice = numOfSlice
     this
@@ -1036,7 +1215,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
   }
 
   def getTrainSummary(tag: String): Array[(Long, Float, Double)] = {
-    if (this.trainSummary isDefined) {
+    if (this.trainSummary.isDefined) {
       this.trainSummary.get.readScalar(tag)
     } else {
       null
@@ -1044,7 +1223,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
   }
 
   def getValidationSummary(tag: String): Array[(Long, Float, Double)] = {
-    if (this.validationSummary isDefined) {
+    if (this.validationSummary.isDefined) {
       this.validationSummary.get.readScalar(tag)
     } else {
       null
@@ -1088,7 +1267,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
             validationTrigger.get.asInstanceOf[ZooTrigger].setZooState(state)
           }
         } else {
-          throw new IllegalArgumentException(
+          Log4Error.invalidInputError(false,
             s"Excepted com.intel.analytics.bigdl.dllib.common.ZooTrigger." +
             s" Please change your trigger to an instance of ZooTrigger.")
         }
@@ -1140,7 +1319,11 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
         coresPerNode
       }
       case MklDnn => 1
-      case _ => throw new IllegalArgumentException
+      case _ =>
+        Log4Error.invalidInputError(false,
+          s"got unsupported engine type ${EngineRef.getEngineType()}",
+        "only expect MklBlas, MklDnn")
+        1
     }
 
     val models = if (null != cachedModels) {
@@ -1225,7 +1408,7 @@ private[bigdl] class InternalDistriOptimizerV2[T: ClassTag] (
 
 
   def setNumOfSlice(numOfSlice: Int): this.type = {
-    require(numOfSlice >= 0, s"excepted numOfSlice >= 0," +
+    Log4Error.invalidInputError(numOfSlice >= 0, s"excepted numOfSlice >= 0," +
       s" but got $numOfSlice")
     this.numSlice = numOfSlice
     this
@@ -1291,7 +1474,7 @@ private[bigdl] class InternalDistriOptimizerV2[T: ClassTag] (
         if (checkPointTrigger.get.isInstanceOf[ZooTrigger]) {
           checkPointTrigger.get.asInstanceOf[ZooTrigger].setZooState(state)
         } else {
-          throw new IllegalArgumentException(
+          Log4Error.invalidInputError(false,
             s"Excepted com.intel.analytics.bigdl.dllib.common.ZooTrigger." +
             s" Please change your trigger to an instance of ZooTrigger.")
         }
@@ -1356,7 +1539,7 @@ private[bigdl] class InternalDistriOptimizerV2[T: ClassTag] (
 }
 
 object InternalDistriOptimizer {
-  val logger = Logger.getLogger(this.getClass)
+  val logger = LogManager.getLogger(this.getClass)
 
   protected def validate[T](validationFeatureSet: FeatureSet[MiniBatch[T]],
                             validationMethods: Array[ValidationMethod[T]],
@@ -1380,7 +1563,7 @@ object InternalDistriOptimizer {
           val stackSize = batch.size() / _subModelNumber
           val extraSize = batch.size() % _subModelNumber
           val parallelism = if (stackSize == 0) extraSize else _subModelNumber
-          (0 until parallelism).toParArray.map { b =>
+          collection.parallel.immutable.ParVector.range(0, parallelism).map { b =>
             val offset = b * stackSize + math.min(b, extraSize) + 1
             val length = stackSize + (if (b < extraSize) 1 else 0)
             val miniBatch = batch.slice(offset, length)
@@ -1496,7 +1679,8 @@ object InternalDistriOptimizer {
       }).reduce((a, b) => (a._1 ++ b._1, a._2 ++ b._2))
 
       val taskSize = parameters.size / partitionNum
-      require(taskSize != 0, "parameter length should not less than partition number")
+      Log4Error.invalidOperationError(taskSize != 0,
+        "parameter length should not less than partition number")
       val extraSize = parameters.size % partitionNum
 
       (0 until partitionNum).map(pid => {
@@ -1513,7 +1697,7 @@ object InternalDistriOptimizer {
 }
 
 object InternalDistriOptimizerV2 {
-  val logger = Logger.getLogger(this.getClass)
+  val logger = LogManager.getLogger(this.getClass)
 
   protected def validate[T](validationFeatureSet: FeatureSet[MiniBatch[T]],
                             validationMethods: Array[ValidationMethod[T]],
@@ -1537,7 +1721,7 @@ object InternalDistriOptimizerV2 {
           val stackSize = batch.size() / _subModelNumber
           val extraSize = batch.size() % _subModelNumber
           val parallelism = if (stackSize == 0) extraSize else _subModelNumber
-          (0 until parallelism).toParArray.map { b =>
+          collection.parallel.immutable.ParVector.range(0, parallelism).map { b =>
             val offset = b * stackSize + math.min(b, extraSize) + 1
             val length = stackSize + (if (b < extraSize) 1 else 0)
             val miniBatch = batch.slice(offset, length)
@@ -1583,5 +1767,112 @@ object InternalDistriOptimizerV2 {
       iter
     }.count()
     models.unpersist()
+  }
+}
+
+object Models {
+  def loadModel[T: ClassTag](path: String)(implicit ev: TensorNumeric[T]): KerasNet[T] = {
+    val model = Net.load[T](path)
+    return model
+  }
+}
+
+object Model {
+  /**
+   * Build a multiple-input, multiple-output graph container.
+   * @param input Array of input nodes.
+   * @param output Array of output nodes.
+   * @return A graph container.
+   */
+  def apply[T: ClassTag](
+    input : Array[ModuleNode[T]],
+    output : Array[ModuleNode[T]])(implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+    keras.Model[T](input, output)
+  }
+
+  /**
+   * Build a single-input, multiple-output graph container
+   * @param input The input node.
+   * @param output Array of output nodes.
+   * @return A graph container.
+   */
+  def apply[T: ClassTag](input : ModuleNode[T], output : Array[ModuleNode[T]])
+    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+    keras.Model[T](Array(input), output)
+  }
+
+  /**
+   * Build a multiple-input, single-output graph container.
+   * @param input Array of input nodes.
+   * @param output The output node.
+   * @return A graph container.
+   */
+  def apply[T: ClassTag](input : Array[ModuleNode[T]], output : ModuleNode[T])
+    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+    keras.Model[T](input, Array(output))
+  }
+
+  /**
+   * Build a single-input, single-output graph container
+   * @param input The input node.
+   * @param output The output node.
+   * @return A graph container.
+   */
+  def apply[T: ClassTag](input : ModuleNode[T], output : ModuleNode[T])
+    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+    keras.Model[T](Array(input), Array(output))
+  }
+
+  /* ------------------------ factory methods for variables--------------------- */
+  /**
+   * Build a multiple-input, multiple-output graph container.
+   * @param input Array of input variables.
+   * @param output Array of output variables.
+   * @return A graph container.
+   */
+  def apply[T: ClassTag](
+    input : Array[Variable[T]],
+    output : Array[Variable[T]])(implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+    keras.Model[T](input.map(_.node), output.map(_.node))
+  }
+
+  /**
+   * Build a single-input, multiple-output graph container
+   * @param input The input variable.
+   * @param output Array of output variables.
+   * @return A graph container.
+   */
+  def apply[T: ClassTag](input : Variable[T], output : Array[Variable[T]])
+    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+    keras.Model[T](Array(input.node), output.map(_.node))
+  }
+
+  /**
+   * Build a multiple-input, single-output graph container.
+   * @param input Array of input variables.
+   * @param output The output variables.
+   * @return A graph container.
+   */
+  def apply[T: ClassTag](input : Array[Variable[T]], output : Variable[T])
+    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+    keras.Model[T](input.map(_.node), Array(output.node))
+  }
+
+  /**
+   * Build a single-input, single-output graph container
+   * @param input The input variable.
+   * @param output The output variable.
+   * @return A graph container.
+   */
+  def apply[T: ClassTag](input : Variable[T], output : Variable[T])
+    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+    keras.Model[T](Array(input.node), Array(output.node))
+  }
+}
+
+object Sequential {
+  def apply[@specialized(Float, Double) T: ClassTag]()
+    (implicit ev: TensorNumeric[T]) : keras.Sequential[T] = {
+    keras.Sequential[T]()
   }
 }

@@ -17,6 +17,7 @@ package com.intel.analytics.bigdl.dllib.feature.common
 
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 import scala.reflect.ClassTag
 
@@ -32,8 +33,10 @@ class SeqToMultipleTensors[T: ClassTag](multiSizes: Array[Array[Int]])
     prev.map { f =>
       val tensors = f match {
         case sd: Seq[Any] => matchSeq(sd)
-        case _ => throw new IllegalArgumentException("SeqToTensor only supports Float, Double, " +
-          s"Array[Float], Array[Double] or MLlib Vector but got $f")
+        case _ =>
+          Log4Error.invalidInputError(false, "SeqToTensor only supports Float, Double, " +
+            s"Array[Float], Array[Double] or MLlib Vector but got $f")
+          null
       }
       tensors
     }
@@ -44,12 +47,14 @@ class SeqToMultipleTensors[T: ClassTag](multiSizes: Array[Array[Int]])
       case dd: Double => list.asInstanceOf[Seq[Double]].map(ev.fromType(_)).toArray
       case ff: Float => list.asInstanceOf[Seq[Float]].map(ev.fromType(_)).toArray
       case ii: Int => list.asInstanceOf[Seq[Int]].map(ev.fromType(_)).toArray
-      case _ => throw new IllegalArgumentException(s"SeqToTensor only supports Array[Int], " +
-        s"Array[Float] and Array[Double] for ArrayType, but got $list")
+      case _ =>
+        Log4Error.invalidInputError(false, s"SeqToTensor only supports Array[Int], " +
+          s"Array[Float] and Array[Double] for ArrayType, but got $list")
+        null
     }
 
-    require(multiSizes.map(s => s.product).sum == rawData.length, s"feature columns length " +
-      s"${rawData.length} does not match with the sum of tensors" +
+    Log4Error.unKnowExceptionError(multiSizes.map(s => s.product).sum == rawData.length,
+      s"feature columns length ${rawData.length} does not match with the sum of tensors" +
       s" ${multiSizes.map(a => a.mkString(",")).mkString("\n")}")
 
     var cur = 0

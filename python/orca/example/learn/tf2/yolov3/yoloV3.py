@@ -50,15 +50,14 @@ from tensorflow.keras.layers import Add, Concatenate, Conv2D, Input, Lambda, \
     LeakyReLU, MaxPool2D, UpSampling2D, ZeroPadding2D, BatchNormalization
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras.losses import binary_crossentropy, sparse_categorical_crossentropy
+from bigdl.dllib.utils.log4Error import invalidInputError
 from bigdl.orca.data.image.parquet_dataset import read_parquet, write_parquet
 from bigdl.orca.learn.tf2 import Estimator
 from bigdl.orca import init_orca_context, stop_orca_context
 import numpy as np
-import ray
 import tempfile
 import os
 import argparse
-import sys
 
 DEFAULT_IMAGE_SIZE = 416
 
@@ -89,8 +88,8 @@ def transform_targets_for_output(y_true, grid_size, anchor_idxs):
                 # idx += 1
                 return (True, indexes, updates)
 
-            (mask, indexes, updates) = tf.cond(tf.reduce_any(anchor_eq) and
-                                               not tf.equal(y_true[i][j][2], 0),
+            (mask, indexes, updates) = tf.cond(tf.math.logical_and(tf.reduce_any(anchor_eq),
+                                               tf.math.logical_not(tf.equal(y_true[i][j][2], 0))),
                                                lambda: reduce(y_true, anchor_eq, grid_size),
                                                lambda: (False, tf.zeros(4, tf.int32),
                                                         tf.zeros(6, tf.float32)))
@@ -234,7 +233,7 @@ def load_darknet_weights(model, weights_file, tiny=False):
                 layer.set_weights([conv_weights])
                 batch_norm.set_weights(bn_weights)
 
-    assert len(wf.read()) == 0, 'failed to read all data'
+    invalidInputError(len(wf.read()) == 0, 'failed to read all data')
     wf.close()
 
 
@@ -595,8 +594,8 @@ def main():
                                 "nfsvolumeclaim.options.claimName": "nfsvolumeclaim",
                                 "spark.kubernetes.driver.volumes.persistentVolumeClaim."
                                 "nfsvolumeclaim.mount.path": options.nfs_mount_path})
-    elif options.cluster_mode == "yarn":
-        init_orca_context(cluster_mode="yarn-client", cores=options.cores,
+    elif options.cluster_mode.startswith("yarn"):
+        init_orca_context(cluster_mode=options.cluster_mode, cores=options.cores,
                           num_nodes=options.worker_num, memory=options.memory,
                           init_ray_on_spark=True, enable_numa_binding=options.enable_numa_binding,
                           object_store_memory=options.object_store_memory)
@@ -683,10 +682,8 @@ def main():
     trainer.fit(train_data_creator,
                 epochs=options.epochs,
                 batch_size=options.batch_size,
-                steps_per_epoch=3473 // options.batch_size,
                 callbacks=callbacks,
-                validation_data=val_data_creator,
-                validation_steps=3581 // options.batch_size)
+                validation_data=val_data_creator)
     stop_orca_context()
 
 
@@ -695,4 +692,3 @@ if __name__ == '__main__':
         main()
     except SystemExit:
         pass
-

@@ -30,7 +30,13 @@ from bigdl.orca import init_orca_context, stop_orca_context
 parser = argparse.ArgumentParser()
 parser.add_argument('--cluster_mode', type=str, default="local",
                     help='The mode for the Spark cluster. local, yarn or spark-submit.')
+parser.add_argument('--train_data_size', type=int, default=None,
+                    help='The number of train data samples to use.')
+parser.add_argument('--test_data_size', type=int, default=None,
+                    help='The number of test data samples to use.')
+
 args = parser.parse_args()
+
 cluster_mode = args.cluster_mode
 conf = {"spark.executor.extraJavaOptions": "-Xss512m",
         "spark.driver.extraJavaOptions": "-Xss512m"}
@@ -38,34 +44,33 @@ max_features = 2000
 max_len = 200
 
 if cluster_mode == "local":
-    sc = init_orca_context(cluster_mode="local", cores=8,
-                           memory="100g",
-                           driver_memory="20g",
-                           conf=conf
-                           )
+    sc = init_orca_context(cluster_mode="local", cores=8, memory="100g",
+                           driver_memory="20g", conf=conf)
 elif cluster_mode.startswith("yarn"):
     if cluster_mode == "yarn_client":
         sc = init_orca_context(cluster_mode="yarn-client", num_nodes=8, cores=8,
-                           memory="100g",
-                           driver_memory="20g",
-                           conf=conf
-                            )
+                               memory="100g", driver_memory="20g", conf=conf)
     else:
         sc = init_orca_context(cluster_mode="yarn-cluster", num_nodes=8, cores=8,
-                            memory="100g",
-                            driver_memory="20g",
-                            conf=conf
-                            )
+                               memory="100g", driver_memory="20g", conf=conf)
 elif cluster_mode == "spark-submit":
-    sc = init_orca_context(cluster_mode="spark-submit")                           
+    sc = init_orca_context(cluster_mode="spark-submit")
 else:
-    print("init_orca_context failed. cluster_mode should be one of 'local', 'yarn' and 'spark-submit' but got "
-          + cluster_mode)
+    print("init_orca_context failed. cluster_mode should be one of 'local', "
+          "'yarn' and 'spark-submit' but got " + cluster_mode)
 
 print('Loading data...')
 (x_train, y_train), (x_test, y_test) = imdb.load_data(num_words=max_features)
 print(len(x_train), 'train sequences')
 print(len(x_test), 'test sequences')
+
+if args.train_data_size is not None:
+    x_train = x_train[:args.train_data_size]
+    y_train = y_train[:args.train_data_size]
+
+if args.test_data_size is not None:
+    x_test = x_test[:args.test_data_size]
+    y_test = y_test[:args.test_data_size]
 
 print('Pad sequences (samples x time)')
 x_train = sequence.pad_sequences(x_train, maxlen=max_len)

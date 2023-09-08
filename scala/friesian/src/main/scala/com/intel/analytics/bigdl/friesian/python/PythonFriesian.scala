@@ -32,6 +32,7 @@ import scala.reflect.ClassTag
 import scala.collection.JavaConverters._
 import scala.collection.mutable.WrappedArray
 import scala.math.pow
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 object PythonFriesian {
   def ofFloat(): PythonFriesian[Float] = new PythonFriesian[Float]()
@@ -88,63 +89,6 @@ class PythonFriesian[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
 
     val spark = df.sparkSession
     spark.createDataFrame(dfUpdated, schema)
-  }
-
-  def generateStringIdx(df: DataFrame, columns: JList[String], frequencyLimit: String = null,
-                        orderByFrequency: Boolean = false)
-  : JList[DataFrame] = {
-    var default_limit: Option[Int] = None
-    val freq_map = scala.collection.mutable.Map[String, Int]()
-    if (frequencyLimit != null) {
-      val freq_list = frequencyLimit.split(",")
-      for (fl <- freq_list) {
-        val frequency_pair = fl.split(":")
-        if (frequency_pair.length == 1) {
-          default_limit = Some(frequency_pair(0).toInt)
-        } else if (frequency_pair.length == 2) {
-          freq_map += (frequency_pair(0) -> frequency_pair(1).toInt)
-        }
-      }
-    }
-    val cols = columns.asScala.toList
-    cols.map(col_n => {
-      val df_col = df
-        .select(col_n)
-        .filter(s"${col_n} is not null")
-        .groupBy(col_n)
-        .count()
-      val df_col_ordered = if (orderByFrequency) {
-        df_col.orderBy(col("count").desc)
-      } else df_col
-      val df_col_filtered = if (freq_map.contains(col_n)) {
-        df_col_ordered.filter(s"count >= ${freq_map(col_n)}")
-      } else if (default_limit.isDefined) {
-        df_col_ordered.filter(s"count >= ${default_limit.get}")
-      } else {
-        df_col_ordered
-      }
-
-      df_col_filtered.cache()
-      val count_list: Array[(Int, Int)] = df_col_filtered.rdd.mapPartitions(Utils.getPartitionSize)
-        .collect().sortBy(_._1)  // further guarantee prior partitions are given smaller indices.
-      val base_dict = scala.collection.mutable.Map[Int, Int]()
-      var running_sum = 0
-      for (count_tuple <- count_list) {
-        base_dict += (count_tuple._1 -> running_sum)
-        running_sum += count_tuple._2
-      }
-      val base_dict_bc = df_col_filtered.rdd.sparkContext.broadcast(base_dict)
-
-      val windowSpec = Window.partitionBy("part_id").orderBy(col("count").desc)
-      val df_with_part_id = df_col_filtered.withColumn("part_id", spark_partition_id())
-      val df_row_number = df_with_part_id.withColumn("row_number", row_number.over(windowSpec))
-      val get_label = udf((part_id: Int, row_number: Int) => {
-        row_number + base_dict_bc.value.getOrElse(part_id, 0)
-      })
-      df_row_number
-        .withColumn("id", get_label(col("part_id"), col("row_number")))
-        .drop("part_id", "row_number", "count")
-    }).asJava
   }
 
   def compute(df: DataFrame): Unit = {
@@ -235,7 +179,7 @@ class PythonFriesian[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
                  timeCol: String,
                  minLength: Int,
                  maxLength: Int,
-                 nunSeqs: Int = Int.MaxValue): DataFrame = {
+                 numSeqs: Int = Int.MaxValue): DataFrame = {
 
     df.sparkSession.conf.set("spark.sql.legacy.allowUntypedScalaUDF", "true")
     val colNames: Array[String] = cols.asScala.toArray
@@ -265,7 +209,7 @@ class PythonFriesian[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
       }
 
 
-      val result: Seq[Row] = couples.takeRight(nunSeqs).map(x => {
+      val result: Seq[Row] = couples.takeRight(numSeqs).map(x => {
         val rowValue: Array[Any] = colsWithType.flatMap(col => {
           if (colNames.contains(col.name)) {
             col.dataType.typeName match {
@@ -298,7 +242,7 @@ class PythonFriesian[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
   def addValueFeatures(df: DataFrame, cols: JList[String], dictDF: DataFrame,
                        key: String, value: String): DataFrame = {
 
-    val mapScala = dictDF.rdd.map(r => (r.getInt(0), r.getInt(1))).collect().toMap
+    val mapScala = dictDF.na.drop().rdd.map(r => (r.getInt(0), r.getInt(1))).collect().toMap
     val sc = df.sparkSession.sparkContext
     val mapBr: Broadcast[Map[Int, Int]] = sc.broadcast(mapScala)
 
@@ -331,9 +275,9 @@ class PythonFriesian[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
 
     df.sparkSession.conf.set("spark.sql.legacy.allowUntypedScalaUDF", "true")
     val itemType = df.select(explode(col(historyCol))).schema.fields(0).dataType
-    require(itemType.typeName == "integer", throw new IllegalArgumentException(
+    Log4Error.invalidOperationError(itemType.typeName == "integer",
       s"Unsupported data type ${itemType.typeName} " +
-        s"of column ${historyCol} in add_neg_hist_seq"))
+        s"of column ${historyCol} in add_neg_hist_seq")
     val schema = ArrayType(ArrayType(itemType))
 
     val negativeUdf = udf(Utils.addNegativeList(negNum, itemSize), schema)
@@ -349,9 +293,9 @@ class PythonFriesian[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
 
     df.sparkSession.conf.set("spark.sql.legacy.allowUntypedScalaUDF", "true")
     val itemType = df.select(itemCol).schema.fields(0).dataType
-    require(itemType.typeName == "integer", throw new IllegalArgumentException(
+    Log4Error.invalidOperationError(itemType.typeName == "integer",
       s"Unsupported data type ${itemType.typeName} " +
-        s"of column ${itemCol} in add_negative_samples"))
+        s"of column ${itemCol} in add_negative_samples")
     val schema = ArrayType(StructType(Seq(StructField(itemCol, itemType),
       StructField(labelCol, itemType))))
 
@@ -365,7 +309,8 @@ class PythonFriesian[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
     negativedf.select(selectColumns: _*)
   }
 
-  def postPad(df: DataFrame, cols: JList[String], maxLength: Int = 100): DataFrame = {
+  def postPad(df: DataFrame, cols: JList[String], maxLength: Int = 100,
+              maskToken: Any = 0): DataFrame = {
 
     val colFields = df.schema.fields.filter(x => cols.contains(x.name))
 
@@ -377,13 +322,15 @@ class PythonFriesian[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
         case ArrayType(IntegerType, _) => udf(Utils.padArr[Int])
         case ArrayType(LongType, _) => udf(Utils.padArr[Long])
         case ArrayType(DoubleType, _) => udf(Utils.padArr[Double])
+        case ArrayType(StringType, _) => udf(Utils.padArr[String])
         case ArrayType(ArrayType(IntegerType, _), _) => udf(Utils.padMatrix[Int])
         case ArrayType(ArrayType(LongType, _), _) => udf(Utils.padMatrix[Long])
         case ArrayType(ArrayType(DoubleType, _), _) => udf(Utils.padMatrix[Double])
+        case ArrayType(ArrayType(StringType, _), _) => udf(Utils.padMatrix[String])
         case _ => throw new IllegalArgumentException(
           s"Unsupported data type $dataType of column $c in pad")
       }
-      paddedDF = paddedDF.withColumn(c.name, padUdf(lit(maxLength), col(c.name)))
+      paddedDF = paddedDF.withColumn(c.name, padUdf(lit(maxLength), lit(maskToken), col(c.name)))
     })
 
     paddedDF

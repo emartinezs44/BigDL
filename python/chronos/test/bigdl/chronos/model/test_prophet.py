@@ -16,16 +16,18 @@
 
 import pytest
 
-from bigdl.orca.test_zoo_utils import ZooTestCase
-from bigdl.chronos.model.prophet import ProphetModel
+from unittest import TestCase
+from .. import op_diff_set_all
 import numpy as np
 import os
 from numpy.testing import assert_array_almost_equal
 import pandas as pd
+from bigdl.chronos.utils import LazyImport
+ProphetModel = LazyImport('bigdl.chronos.model.prophet.ProphetModel')
 
 
-class TestProphetModel(ZooTestCase):
-
+@op_diff_set_all
+class TestProphetModel(TestCase):
     def setup_method(self, method):
         self.seq_len = 480
         self.config = {
@@ -64,21 +66,21 @@ class TestProphetModel(ZooTestCase):
 
     def test_error(self):
 
-        with pytest.raises(ValueError, match="We don't support input data currently"):
+        with pytest.raises(RuntimeError, match="We don't support input data currently"):
             self.model.evaluate(target=self.validation_data, data=1)
 
-        with pytest.raises(ValueError, match="Input invalid target of None"):
+        with pytest.raises(RuntimeError, match="Input invalid target of None"):
             self.model.evaluate(target=None)
 
-        with pytest.raises(Exception,
+        with pytest.raises(RuntimeError,
                            match="Needs to call fit_eval or restore first before calling predict"):
             self.model.predict()
 
-        with pytest.raises(Exception,
+        with pytest.raises(RuntimeError,
                            match="Needs to call fit_eval or restore first before calling evaluate"):
             self.model.evaluate(target=self.validation_data)
 
-        with pytest.raises(Exception,
+        with pytest.raises(RuntimeError,
                            match="Needs to call fit_eval or restore first before calling save"):
             model_file = "tmp.json"
             self.model.save(model_file)

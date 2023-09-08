@@ -50,7 +50,7 @@ if __name__ == '__main__':
                           cores=opt.cores,
                           init_ray_on_spark=True)
     else:
-        init_orca_context(cluster_mode=opt.cluster_mode,cores=opt.cores, init_ray_on_spark=True)
+        init_orca_context(cluster_mode=opt.cluster_mode, cores=opt.cores, init_ray_on_spark=True)
 
     input_cols = [
         "Year",
@@ -131,7 +131,13 @@ if __name__ == '__main__':
         scheduler = None
         scheduler_params = None
 
-    auto_xgb_clf = AutoXGBClassifier(cpus_per_trial=4, name="auto_xgb_classifier", **config)
+    remote_dir = "hdfs:///tmp/auto_xgb_regressor" if opt.cluster_mode == "yarn" else None
+
+    auto_xgb_clf = AutoXGBClassifier(cpus_per_trial=4,
+                                     name="auto_xgb_classifier",
+                                     remote_dir=remote_dir,
+                                     **config)
+
     import time
     start = time.time()
     auto_xgb_clf.fit(data=(X_train, y_train),
@@ -153,4 +159,3 @@ if __name__ == '__main__':
     accuracy = Evaluator.evaluate(metric="accuracy", y_true=y_val, y_pred=y_hat)
     print("Evaluate: accuracy is", accuracy)
     stop_orca_context()
-

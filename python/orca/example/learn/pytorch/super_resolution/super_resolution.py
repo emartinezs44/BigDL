@@ -26,6 +26,8 @@ from math import log10
 from PIL import Image
 import urllib
 import tarfile
+import shutil
+import os
 from os import makedirs, remove, listdir
 from os.path import exists, join, basename
 
@@ -37,10 +39,12 @@ import torch.nn.init as init
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, CenterCrop, ToTensor, Resize
 
+from bigdl.dllib.utils.log4Error import invalidInputError
 from bigdl.orca import init_orca_context, stop_orca_context
 from bigdl.orca.learn.pytorch import Estimator
 from bigdl.orca.learn.metrics import MSE
 from bigdl.orca.learn.trigger import EveryEpoch
+from bigdl.orca.learn.pytorch.callbacks.model_checkpoint import ModelCheckpoint
 
 parser = argparse.ArgumentParser(description='PyTorch Super Res Example')
 parser.add_argument('--upscale_factor', type=int,
@@ -54,25 +58,38 @@ parser.add_argument('--threads', type=int, default=4,
 parser.add_argument('--seed', type=int, default=123, help='random seed to use. Default=123')
 parser.add_argument('--cluster_mode', type=str,
                     default='local', help='The mode of spark cluster.')
-parser.add_argument('--backend', type=str, default="bigdl",
+parser.add_argument('--runtime', type=str, default="spark",
+                    help='The runtime backend, one of spark or ray.')
+parser.add_argument('--address', type=str, default="",
+                    help='The cluster address if the driver connects to an existing ray cluster. '
+                         'If it is empty, a new Ray cluster will be created.')
+parser.add_argument('--backend', type=str, default="spark",
                     help='The backend of PyTorch Estimator; '
-                         'bigdl, torch_distributed and spark are supported.')
-parser.add_argument('--data_dir', type=str, default="./dataset", help='The path of datesets.')                         
+                         'spark, ray and bigdl are supported.')
+parser.add_argument('--data_dir', type=str, default="./dataset", help='The path of datesets.')
 opt = parser.parse_args()
 
 print(opt)
 
-if opt.cluster_mode == "local":
-    init_orca_context()
-elif opt.cluster_mode == "yarn":
-    additional = None if not exists("dataset/BSDS300.zip") else "dataset/BSDS300.zip#dataset"
-    init_orca_context(cluster_mode="yarn-client", cores=4, num_nodes=2,
-                      additional_archive=additional)
-elif opt.cluster_mode == "spark-submit":
-    init_orca_context(cluster_mode="spark-submit")                      
+if opt.runtime == "ray":
+    init_orca_context(runtime=opt.runtime, address=opt.address)
 else:
-    print("init_orca_context failed. cluster_mode should be one of 'local', 'yarn' and 'spark-submit' but got "
-          + opt.cluster_mode)
+    if opt.cluster_mode == "local":
+        init_orca_context()
+    elif opt.cluster_mode.startswith("yarn"):
+        hadoop_conf = os.environ.get("HADOOP_CONF_DIR")
+        invalidInputError(
+            hadoop_conf is not None,
+            "Directory path to hadoop conf not found for yarn-client mode. Please "
+            "set the environment variable HADOOP_CONF_DIR")
+        additional = None if not exists("dataset/BSDS300.zip") else "dataset/BSDS300.zip#dataset"
+        init_orca_context(cluster_mode=opt.cluster_mode, cores=4,
+                          num_nodes=2, hadoop_conf=hadoop_conf, additional_archive=additional)
+    elif opt.cluster_mode == "spark-submit":
+        init_orca_context(cluster_mode="spark-submit")
+    else:
+        print("init_orca_context failed. cluster_mode should be one of 'local', "
+              "'yarn' and 'spark-submit' but got " + opt.cluster_mode)
 
 
 def download_report(count, block_size, total_size):
@@ -166,7 +183,7 @@ def train_data_creator(config, batch_size):
     train_set = get_training_set(config.get("upscale_factor", 3))
     training_data_loader = DataLoader(dataset=train_set,
                                       batch_size=batch_size,
-                                      num_workers=config.get("threads", 4),
+                                      num_workers=0,
                                       shuffle=True)
     return training_data_loader
 
@@ -184,7 +201,7 @@ def validation_data_creator(config, batch_size):
     test_set = get_test_set(config.get("upscale_factor", 3))
     testing_data_loader = DataLoader(dataset=test_set,
                                      batch_size=batch_size,
-                                     num_workers=config.get("threads", 4),
+                                     num_workers=0,
                                      shuffle=False)
     return testing_data_loader
 
@@ -268,11 +285,13 @@ if opt.backend == "bigdl":
     print("===> Validation Complete: Avg. PSNR: {:.4f} dB, Avg. Loss: {:.4f}"
           .format(10 * log10(1. / val_stats["MSE"]), val_stats["MSE"]))
 
-elif opt.backend in ["torch_distributed", "spark"]:
+elif opt.backend in ["ray", "spark"]:
     estimator = Estimator.from_torch(
         model=model_creator,
         optimizer=optim_creator,
         loss=criterion,
+        model_dir=os.getcwd(),
+        use_tqdm=True,
         backend=opt.backend,
         config={
             "lr": opt.lr,
@@ -282,26 +301,31 @@ elif opt.backend in ["torch_distributed", "spark"]:
         }
     )
 
-    if not exists(model_dir):
-        makedirs(model_dir)
+    if exists(model_dir):
+        shutil.rmtree(model_dir)
 
-    for epoch in range(1, opt.epochs + 1):
-        stats = estimator.fit(data=train_data_creator, epochs=1, batch_size=opt.batch_size)
-        for epochinfo in stats:
-            print("===> Epoch {} Complete: Avg. Loss: {:.4f}"
-                  .format(epoch, epochinfo["train_loss"]))
+    f_model_out_path = join(model_dir, "model_epoch_{epoch:02d}.pth")
 
-        val_stats = estimator.evaluate(data=validation_data_creator,
-                                       batch_size=opt.test_batch_size)
-        print("===> Validation Complete: Avg. PSNR: {:.4f} dB, Avg. Loss: {:.4f}"
-              .format(10 * log10(1. / val_stats["val_loss"]), val_stats["val_loss"]))
+    stats = estimator.fit(data=train_data_creator,
+                          epochs=opt.epochs,
+                          batch_size=opt.batch_size,
+                          callbacks=[ModelCheckpoint(filepath=f_model_out_path,
+                                                     save_weights_only=True)])
+    for epochinfo in stats:
+        print("===> Epoch {} Complete: Avg. Loss: {:.4f}"
+              .format(epochinfo["epoch"], epochinfo["train_loss"]))
 
-        model_out_path = model_dir + "/" + "model_epoch_{}.pth".format(epoch)
-        model = estimator.get_model()
-        torch.save(model, model_out_path)
-        print("Checkpoint saved to {}".format(model_out_path))
+    val_stats = estimator.evaluate(data=validation_data_creator,
+                                   batch_size=opt.test_batch_size)
+    print("===> Validation Complete: Avg. PSNR: {:.4f} dB, Avg. Loss: {:.4f}"
+          .format(10 * log10(1. / val_stats["val_loss"]), val_stats["val_loss"]))
+
+    model = estimator.get_model()
+    last_model_path = f_model_out_path.format(epoch=opt.epochs)
+    estimator.save(last_model_path)
+    print("Checkpoint saved to {}".format(last_model_path))
 else:
-    raise NotImplementedError("Only bigdl and torch_distributed are supported as the backend, "
-                              "but got {}".format(opt.backend))
+    invalidInputError(False, "Only bigdl, ray, and spark are supported as the backend, "
+                      "but got {}".format(opt.backend))
 
 stop_orca_context()

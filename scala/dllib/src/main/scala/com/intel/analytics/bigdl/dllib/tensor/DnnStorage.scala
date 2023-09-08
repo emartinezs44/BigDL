@@ -15,9 +15,10 @@
  */
 package com.intel.analytics.bigdl.dllib.tensor
 
-import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 import com.intel.analytics.bigdl.mkl.Memory
-import com.intel.analytics.bigdl.dllib.nn.mkldnn.MemoryOwner
+
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 import scala.reflect._
 
 /**
@@ -37,7 +38,9 @@ private[tensor] class DnnStorage[T: ClassTag](size: Int) extends Storage[T] {
   } else if (checkIsInstanceOf(ClassTag.Int)) {
     DnnStorage.INT_BYTES
   } else {
-    throw new UnsupportedOperationException(s"Unsupported type for storage")
+    Log4Error.invalidInputError(false, s"Unsupported type for storage",
+    "DnnStorage only support Float, Byte, Int")
+    DnnStorage.INT_BYTES
   }
 
   private var _isReleased: Boolean = false
@@ -47,8 +50,10 @@ private[tensor] class DnnStorage[T: ClassTag](size: Int) extends Storage[T] {
 
   override def length(): Int = size
 
-  override def apply(index: Int): T =
-    throw new UnsupportedOperationException("Not support this operation in DnnStorage")
+  override def apply(index: Int): T = {
+    Log4Error.invalidOperationError(false, "Not support this operation in DnnStorage")
+    0.asInstanceOf[T]
+  }
 
   /**
    * Set the element at position index in the storage. Valid range of index is 1 to length()
@@ -56,39 +61,51 @@ private[tensor] class DnnStorage[T: ClassTag](size: Int) extends Storage[T] {
    * @param index
    * @param value
    */
-  override def update(index: Int, value: T): Unit =
-    throw new UnsupportedOperationException("Not support this operation in DnnStorage")
+  override def update(index: Int, value: T): Unit = {
+    Log4Error.invalidOperationError(false, "Not support update in DnnStorage")
+  }
 
   override def copy(source: Storage[T], offset: Int, sourceOffset: Int, length: Int)
   : this.type = {
     source match {
       case s: ArrayStorage[T] =>
-        require(checkIsInstanceOf(ClassTag.Float), s"copy from float storage not supported")
+        Log4Error.unKnowExceptionError(checkIsInstanceOf(ClassTag.Float),
+          s"copy from float storage not supported")
         Memory.CopyArray2Ptr(s.array().asInstanceOf[Array[Float]], sourceOffset,
           ptr.address, offset, length, bytes)
       case s: DnnStorage[T] =>
         Memory.CopyPtr2Ptr(s.ptr.address, sourceOffset, ptr.address, offset, length,
           bytes)
       case _ =>
-        throw new UnsupportedOperationException("Only support copy from ArrayStorage or DnnStorage")
+        Log4Error.invalidOperationError(false, "Only support copy from ArrayStorage or DnnStorage")
     }
     this
   }
 
-  override def fill(value: T, offset: Int, length: Int): DnnStorage.this.type =
-    throw new UnsupportedOperationException("Not support this operation in DnnStorage")
+  override def fill(value: T, offset: Int, length: Int): DnnStorage.this.type = {
+    Log4Error.invalidOperationError(false, "Not support this operation in DnnStorage")
+    this
+  }
 
-  override def resize(size: Long): DnnStorage.this.type =
-    throw new UnsupportedOperationException("Not support this operation in DnnStorage")
+  override def resize(size: Long): DnnStorage.this.type = {
+    Log4Error.invalidOperationError(false, "Not support this operation in DnnStorage")
+    this
+  }
 
-  override def array(): Array[T] =
-    throw new UnsupportedOperationException("Not support this operation in DnnStorage")
+  override def array(): Array[T] = {
+    Log4Error.invalidOperationError(false, "Not support this operation in DnnStorage")
+    null
+  }
 
-  override def set(other: Storage[T]): DnnStorage.this.type =
-    throw new UnsupportedOperationException("Not support this operation in DnnStorage")
+  override def set(other: Storage[T]): DnnStorage.this.type = {
+    Log4Error.invalidOperationError(false, "Not support this operation in DnnStorage")
+    this
+  }
 
-  override def iterator: Iterator[T] =
-    throw new UnsupportedOperationException("Not support this operation in DnnStorage")
+  override def iterator: Iterator[T] = {
+    Log4Error.invalidOperationError(false, "Not support this operation in DnnStorage")
+    null
+  }
 
   /**
    * Release the native array, the storage object is useless
@@ -105,9 +122,9 @@ private[tensor] class DnnStorage[T: ClassTag](size: Int) extends Storage[T] {
   def isReleased(): Boolean = _isReleased
 
   private def allocate(capacity: Int): Long = {
-    require(capacity > 0, s"capacity should be larger than 0")
+    Log4Error.unKnowExceptionError(capacity > 0, s"capacity should be larger than 0")
     val ptr = Memory.AlignedMalloc(capacity * bytes, DnnStorage.CACHE_LINE_SIZE)
-    require(ptr != 0L, s"allocate native aligned memory failed")
+    Log4Error.unKnowExceptionError(ptr != 0L, s"allocate native aligned memory failed")
     _isReleased = false
     DnnStorage.add(ptr)
     ptr
@@ -115,6 +132,8 @@ private[tensor] class DnnStorage[T: ClassTag](size: Int) extends Storage[T] {
 
   @throws(classOf[IOException])
   private def readObject(in: ObjectInputStream): Unit = {
+//    val in1 = new ValidatingObjectInputStream(in)
+//    in1.defaultReadObject()
     in.defaultReadObject()
     if (!_isReleased) {
       ptr = new Pointer(allocate(this.size))

@@ -15,9 +15,10 @@
  */
 package com.intel.analytics.bigdl.dllib.feature.image
 
-import org.apache.log4j.Logger
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.ImageFeature
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.opencv.OpenCVMat
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
+import org.apache.logging.log4j.LogManager
 import org.opencv.imgcodecs.Imgcodecs
 
 /**
@@ -27,7 +28,7 @@ import org.opencv.imgcodecs.Imgcodecs
  *              By default is Imgcodecs.CV_LOAD_IMAGE_UNCHANGED
  */
 class ImageBytesToMat(byteKey: String = ImageFeature.bytes,
-                      imageCodec: Int = Imgcodecs.CV_LOAD_IMAGE_UNCHANGED) extends ImageProcessing {
+                      imageCodec: Int = Imgcodecs.IMREAD_UNCHANGED) extends ImageProcessing {
 
   override def apply(prev: Iterator[ImageFeature]): Iterator[ImageFeature] = {
     prev.map(transform(_))
@@ -39,10 +40,10 @@ class ImageBytesToMat(byteKey: String = ImageFeature.bytes,
 }
 
 object ImageBytesToMat {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 
   def apply(byteKey: String = ImageFeature.bytes,
-            imageCodec: Int = Imgcodecs.CV_LOAD_IMAGE_UNCHANGED): ImageBytesToMat =
+            imageCodec: Int = Imgcodecs.IMREAD_UNCHANGED): ImageBytesToMat =
     new ImageBytesToMat(byteKey, imageCodec)
 
   def transform(feature: ImageFeature, byteKey: String, imageCodec: Int): ImageFeature = {
@@ -50,7 +51,8 @@ object ImageBytesToMat {
     val bytes = feature[Array[Byte]](byteKey)
     var mat: OpenCVMat = null
     try {
-      require(null != bytes && bytes.length > 0, "image file bytes should not be empty")
+      Log4Error.invalidInputError(null != bytes && bytes.length > 0,
+        "image file bytes should not be empty")
       mat = OpenCVMethod.fromImageBytes(bytes, imageCodec)
       feature(ImageFeature.mat) = mat
       feature(ImageFeature.originalSize) = mat.shape()
@@ -58,7 +60,7 @@ object ImageBytesToMat {
       case e: Exception =>
         e.printStackTrace()
         val uri = feature.uri()
-        logger.error(s"The convertion from bytes to mat fails for $uri")
+        logger.info(s"The convertion from bytes to mat fails for $uri")
         feature(ImageFeature.originalSize) = (-1, -1, -1)
         feature.isValid = false
     }

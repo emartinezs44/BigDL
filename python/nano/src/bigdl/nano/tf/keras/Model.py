@@ -13,11 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
-
 import tensorflow as tf
+from tensorflow.keras import Model as Model
+from bigdl.nano.tf.keras.training_utils import TrainingUtils
+from bigdl.nano.tf.keras.inference_utils import InferenceUtils
+from bigdl.nano.tf.keras.inheritance_utils import inject_function
+from keras.engine.training import Model as V2Model
+from keras.engine.training_v1 import Model as V1Model
 
 
-class Model(tf.keras.Model):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+# override_method(Model, TFModel, f_wrapper)
+V1Model.__doc__ = 'A wrapper class for tf.keras.Model adding more functions for BigDL-Nano.'
+V2Model.__doc__ = 'A wrapper class for tf.keras.Model adding more functions for BigDL-Nano.'
+inject_function(V2Model, TrainingUtils, InferenceUtils)
+inject_function(V1Model, TrainingUtils, InferenceUtils)

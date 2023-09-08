@@ -19,6 +19,8 @@ import os
 import glob
 import warnings
 import logging
+from bigdl.dllib.utils.log4Error import *
+
 
 log = logging.getLogger(__name__)
 
@@ -54,9 +56,9 @@ def __prepare_spark_env():
     else:
         # use $SPARK_HOME as the spark source
         if not spark_home:
-            raise ValueError(
-                """Could not find Spark. Please make sure SPARK_HOME env is set:
-                   export SPARK_HOME=path to your spark home directory.""")
+            invalidInputError(False,
+                              """Could not find Spark. Please make sure SPARK_HOME env is set:
+                              export SPARK_HOME=path to your spark home directory.""")
         log.info(f"Using {spark_home} as spark home")
         py4j = glob.glob(os.path.join(spark_home, 'python/lib', 'py4j-*.zip'))[0]
         pyspark = glob.glob(os.path.join(spark_home, 'python/lib', 'pyspark*.zip'))[0]
@@ -84,7 +86,8 @@ def __prepare_analytics_zoo_env():
         append_path("BIGDL_JARS", analytics_zoo_classpath)
 
     if conf_paths:
-        assert len(conf_paths) == 1, "Expecting one conf, but got: %s" % len(conf_paths)
+        invalidInputError(len(conf_paths) == 1,
+                          "Expecting one conf, but got: %s" % len(conf_paths))
         if conf_paths[0] not in sys.path:
             log.info(f"Prepending {conf_paths[0]} to sys.path")
             sys.path.insert(0, conf_paths[0])
@@ -107,19 +110,20 @@ def __prepare_analytics_zoo_env():
 
 def get_analytics_zoo_classpath():
     """
-    Get and return the jar path for analytics-zoo if exists.
+    Get and return the jar path for BigDL if exists.
     """
     if os.getenv("BIGDL_CLASSPATH"):
         for path in os.getenv("BIGDL_CLASSPATH").split(":"):
             # check jar path or jars dir path that is ended with "jars/*"
             if not os.path.exists(path) and not os.path.exists(path.split("*")[0]):
-                raise ValueError("Path {} specified BIGDL_CLASSPATH does not exist."
-                                     .format(path))
+                invalidInputError(False,
+                                  "Path {} specified BIGDL_CLASSPATH does not exist.".format(path))
         return os.environ["BIGDL_CLASSPATH"]
     jar_dir = os.path.abspath(__file__ + "/../../../")
     jar_paths = glob.glob(os.path.join(jar_dir, "share/orca/lib/*.jar"))
     if jar_paths:
-        assert len(jar_paths) == 1, "Expecting one jar: %s" % len(jar_paths)
+        invalidInputError(len(jar_paths) == 1,
+                          "Expecting one jar: %s" % len(jar_paths))
         return jar_paths[0]
     return ""
 

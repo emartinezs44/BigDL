@@ -22,6 +22,7 @@ from bigdl.dllib.utils.common import to_list
 from bigdl.dllib.keras.converter import *
 from keras.objectives import *
 import six
+from bigdl.dllib.utils.log4Error import *
 
 
 class OptimConverter:
@@ -71,7 +72,7 @@ class OptimConverter:
         elif kloss == "cosine_proximity" or kloss == "cosine" or kloss == cosine_proximity:
             return bcriterion.CosineProximityCriterion()
         else:
-            raise Exception("Not supported loss: %s" % kloss)
+            invalidInputError(False, "Not supported loss: %s" % kloss)
 
     @staticmethod
     def to_bigdl_optim_method(koptim_method):
@@ -103,7 +104,8 @@ class OptimConverter:
                                       decayrate=rho,
                                       epsilon=koptim_method.epsilon)
         elif isinstance(koptim_method, koptimizers.Adadelta):
-            warnings.warn("For Adadelta, we don't support learning rate and learning rate decay for now")
+            warnings.warn("For Adadelta, we don't support learning rate and learning rate decay for"
+                          " now")
             return boptimizer.Adadelta(decayrate=koptim_method.rho,
                                        epsilon=koptim_method.epsilon)
         elif isinstance(koptim_method, koptimizers.Adamax):

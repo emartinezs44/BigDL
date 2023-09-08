@@ -16,29 +16,15 @@
 # limitations under the License.
 #
 
-import collections
 import functools
 import sys
 
-from tensorflow.python.util import tf_decorator
-from tensorflow.python.util import tf_inspect
-
-
 Keras_API_NAME = 'keras'
-
-_Attributes = collections.namedtuple(
-    'ExportedApiAttributes', ['names'])
-
-API_ATTRS = {
-    Keras_API_NAME: _Attributes(
-        '_keras_api_names')
-}
-_NAME_TO_SYMBOL_MAPPING = dict()
 
 
 class api_export(object):  # pylint: disable=invalid-name
-  def __init__(self, *args, **kwargs):  # pylint: disable=g-doc-args
-    """Export under the names *args (first one is considered canonical).
+    def __init__(self, *args, **kwargs):  # pylint: disable=g-doc-args
+        """Export under the names *args (first one is considered canonical).
 
     Args:
       *args: API names in dot delimited format.
@@ -46,23 +32,13 @@ class api_export(object):  # pylint: disable=invalid-name
         api_name: Name of the API you want to generate (e.g. `tensorflow` or
           `estimator`). Default is `keras`.
     """
-    self._names = args
-    self._api_name = kwargs.get('api_name', Keras_API_NAME)
+        self._names = args
+        self._api_name = kwargs.get('api_name', Keras_API_NAME)
 
-
-  def __call__(self, func):
-    api_names_attr = API_ATTRS[self._api_name].names
-
-    _, undecorated_func = tf_decorator.unwrap(func)
-    self.set_attr(undecorated_func, api_names_attr, self._names)
-
-    for name in self._names:
-      _NAME_TO_SYMBOL_MAPPING[name] = func
-      sys.modules[name] = func
-    return func
-
-  def set_attr(self, func, api_names_attr, names):
-    setattr(func, api_names_attr, names)
+    def __call__(self, func):
+        for name in self._names:
+            sys.modules[name] = func
+        return func
 
 
 keras_export = functools.partial(api_export, api_name=Keras_API_NAME)

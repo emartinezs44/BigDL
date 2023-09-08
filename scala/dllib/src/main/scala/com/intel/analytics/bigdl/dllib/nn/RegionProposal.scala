@@ -16,14 +16,15 @@
 package com.intel.analytics.bigdl.dllib.nn
 
 import java.util
+
 import breeze.linalg.{dim, min}
 import com.intel.analytics.bigdl.Module
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.AbstractModule
 import com.intel.analytics.bigdl.dllib.tensor.{Storage, Tensor}
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.util.BboxUtil
-import com.intel.analytics.bigdl.dllib.utils.{T, Table}
-import com.intel.analytics.bigdl.dllib.utils.LayerException
+import com.intel.analytics.bigdl.dllib.utils.{LayerException, Log4Error, T, Table}
+
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -52,7 +53,7 @@ class RegionProposal(
    extends AbstractModule[Table, Table, Float] {
 
   // for anchor generation
-  require(anchorSizes.length == anchorStride.length,
+  Log4Error.invalidInputError(anchorSizes.length == anchorStride.length,
       s"length of anchor size and stride should be same, " +
       s"but get size length ${anchorSizes.length}, stride length ${anchorStride.length}")
 
@@ -190,11 +191,14 @@ class RegionProposal(
   }
 
   override def updateGradInput(input: Table, gradOutput: Table): Table = {
-    throw new UnsupportedOperationException("RegionProposal only support inference")
+    Log4Error.invalidOperationError(false,
+      "RegionProposal only support inference")
+    null
   }
 
   override def accGradParameters(input: Table, gradOutput: Table): Unit = {
-    throw new UnsupportedOperationException("RegionProposal only support inference")
+    Log4Error.invalidOperationError(false,
+      "RegionProposal only support inference")
   }
 
   override def parameters(): (Array[Tensor[Float]], Array[Tensor[Float]]) = {
@@ -356,7 +360,9 @@ private[nn] class ProposalPostProcessor(
   }
 
   override def updateGradInput(input: Table, gradOutput: Table): Table = {
-    throw new UnsupportedOperationException("ProposalPostProcessor only support inference")
+    Log4Error.invalidOperationError(false,
+      "ProposalPostProcessor only support inference")
+    null
   }
 }
 

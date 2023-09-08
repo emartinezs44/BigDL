@@ -17,9 +17,9 @@
 package com.intel.analytics.bigdl.dllib.nn.mkldnn
 
 import com.intel.analytics.bigdl.Module
+import com.intel.analytics.bigdl.dllib.nn.Graph.ModuleNode
+import com.intel.analytics.bigdl.dllib.nn.{Container, CrossEntropyCriterion, MsraFiller, Ones, RandomNormal, Zeros}
 import com.intel.analytics.bigdl.mkl.{MKL, Memory, MklDnn}
-import com.intel.analytics.bigdl.dllib.nn.Graph._
-import com.intel.analytics.bigdl.dllib.nn._
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.Activity
 import com.intel.analytics.bigdl.dllib.nn.mkldnn.Phase.{InferencePhase, TrainingPhase}
 import com.intel.analytics.bigdl.dllib.nn.mkldnn.ResNet.DatasetType.ImageNet
@@ -28,17 +28,15 @@ import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.utils.RandomGenerator._
-import com.intel.analytics.bigdl.dllib.utils.ThreadPool
-import com.intel.analytics.bigdl.dllib.utils.{T, Table}
-import com.intel.analytics.bigdl.dllib.utils.{Engine, OptimizerV1, OptimizerV2}
-import org.apache.log4j.Logger
+import com.intel.analytics.bigdl.dllib.utils._
+import org.apache.logging.log4j.LogManager
 import scopt.OptionParser
 
 import scala.reflect.ClassTag
 
 object Perf {
 
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 
   val parser = new OptionParser[ResNet50PerfParams]("BigDL w/ Dnn Local Model Performance Test") {
     opt[String]('m', "model")
@@ -83,7 +81,10 @@ object Perf {
         case "vgg16_graph" => Vgg_16.graph(batchSize, classNum, true)
         case "resnet50_graph" =>
           ResNet.graph(batchSize, classNum, T("depth" -> 50, "dataSet" -> ImageNet))
-        case _ => throw new UnsupportedOperationException(s"Unkown model ${params.model}")
+        case _ =>
+          Log4Error.invalidInputError(false, s"Unkown model ${params.model}",
+            "only support vgg16, resnet50, vgg16_graph, resnet50_graph")
+          null
       }
 
       val criterion = CrossEntropyCriterion()
@@ -192,7 +193,8 @@ object ResNet {
             .setName(s"res${name}_branch1"))
           .add(SbnDnn(nOutputPlane).setName(s"bn${name}_branch1"))
       } else if (nInputPlane != nOutputPlane) {
-        throw new IllegalArgumentException(s"useConv false")
+        Log4Error.invalidOperationError(false, s"useConv false")
+        null
       } else {
         Identity()
       }
@@ -251,7 +253,7 @@ object ResNet {
         50 -> ((3, 4, 6, 3), 2048, bottleneck: (Int, Int, String) => Module[Float])
       )
 
-      require(cfg.keySet.contains(depth), s"Invalid depth ${depth}")
+      Log4Error.invalidInputError(cfg.keySet.contains(depth), s"Invalid depth ${depth}")
 
       val (loopConfig, nFeatures, block) = cfg.get(depth).get
       iChannels = 64
@@ -270,7 +272,7 @@ object ResNet {
           "fc1000"))
         .add(ReorderMemory(HeapData(Array(batchSize, classNum), Memory.Format.nc)))
     } else {
-      throw new IllegalArgumentException(s"Invalid dataset ${dataSet}")
+      Log4Error.invalidOperationError(false, s"Invalid dataset ${dataSet}")
     }
 
     modelInit(model)
@@ -283,13 +285,14 @@ object ResNet {
       graph.getSortedForwardExecutions.foreach(n => {
         n.element match {
           case conv: SpatialConvolution =>
-            val n: Float = conv.kernelW * conv.kernelW * conv.nOutputPlane
-            val weight = Tensor[Float].resize(conv.weight.size()).apply1 { _ =>
+            val conv2 = conv.asInstanceOf[SpatialConvolution]
+            val n: Float = conv2.kernelW * conv2.kernelW * conv2.nOutputPlane
+            val weight = Tensor[Float].resize(conv2.weight.size()).apply1 { _ =>
               RNG.normal(0, Math.sqrt(2.0f / n)).toFloat
             }
-            val bias = Tensor[Float].resize(conv.bias.size()).apply1(_ => 0.0f)
-            conv.weight.copy(weight)
-            conv.bias.copy(bias)
+            val bias = Tensor[Float].resize(conv2.bias.size()).apply1(_ => 0.0f)
+            conv2.weight.copy(weight)
+            conv2.bias.copy(bias)
 
           case bn: SpatialBatchNormalization =>
             val weightAndBias = Tensor[Float]().resize(Array(2, bn.nOutput))
@@ -322,7 +325,8 @@ object ResNet {
             .setName(s"res${name}_branch1").inputs(input)
         SbnDnn(nOutputPlane).setName(s"bn${name}_branch1").inputs(conv)
       } else if (nInputPlane != nOutputPlane) {
-        throw new IllegalArgumentException(s"useConv false")
+        Log4Error.invalidOperationError(false, s"useConv false")
+        null
       } else {
         Identity().inputs(input)
       }
@@ -383,7 +387,7 @@ object ResNet {
           bottleneck: (ModuleNode[Float], Int, Int, String) => ModuleNode[Float])
       )
 
-      require(cfg.keySet.contains(depth), s"Invalid depth ${depth}")
+      Log4Error.invalidInputError(cfg.keySet.contains(depth), s"Invalid depth ${depth}")
 
       val (loopConfig, nFeatures, block) = cfg.get(depth).get
       iChannels = 64
@@ -407,7 +411,8 @@ object ResNet {
       modelInit(model)
       model
     } else {
-      throw new IllegalArgumentException(s"Invalid dataset ${dataSet}")
+      Log4Error.invalidOperationError(false, s"Invalid dataset ${dataSet}")
+      null
     }
   }
 

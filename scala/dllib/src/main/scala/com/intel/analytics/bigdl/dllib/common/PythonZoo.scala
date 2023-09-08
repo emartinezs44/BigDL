@@ -27,11 +27,12 @@ import org.apache.spark.api.java.JavaRDD
 import java.util.{List => JList}
 
 import com.intel.analytics.bigdl.Module
-import com.intel.analytics.bigdl.dllib.feature.dataset.{MiniBatch}
+import com.intel.analytics.bigdl.dllib.feature.dataset.MiniBatch
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.dllib.optim.{LocalPredictor, ValidationMethod, _}
-import com.intel.analytics.bigdl.dllib.feature.image.ImageSet
+import com.intel.analytics.bigdl.dllib.feature.image.{ImageProcessing, ImageSet}
 import com.intel.analytics.bigdl.dllib.feature.text.TextSet
+import org.apache.spark.sql.DataFrame
 // import com.intel.analytics.zoo.pipeline.api.net.TFNet
 
 import scala.collection.JavaConverters._
@@ -83,13 +84,14 @@ class PythonZoo[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonBigDLK
             .asInstanceOf[Tensor[T]]
         }
       case t: String =>
-        throw new IllegalArgumentException(s"Not supported type: ${t}")
+        Log4Error.invalidInputError(false, s"only support Double/Float. Not supported type: ${t}")
+        null
     }
   }
 
   override def toJTensor(tensor: Tensor[T]): JTensor = {
     // clone here in case the the size of storage larger then the size of tensor.
-    require(tensor != null, "tensor cannot be null")
+    Log4Error.unKnowExceptionError(tensor != null, "tensor cannot be null")
     tensor.getTensorType match {
       case SparseType =>
         // Note: as SparseTensor's indices is inaccessible here,
@@ -116,8 +118,9 @@ class PythonZoo[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonBigDLK
           result
         }
       case _ =>
-        throw new IllegalArgumentException(s"toJTensor: Unsupported tensor type" +
+        Log4Error.invalidInputError(false, s"toJTensor: Unsupported tensor type" +
           s" ${tensor.getTensorType}")
+        null
     }
   }
 
@@ -141,7 +144,7 @@ class PythonZoo[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonBigDLK
       } else if (item.isInstanceOf[Table]) {
         list.add(table2JList(item.asInstanceOf[Table]))
       } else {
-        throw new IllegalArgumentException(s"Table contains unrecognizable objects $item")
+        Log4Error.invalidInputError(false, s"Table contains unrecognizable objects $item")
       }
       i += 1
     }
@@ -159,6 +162,26 @@ class PythonZoo[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonBigDLK
                  module: Predictable[T],
                  x: JavaRDD[MiniBatch[T]]): JavaRDD[JList[Object]] = {
     module.predictMiniBatch(x.rdd).map(activityToList).toJavaRDD()
+  }
+
+  def zooPredict(
+                  module: Predictable[T],
+                  x: DataFrame,
+                  featureCols: JList[String],
+                  predictionCol: String,
+                  batchPerThread: Int
+                ): DataFrame = {
+    module.predict(x, featureCols.asScala.toArray, predictionCol, batchPerThread)
+  }
+
+  def zooPredictImage(
+                  module: Predictable[T],
+                  x: DataFrame,
+                  predictionCol: String,
+                  transform: ImageProcessing,
+                  batchPerThread: Int
+                ): DataFrame = {
+    module.predict(x, predictionCol, transform, batchPerThread)
   }
 
   // todo support featurePaddingParam
@@ -291,10 +314,10 @@ class PythonZoo[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonBigDLK
   }
 
   def createZooTriggerAnd(first: ZooTrigger, others: JList[ZooTrigger]): And = {
-    new And(first, others.asScala: _*)
+    new And(first, others.asScala.toSeq: _*)
   }
 
   def createZooTriggerOr(first: ZooTrigger, others: JList[ZooTrigger]): Or = {
-    new Or(first, others.asScala: _*)
+    new Or(first, others.asScala.toSeq: _*)
   }
 }

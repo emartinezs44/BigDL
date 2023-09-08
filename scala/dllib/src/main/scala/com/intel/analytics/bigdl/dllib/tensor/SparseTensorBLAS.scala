@@ -17,6 +17,7 @@
 package com.intel.analytics.bigdl.dllib.tensor
 
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath._
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 object SparseTensorBLAS {
 
@@ -35,13 +36,16 @@ object SparseTensorBLAS {
         vdotDouble(vec1.asInstanceOf[DenseTensor[Double]],
           vec2.asInstanceOf[SparseTensor[Double]])
           .asInstanceOf[T]
-      case t => throw new IllegalArgumentException(s"Sparse vdot doesn't support $t")
+      case t =>
+        Log4Error.invalidOperationError(false, s"Sparse vdot doesn't support $t")
+        0.asInstanceOf[T]
     }
   }
 
   private def vdotFloat(vec1: DenseTensor[Float],
                    vec2: SparseTensor[Float]): Float = {
-    require(vec1.isContiguous(), "The DenseTensor must be contiguous")
+    Log4Error.unKnowExceptionError(vec1.isContiguous(),
+      "The DenseTensor must be contiguous")
 
     val vec1Values = vec1.storage().array()
     val vec1StorageOffset = vec1.storageOffset() - 1
@@ -70,7 +74,8 @@ object SparseTensorBLAS {
 
   private def vdotDouble(vec1: DenseTensor[Double],
                    vec2: SparseTensor[Double]): Double = {
-    require(vec1.isContiguous(), "The DenseTensor must be contiguous")
+    Log4Error.unKnowExceptionError(vec1.isContiguous(),
+      "The DenseTensor must be contiguous")
 
     val vec1Values = vec1.storage().array()
     val vec1StorageOffset = vec1.storageOffset() - 1
@@ -129,7 +134,7 @@ object SparseTensorBLAS {
         scoomv(alpha, a.asInstanceOf[SparseTensor[Float]], x.asInstanceOf[DenseTensor[Float]],
           beta, y.asInstanceOf[DenseTensor[Float]])
       case _ =>
-        throw new IllegalArgumentException(s"Sparse addmv doesn't support")
+        Log4Error.invalidOperationError(false, s"Sparse addmv doesn't support")
     }
   }
 
@@ -225,7 +230,7 @@ object SparseTensorBLAS {
         dcoomm(alpha, a.asInstanceOf[DenseTensor[Double]], x.asInstanceOf[SparseTensor[Double]],
           beta, y.asInstanceOf[DenseTensor[Double]])
       case _ =>
-        throw new IllegalArgumentException(s"Sparse addmm doesn't support")
+        Log4Error.invalidOperationError(false, s"Sparse addmm doesn't support")
     }
   }
 

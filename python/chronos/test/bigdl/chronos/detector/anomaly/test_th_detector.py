@@ -17,18 +17,21 @@
 import pytest
 import numpy as np
 import pandas as pd
-from bigdl.orca.test_zoo_utils import ZooTestCase
+from unittest import TestCase
 
-from bigdl.chronos.forecaster.lstm_forecaster import LSTMForecaster
+from bigdl.chronos.utils import LazyImport
+LSTMForecaster = LazyImport('bigdl.chronos.forecaster.lstm_forecaster.LSTMForecaster')
 from bigdl.chronos.detector.anomaly import ThresholdDetector
+from ... import op_torch
 
 
-class TestThresholdDetector(ZooTestCase):
+@op_torch
+class TestThresholdDetector(TestCase):
 
-    def setup_method(self, method):
+    def setUp(self):
         pass
 
-    def teardown_method(self, method):
+    def tearDown(self):
         pass
 
     def gen_data(self, feature_num=6, sample_num=100):
@@ -53,7 +56,7 @@ class TestThresholdDetector(ZooTestCase):
             X.append(data[i: (i + look_back)])
             # Y.append(dataset.iloc[i + look_back, target_col_indexes])
             Y.append(data[i + look_back][target_col_indexes])
-        return np.array(X), np.array(Y)
+        return np.array(X).astype(np.float32), np.array(Y).astype(np.float32)
 
     def test_fit_score(self):
         look_back = 4
@@ -77,7 +80,7 @@ class TestThresholdDetector(ZooTestCase):
                                     hidden_dim=32,
                                     layer_num=2)
         forecaster.fit(data=(x_train, y_train), batch_size=1024, epochs=50)
-        y_predict = forecaster.predict(x_test)
+        y_predict = forecaster.predict(x_test, acceleration=False)
         y_predict = np.squeeze(y_predict, axis=1)
 
         # find anomaly using a manual set threshold
@@ -162,22 +165,22 @@ class TestThresholdDetector(ZooTestCase):
         time = np.arange(0, 1, 0.5)
         y = np.sin(time)
         td.set_params(mode="dummy")
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             td.fit(y, y)
         td.set_params(mode="gaussian")
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             td.fit(y)
         td.set_params(threshold="1")
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             td.fit(y)
         td.set_params(threshold=(1, -1))
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             td.fit(y)
         td.set_params(threshold=(np.array([-1]), np.array([-1])))
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             td.fit(y)
         td.set_params(threshold=(np.array([1, 1]), np.array([-1, -1])))
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError):
             td.fit(y)
 
 if __name__ == "__main__":

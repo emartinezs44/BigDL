@@ -18,20 +18,29 @@ package com.intel.analytics.bigdl.dllib.keras
 
 import com.intel.analytics.bigdl.Module
 import com.intel.analytics.bigdl.dllib._
-import com.intel.analytics.bigdl.dllib.feature.dataset.{LocalDataSet, MiniBatch, PaddingParam, Sample, SampleToMiniBatch, Transformer}
+import com.intel.analytics.bigdl.dllib.feature.common._
+import com.intel.analytics.bigdl.dllib.feature.dataset._
 import com.intel.analytics.bigdl.dllib.models.utils.ModelBroadcast
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.Activity
 import com.intel.analytics.bigdl.dllib.optim.LocalPredictor
-import com.intel.analytics.bigdl.dllib.tensor.Tensor
+import com.intel.analytics.bigdl.dllib.tensor.{DoubleType, FloatType, Tensor}
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.{DistributedImageFrame, ImageFeature, ImageFrame, LocalImageFrame}
-import com.intel.analytics.bigdl.dllib.utils.{T, Table}
-import com.intel.analytics.bigdl.dllib.feature.image.ImageSet
+import com.intel.analytics.bigdl.dllib.utils.{Engine, Log4Error, T, Table}
+import com.intel.analytics.bigdl.dllib.feature.image.{ImageMatToTensor, ImageProcessing, ImageSet, ImageSetToSample}
 import com.intel.analytics.bigdl.dllib.feature.text._
 import com.intel.analytics.bigdl.dllib.keras.layers.utils.KerasUtils
+import com.intel.analytics.bigdl.dllib.nnframes.{NNImageReader, NNImageSchema}
+import org.apache.spark.ml.VectorCompatibility
+import org.apache.spark.ml.adapter.SchemaUtils
+import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType, DoubleType => sqlDoubleType, FloatType => sqlFloatType}
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 import scala.collection.Iterator
+import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 
@@ -66,7 +75,7 @@ object Predictor {
       localModel
     } else {
       val ol = localModel(outputLayer)
-      require(ol.isDefined, s"cannot find layer that map name $outputLayer")
+      Log4Error.invalidOperationError(ol.isDefined, s"cannot find layer that map name $outputLayer")
       ol.get
     }
     localToBatch(samples.toIterator).flatMap(batch => {
@@ -83,7 +92,7 @@ object Predictor {
       Array(result.squeeze)
     } else {
       val size = result.size(1)
-      require(batchSize == size,
+      Log4Error.invalidOperationError(batchSize == size,
         s"The batchSize is required to be $size, while actual is $batchSize")
       result.split(1)
     }
@@ -102,7 +111,7 @@ object Predictor {
       (1 to result.length()).foreach(key => {
         val split = splitBatch(result(key), shareBuffer, batchSize)
         val size = split.length
-        require(batchSize == size,
+        Log4Error.invalidOperationError(batchSize == size,
           s"The batchSize is required to be $size, while actual is $batchSize")
         var i = 0
         while (i < batchSize) {
@@ -160,8 +169,8 @@ object Predictor {
     val modelBroad = ModelBroadcast[T]().broadcast(dataSet.sparkContext, model)
     val partitionNum = dataSet.partitions.length
     val totalBatch = if (batchSize > 0) {
-      require(batchSize % partitionNum == 0, s"Predictor.predict: total batch size $batchSize " +
-        s"should be divided by partitionNum ${partitionNum}")
+      Log4Error.invalidInputError(batchSize % partitionNum == 0, s"Predictor.predict:" +
+        s" total batch size $batchSize should be divided by partitionNum ${partitionNum}")
       batchSize
     } else {
       batchPerPartition * partitionNum
@@ -216,7 +225,7 @@ object Predictor {
     result.mapPartitions { partition =>
       partition.map(output => {
         val _output = output.toTensor[T]
-        require(_output.dim() == 1, s"Predictor.predictClass:" +
+        Log4Error.invalidInputError(_output.dim() == 1, s"Predictor.predictClass:" +
           s"Only support one sample has one label, but got ${_output.dim()} label")
         ev.toType[Int](_output.max(1)._2.valueAt(1))
       })
@@ -224,7 +233,7 @@ object Predictor {
   }
 }
 
-trait Predictable[T]  {
+trait Predictable[T] extends VectorCompatibility{
 
   protected val module: Module[T]
 
@@ -350,6 +359,199 @@ trait Predictable[T]  {
   def predict(
                x: ImageSet): ImageSet = {
     predict(x, batchPerThread = 4)
+  }
+
+  def unwrapVectorAsNecessary(colType: DataType): (Row, Array[Int]) => Any = {
+    // to support both ML Vector and MLlib Vector
+    if (colType.typeName.contains("vector")) {
+      (row: Row, index: Array[Int]) => getVectorSeq(row, colType, index(0))
+    } else {
+      (row: Row, index: Array[Int]) => row.get(index(0))
+    }
+  }
+
+  protected def df2ImageSet(df: DataFrame, labelCols: Array[String] = null,
+                            transformer: ImageProcessing = null):
+  ImageSet = {
+    val labelColIndexes = if (labelCols != null) {
+      labelCols.map(df.schema.fieldIndex(_))
+    } else null
+
+    val imfRDD = df.rdd.mapPartitions { rowIter =>
+      rowIter.map { row =>
+        val imf = NNImageSchema.row2IMF(row.get(0).asInstanceOf[Row])
+        if (labelColIndexes != null) {
+          if (labelColIndexes.size == 1) {
+            val labelTensor = Tensor[Float](1)
+            labelTensor(Array(1)) = row.getInt(labelColIndexes.head)
+            imf(ImageFeature.label) = labelTensor
+          } else {
+            for ((x, i) <- labelColIndexes.view.zipWithIndex) {
+              val labelTensor = Tensor[Float](1)
+              labelTensor(Array(1)) = row.getInt(x)
+              imf.update("l" + i, labelTensor)
+            }
+          }
+        }
+        imf
+      }
+    }
+
+    val transformeredImf = if (transformer != null) {
+      transformer.apply(imfRDD)
+    } else imfRDD
+
+    val trainData = ImageSet.rdd(transformeredImf)
+    trainData
+  }
+
+  def outputToPrediction(output: Tensor[T]): Any = {
+    output.clone().storage().array()
+  }
+
+  def extractFeaturesFromRow(colTypes: Array[DataType]):
+  (Row, Array[Int]) => Seq[Any] = {
+    (row: Row, indexes: Array[Int]) => {
+      var res = Seq[Any]()
+      (0 to indexes.size-1).map {idx =>
+        if (colTypes(indexes(idx)).typeName.contains("vector")) {
+          val seq = getVectorSeq(row, colTypes(indexes(idx)), indexes(idx))
+          res = res ++: seq
+        } else {
+          val value = row.get(idx)
+          res = res :+ value
+        }
+      }
+      res
+    }
+  }
+
+  def predict(x: DataFrame,
+              featureCols: Array[String],
+              predictionCol: String,
+              batchPerThread: Int): DataFrame = {
+    val featureColIndexs = featureCols.map {f => x.schema.fieldIndex(f)}
+    var featureSizes: Array[Array[Int]] = null
+    val featureFunc = if (featureCols.length == 1) {
+      val featureType = x.schema(featureCols.head).dataType
+      unwrapVectorAsNecessary(featureType)
+    } else {
+      val row = x.take(1).head
+      featureSizes = featureCols.map {f =>
+        val colType = x.schema(f).dataType
+        if (colType.typeName.contains("vector")) {
+          val idx = x.schema.fieldIndex(f)
+          val seq = getVectorSeq(row, colType, idx)
+          Array(seq.size)
+        } else {
+          Array(1)
+        }
+      }
+
+      val colTypes = x.schema.fields.map(f => f.dataType)
+      extractFeaturesFromRow(colTypes)
+    }
+
+    val sc = x.sqlContext.sparkContext
+    val modelBroadCast = ModelBroadcast[T]().broadcast(sc, module.evaluate())
+
+    val featurePreprocessing = if (featureCols.size == 1) {
+      SeqToTensor()
+    } else {
+      SeqToMultipleTensors(featureSizes)
+    }
+
+    val preprocessing =
+      FeatureLabelPreprocessing(featurePreprocessing, ScalarToTensor[T]())
+        .asInstanceOf[Preprocessing[(Any, Option[Any]), Sample[T]]]
+
+    val predictTransformer = ToTuple() -> preprocessing
+      .asInstanceOf[Preprocessing[(Any, Option[Any]), Sample[T]]].clonePreprocessing()
+
+    val featureTransformersBC = sc.broadcast(predictTransformer)
+    val toBatchBC = sc.broadcast(SampleToMiniBatch[T](batchPerThread, partitionNum = Some(1)))
+
+    // concat the prediction and other columns in DF. avoid zip between RDD
+    val resultRDD = x.rdd.mapPartitions { rowIter =>
+      val localModel = modelBroadCast.value()
+      localModel.evaluate()
+      val featureSteps = featureTransformersBC.value.cloneTransformer()
+      val toBatch = toBatchBC.value.cloneTransformer()
+
+      rowIter.grouped(batchPerThread).flatMap { rowBatch =>
+        val featureSeq = rowBatch.map(r => featureFunc(r, featureColIndexs))
+        val samples = featureSteps(featureSeq.iterator)
+        val predictions = toBatch(samples).flatMap { batch =>
+          val batchResultActivity = localModel.forward(batch.getInput())
+          val batchResults = if (batchResultActivity.isTensor) {
+            Seq(batchResultActivity.toTensor)
+          } else {
+            batchResultActivity.toTable.toSeq[Tensor[T]]
+          }
+
+          batchResults.flatMap {batchResult => if (batchResult.size().length == 2) {
+            batchResult.split(1).map(outputToPrediction)
+          } else if (batchResult.size().length == 1) {
+            Array(outputToPrediction(batchResult))
+          } else {
+            Log4Error.unKnowExceptionError(false,
+              "unexpected batchResult dimension: " + batchResult.size().mkString(", "))
+            null
+          }
+          }
+        }
+
+        rowBatch.toIterator.zip(predictions).map { case (row, predict) =>
+          Row.fromSeq(row.toSeq ++ Seq(predict))
+        }
+      }
+    }
+
+    val resultSchema =
+      ev.getType() match {
+      case DoubleType =>
+        SchemaUtils.appendColumn(x.schema, predictionCol, ArrayType(sqlDoubleType, false))
+      case FloatType =>
+        SchemaUtils.appendColumn(x.schema, predictionCol, ArrayType(sqlFloatType, false))
+      case _ =>
+        Log4Error.invalidInputError(false, s"unsupported type ${ev.getType()}",
+          "Only support Double and Float for now")
+        null
+    }
+
+    x.sqlContext.createDataFrame(resultRDD, resultSchema)
+  }
+
+  def predict(x: DataFrame,
+              featureCols: Array[String],
+              predictionCol: String): DataFrame = {
+    predict(x, featureCols, predictionCol, batchPerThread = 4)
+  }
+
+  def predict(x: DataFrame,
+    predictionCol: String,
+    transform: ImageProcessing,
+    batchPerThread: Int): DataFrame = {
+    val imageset = df2ImageSet(x, null, transform)
+    val transformer2 = ImageMatToTensor[Float]() -> ImageSetToSample[Float]()
+    imageset.transform(transformer2)
+    val res = this.predict(imageset, batchPerThread)
+
+    val rowRDD = res.toDistributed().rdd.map { imf =>
+      val r = NNImageSchema.imf2Row(imf)
+      Row.fromSeq(r.toSeq ++ Seq(imf.getLabel[Int]))
+    }
+
+    import org.apache.spark.sql.types.IntegerType
+    val resultSchema =
+          SchemaUtils.appendColumn(NNImageSchema.floatSchema, predictionCol, IntegerType, true)
+    x.sqlContext.createDataFrame(rowRDD, resultSchema)
+  }
+
+  def predict(x: DataFrame,
+    predictionCol: String,
+    transform: ImageProcessing): DataFrame = {
+    predict(x, predictionCol, transform, batchPerThread = 4)
   }
 
   /**

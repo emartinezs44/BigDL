@@ -67,7 +67,7 @@ class DirectedGraph[T](val source : Node[T], val reverse : Boolean = false) exte
     while(inDegrees.nonEmpty) {
       // toArray is not lazy eval, which is not affected by inDegrees - 1 operations below
       val startNodes = inDegrees.filterKeys(inDegrees(_) == 0).keySet.toArray
-      require(startNodes.length != 0, "There's a cycle in the graph")
+      Log4Error.unKnowExceptionError(startNodes.length != 0, "There's a cycle in the graph")
       result.appendAll(startNodes)
       startNodes.foreach(n => {
         val nextNodes = if (!reverse) n.nextNodes else n.prevNodes
@@ -92,7 +92,7 @@ class DirectedGraph[T](val source : Node[T], val reverse : Boolean = false) exte
       override def hasNext: Boolean = !stack.isEmpty
 
       override def next(): Node[T] = {
-        require(hasNext, "No more elements in the graph")
+        Log4Error.unKnowExceptionError(hasNext, "No more elements in the graph")
         val node = stack.pop()
         visited.add(node)
         val nextNodes = if (!reverse) node.nextNodes else node.prevNodes
@@ -120,7 +120,7 @@ class DirectedGraph[T](val source : Node[T], val reverse : Boolean = false) exte
       override def hasNext: Boolean = !queue.isEmpty
 
       override def next(): Node[T] = {
-        require(hasNext, "No more elements in the graph")
+        Log4Error.unKnowExceptionError(hasNext, "No more elements in the graph")
         val node = queue.dequeue()
         visited.add(node)
         val nextNodes = if (!reverse) node.nextNodes else node.prevNodes
@@ -192,37 +192,37 @@ class Node[T](var element: T) extends Serializable {
    * The nodes pointed by current node
    * @return
    */
-  def nextNodes: Seq[Node[T]] = nexts.map(_._1)
+  def nextNodes: Seq[Node[T]] = nexts.map(_._1).toSeq
 
   /**
    * The edges start from this node
    * @return
    */
-  def nextEdges: Seq[Edge] = nexts.map(_._2)
+  def nextEdges: Seq[Edge] = nexts.map(_._2).toSeq
 
   /**
    * The nodes pointed by current node with the connect edges
    * @return
    */
-  def nextNodesAndEdges: Seq[(Node[T], Edge)] = nexts
+  def nextNodesAndEdges: Seq[(Node[T], Edge)] = nexts.toSeq
 
   /**
    * The nodes point to current node
    * @return
    */
-  def prevNodes: Seq[Node[T]] = prevs.map(_._1)
+  def prevNodes: Seq[Node[T]] = prevs.map(_._1).toSeq
 
   /**
    * The edges connect to this node
    * @return
    */
-  def prevEdges: Seq[Edge] = prevs.map(_._2)
+  def prevEdges: Seq[Edge] = prevs.map(_._2).toSeq
 
   /**
    * The nodes pointed to current node with the connect edges
    * @return
    */
-  def prevNodesAndEdges: Seq[(Node[T], Edge)] = prevs
+  def prevNodesAndEdges: Seq[(Node[T], Edge)] = prevs.toSeq
 
   // scalastyle:off methodName
   // scalastyle:off noSpaceBeforeLeftBracket

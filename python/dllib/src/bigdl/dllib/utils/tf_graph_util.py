@@ -50,6 +50,8 @@ from tensorflow.python.framework import tensor_util
 from tensorflow.python.platform import tf_logging as logging
 from tensorflow.python.util import deprecation
 from tensorflow.python.util.tf_export import tf_export
+from bigdl.dllib.utils.log4Error import *
+
 
 _VARIABLE_OPS = {
     "Assign",
@@ -88,7 +90,8 @@ def must_run_on_cpu(node, pin_variables_on_cpu=False):
     if isinstance(node, ops.Operation):
         node_def = node.node_def
     else:
-        assert isinstance(node, node_def_pb2.NodeDef)
+        invalidInputError(isinstance(node, node_def_pb2.NodeDef),
+                          f"node is not node_def_pb2.NodeDef type")
         node_def = node
 
     # If the op is a variable-related op, should we pin it on CPU?
@@ -158,7 +161,7 @@ def _extract_graph_summary(graph_def):
 def _assert_nodes_are_present(name_to_node, nodes):
     """Assert that nodes are present in the graph."""
     for d in nodes:
-        assert d in name_to_node, "%s is not in graph" % d
+        invalidInputError(d in name_to_node, "%s is not in graph" % d)
 
 
 def _bfs_for_reachable_nodes(target_nodes, name_to_input_name):
@@ -194,10 +197,10 @@ def extract_sub_graph(graph_def, dest_nodes):
     """
 
     if not isinstance(graph_def, graph_pb2.GraphDef):
-        raise TypeError("graph_def must be a graph_pb2.GraphDef proto.")
+        invalidInputError(False, "graph_def must be a graph_pb2.GraphDef proto.")
 
     if isinstance(dest_nodes, six.string_types):
-        raise TypeError("dest_nodes must be a list.")
+        invalidInputError(False, "dest_nodes must be a list.")
 
     name_to_input_name, name_to_node, name_to_seq_num = _extract_graph_summary(
         graph_def)
@@ -275,8 +278,8 @@ def convert_variables_to_constants(sess,
             if op_name in control_ops or op_name == "Identity":
                 curr_input_name = _node_name(current_node.input[0])
             else:
-                raise ValueError("Op type %s should not be in the path " +
-                                 "between ReadVariableOp and VarHandleOp" % current_node.op)
+                invalidInputError(False, "Op type %s should not be in the path "
+                                         "between ReadVariableOp and VarHandleOp" % current_node.op)
             current_name = curr_input_name
 
         return current_name, nodes_in_path
@@ -368,7 +371,7 @@ def convert_variables_to_constants(sess,
             # constants, so we need to convert the associated ResourceGather to Gather
             # ops with a Const axis feeding into it.
             if input_node.attr["batch_dims"].i != 0:
-                raise ValueError("batch_dims != 0 is not supported by freeze_graph.")
+                invalidInputError(False, "batch_dims != 0 is not supported by freeze_graph.")
             axis_data = input_node.attr["batch_dims"].i
             axis_node_name = input_node.name + "/axis"
             axis_dtype = input_node.attr["Tindices"]

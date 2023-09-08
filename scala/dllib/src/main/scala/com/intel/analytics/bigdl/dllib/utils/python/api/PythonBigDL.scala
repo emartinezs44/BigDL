@@ -37,7 +37,7 @@ import java.nio.ByteOrder
 
 import com.intel.analytics.bigdl.dllib.feature.dataset.image.{CropCenter, CropRandom, CropperMethod}
 import com.intel.analytics.bigdl.dllib.nn.Graph._
-import com.intel.analytics.bigdl.dllib.nn.keras.{KerasLayer, KerasModel}
+import com.intel.analytics.bigdl.dllib.nn.internal.{KerasLayer, KerasModel}
 import com.intel.analytics.bigdl.dllib.optim.SGD.{LearningRateSchedule, SequentialSchedule}
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image._
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.augmentation._
@@ -46,8 +46,9 @@ import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.opencv.Ope
 import com.intel.analytics.bigdl.dllib.utils.tf.TensorflowDataFormat
 import com.intel.analytics.bigdl.dllib.utils.tf.TensorflowLoader.parse
 import com.intel.analytics.bigdl.dllib.utils.tf._
+import org.apache.logging.log4j.core.config.Configurator
+import org.apache.logging.log4j.{Level, LogManager}
 import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.log4j._
 import org.opencv.imgproc.Imgproc
 
 import scala.collection.JavaConverters._
@@ -108,7 +109,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
 
   def jTensorsToActivity(input: JList[_ <: Object], isTable: Boolean): Activity = {
     if (input.isEmpty) {
-      throw new IllegalArgumentException("Empty input")
+      Log4Error.invalidOperationError(false, "Empty input")
     }
     if (isTable) {
       toTable(input)
@@ -127,8 +128,9 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
     } else if (outputActivity.isInstanceOf[EmptyGradInput]) {
       List[JTensor]().asJava
     } else {
-      throw new UnsupportedOperationException(s"Activity type" +
+      Log4Error.invalidOperationError(false, s"Activity type" +
         s"(${outputActivity.getClass.getName}) not support")
+      null
     }
   }
 
@@ -167,13 +169,14 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
             jTensor.storage.map(x => ev.fromType(x.toDouble)), jTensor.shape)
         }
       case t: String =>
-        throw new IllegalArgumentException(s"Not supported type: ${t}")
+        Log4Error.invalidOperationError(false, s"Not supported type: ${t}")
+        null
     }
   }
 
   def toJTensor(tensor: Tensor[T]): JTensor = {
     // clone here in case the the size of storage larger then the size of tensor.
-    require(tensor != null, "tensor cannot be null")
+    Log4Error.unKnowExceptionError(tensor != null, "tensor cannot be null")
     tensor.getTensorType match {
       case SparseType =>
         // Note: as SparseTensor's indices is inaccessible here,
@@ -200,8 +203,9 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
           result
         }
       case _ =>
-        throw new IllegalArgumentException(s"toJTensor: Unsupported tensor type" +
+        Log4Error.invalidOperationError(false, s"toJTensor: Unsupported tensor type" +
           s" ${tensor.getTensorType}")
+        null
     }
   }
 
@@ -217,7 +221,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
   }
 
   def toJSample(record: Sample): JSample[T] = {
-    require(record.bigdlType == this.typeName,
+    Log4Error.unKnowExceptionError(record.bigdlType == this.typeName,
       s"record.bigdlType: ${record.bigdlType} == this.typeName: ${this.typeName}")
     JSample[T](record.features.asScala.toArray.map(toTensor(_)),
       record.labels.asScala.toArray.map(toTensor(_)))
@@ -229,13 +233,13 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
 
   // The first dimension is batch for both X and y
   def toSampleArray(Xs: List[Tensor[T]], y: Tensor[T] = null): Array[JSample[T]] = {
-    require(!Xs.isEmpty, "Xs should not be empty")
+    Log4Error.unKnowExceptionError(!Xs.isEmpty, "Xs should not be empty")
     val totalNum = Xs(0).size()(0)
     var i = 1
     val samples = new Array[JSample[T]](totalNum)
 
     if (y != null) {
-      require(Xs(0).size()(0) == y.size()(0),
+      Log4Error.unKnowExceptionError(Xs(0).size()(0) == y.size()(0),
         s"The batch dim should be equal, but we got: ${Xs(0).size()(0)} vs ${y.size()(0)}")
       while (i <= totalNum) {
         samples(i-1) = JSample(Xs.map{X => X.select(1, i)}.toArray, y.select(1, i))
@@ -1221,9 +1225,9 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
     Sigmoid[T]()
   }
 
-  def createSoftMax(pos: Int = 1)
+  def createSoftMax()
   : SoftMax[T] = {
-    SoftMax[T](pos)
+    SoftMax[T]()
   }
 
   def createSoftMin()
@@ -1867,8 +1871,9 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
       case "BATCH_SIZE" => NormMode.BATCH_SIZE
       case "NONE" => NormMode.NONE
       case n: String =>
-        throw new IllegalArgumentException(s"Only support 'FULL', " +
+        Log4Error.invalidOperationError(false, s"Only support 'FULL', " +
           s"'VALID', 'BATCH_SIZE' and 'NONE': $n")
+        NormMode.NONE
     }
     val labelToIgnore = ignoreLabel match {
       case i: Integer => Some(i.toInt)
@@ -1970,9 +1975,11 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
     val order = byteOrder match {
       case "little_endian" => ByteOrder.LITTLE_ENDIAN
       case "big_endian" => ByteOrder.BIG_ENDIAN
-      case _ => throw new IllegalArgumentException(s"No support byte order $byteOrder")
+      case _ =>
+        Log4Error.invalidOperationError(false, s"No support byte order $byteOrder")
+        ByteOrder.BIG_ENDIAN
     }
-    Module.loadTF[T](path, inputs.asScala, outputs.asScala, order,
+    Module.loadTF[T](path, inputs.asScala.toSeq, outputs.asScala.toSeq, order,
       Option(binFile), generatedBackward)
   }
 
@@ -1984,20 +1991,24 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
     val order = byteOrder.toLowerCase match {
       case "little_endian" => ByteOrder.LITTLE_ENDIAN
       case "big_endian" => ByteOrder.BIG_ENDIAN
-      case _ => throw new IllegalArgumentException(s"Unknown byte order $byteOrder")
+      case _ =>
+        Log4Error.invalidOperationError(false, s"Unknown byte order $byteOrder")
+        ByteOrder.BIG_ENDIAN
     }
 
     val format = dataFormat.toLowerCase match {
       case "nhwc" => TensorflowDataFormat.NHWC
       case "nchw" => TensorflowDataFormat.NCHW
-      case _ => throw new IllegalArgumentException(s"Unknown format $dataFormat")
+      case _ =>
+        Log4Error.invalidOperationError(false, s"Unknown format $dataFormat")
+        TensorflowDataFormat.NCHW
     }
     val scalaInputs = inputs.asScala.map { elem =>
       val array = elem.asInstanceOf[JList[Any]]
       val name = array.get(0).asInstanceOf[String]
       val shape = array.get(1).asInstanceOf[JList[Int]]
-      (name, shape.asScala)
-    }
+      (name, shape.asScala.toSeq)
+    }.toSeq
     model.saveTF(scalaInputs, path, order, format)
   }
 
@@ -2080,7 +2091,6 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
     activityToJTensors(outputActivity)
   }
 
-
   def modelSave(module: AbstractModule[Activity, Activity, T],
     path: String, overWrite: Boolean): Unit = {
     module.save(path, overWrite)
@@ -2120,16 +2130,17 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
 
   def modelGetParameters(model: AbstractModule[Activity, Activity, T])
   : JMap[Any, JMap[Any, JList[JList[Any]]]] = {
-    model.getParametersTable().getState().mapValues {
+    val a = model.getParametersTable().getState().mapValues {
       case name2Values: Table =>
-        name2Values.getState().mapValues {
+        mapAsJavaMap(name2Values.getState().mapValues {
           case t: Tensor[T] =>
             val tensorClone = t.clone()
             val item = List(tensorClone.storage().toList.asJava.asInstanceOf[JList[Any]],
               tensorClone.size().toList.asJava.asInstanceOf[JList[Any]]).asJava
             item
-        }.asJava
-    }.asJava
+        }.toMap)
+    }.toMap
+    mapAsJavaMap(a)
   }
 
   def createMaxEpoch(max: Int): Trigger = {
@@ -2157,11 +2168,11 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
   }
 
   def createTriggerAnd(first: Trigger, others: JList[Trigger]): Trigger = {
-    Trigger.and(first, others.asScala: _*)
+    Trigger.and(first, others.asScala.toSeq: _*)
   }
 
   def createTriggerOr(first: Trigger, others: JList[Trigger]): Trigger = {
-    Trigger.or(first, others.asScala: _*)
+    Trigger.or(first, others.asScala.toSeq: _*)
   }
 
   def createTop1Accuracy(): ValidationMethod[T] = {
@@ -2318,7 +2329,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
     val nodeList = parse(modelPath)
 
     val context = new Context[T]()
-    val session = new BigDLSessionImpl[T](nodeList.asScala, context, ByteOrder.LITTLE_ENDIAN)
+    val session = new BigDLSessionImpl[T](nodeList.asScala.toSeq, context, ByteOrder.LITTLE_ENDIAN)
     val dataset = batching(DataSet.rdd(toJSample(samples)),
       batchSize).asInstanceOf[DistributedDataSet[MiniBatch[T]]]
     val model = session.train(Seq(output), dataset,
@@ -2495,7 +2506,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
     if (null == x || x.isEmpty) {
       module.inputs()
     } else {
-      module.inputs(x.asScala: _*)
+      module.inputs(x.asScala.toSeq: _*)
     }
   }
 
@@ -2623,7 +2634,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
 
   def freeze(model: AbstractModule[Activity, Activity, T], freezeLayers: JList[String])
   : AbstractModule[Activity, Activity, T] = {
-    if (null == freezeLayers) model.freeze() else model.freeze(freezeLayers.asScala: _*)
+    if (null == freezeLayers) model.freeze() else model.freeze(freezeLayers.asScala.toSeq: _*)
   }
 
   def unFreeze(model: AbstractModule[Activity, Activity, T],
@@ -2631,7 +2642,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
     if (names == null) {
       model.unFreeze()
     } else {
-      model.unFreeze(names.asScala: _*)
+      model.unFreeze(names.asScala.toSeq: _*)
     }
   }
 
@@ -2698,7 +2709,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
   }
 
   def showBigDlInfoLogs(): Unit = {
-    Logger.getLogger("com.intel.analytics.bigdl.dllib.optim").setLevel(Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl.dllib.optim", Level.INFO)
   }
 
   def quantize(module: AbstractModule[Activity, Activity, T]): Module[T] = {
@@ -2715,7 +2726,8 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
       case m: KerasModel[T] =>
         m.getSubModules().asJava
       case kl: KerasLayer[Activity, Activity, T] =>
-        throw new RuntimeException(s"There's no sub modules for ${kl}")
+        Log4Error.invalidOperationError(false, s"There's no sub modules for ${kl}")
+        null
       case _ =>
         module.modules.toList.asJava
     }
@@ -3004,7 +3016,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
 
   def createDistributedImageFrame(imageRdd: JavaRDD[JTensor], labelRdd: JavaRDD[JTensor])
   : DistributedImageFrame = {
-    require(null != imageRdd, "imageRdd cannot be null")
+    Log4Error.unKnowExceptionError(null != imageRdd, "imageRdd cannot be null")
     val featureRdd = if (null != labelRdd) {
       imageRdd.rdd.zip(labelRdd.rdd).map(data => {
         createImageFeature(data._1, data._2)
@@ -3019,7 +3031,7 @@ class PythonBigDL[T: ClassTag](implicit ev: TensorNumeric[T]) extends Serializab
 
   def createLocalImageFrame(images: JList[JTensor], labels: JList[JTensor])
   : LocalImageFrame = {
-    require(null != images, "images cannot be null")
+    Log4Error.unKnowExceptionError(null != images, "images cannot be null")
     val features = if (null != labels) {
       (0 until images.size()).map(i => {
         createImageFeature(images.get(i), labels.get(i))
@@ -3256,7 +3268,8 @@ object PythonBigDLUtils {
       case "double" =>
         Tensor(jTensor.storage.map(x => ev.fromType(x.toDouble)), jTensor.shape)
       case t: String =>
-        throw new IllegalArgumentException(s"Not supported type: ${t}")
+        Log4Error.invalidOperationError(false, s"Not supported type: ${t}")
+        null
     }
   }
 }

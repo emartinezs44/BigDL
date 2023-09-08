@@ -29,6 +29,7 @@ import com.intel.analytics.bigdl.dllib.common.PythonZoo
 import com.intel.analytics.bigdl.dllib.feature.common.Preprocessing
 import com.intel.analytics.bigdl.dllib.feature.image._
 import com.intel.analytics.bigdl.dllib.feature.image3d._
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.opencv.imgcodecs.Imgcodecs
 import org.opencv.imgproc.Imgproc
@@ -151,7 +152,7 @@ class PythonImageFeature[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pyt
 
   def createDistributedImageSet(imageRdd: JavaRDD[JTensor], labelRdd: JavaRDD[JTensor])
   : DistributedImageSet = {
-    require(null != imageRdd, "imageRdd cannot be null")
+    Log4Error.invalidOperationError(null != imageRdd, "imageRdd cannot be null")
     val featureRdd = if (null != labelRdd) {
       imageRdd.rdd.zip(labelRdd.rdd).map(data => {
         if (data._1.shape.length == 4) {
@@ -174,7 +175,7 @@ class PythonImageFeature[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pyt
 
   def createLocalImageSet(images: JList[JTensor], labels: JList[JTensor])
   : LocalImageSet = {
-    require(null != images, "images cannot be null")
+    Log4Error.invalidInputError(null != images, "images cannot be null")
     val features = if (null != labels) {
       (0 until images.size()).map(i => {
         val img = images.get(i)
@@ -216,7 +217,7 @@ class PythonImageFeature[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pyt
 
   def createImageBytesToMat(
       byteKey: String = ImageFeature.bytes,
-      imageCodec: Int = Imgcodecs.CV_LOAD_IMAGE_UNCHANGED): ImageBytesToMat = {
+      imageCodec: Int = Imgcodecs.IMREAD_UNCHANGED): ImageBytesToMat = {
     ImageBytesToMat(byteKey, imageCodec)
   }
 
@@ -237,15 +238,6 @@ class PythonImageFeature[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pyt
     ImageFeatureToSample()
   }
 
-  def createImageChannelNormalizer(
-                                  meanR: Double, meanG: Double, meanB: Double,
-                                  stdR: Double = 1, stdG: Double = 1, stdB: Double = 1
-                                ): ImageChannelNormalize = {
-
-    ImageChannelNormalize(meanR.toFloat, meanG.toFloat, meanB.toFloat,
-      stdR.toFloat, stdG.toFloat, stdB.toFloat)
-  }
-
   def createPerImageNormalize(min: Double, max: Double, normType: Int = 32): PerImageNormalize = {
     PerImageNormalize(min, max, normType)
   }
@@ -257,8 +249,10 @@ class PythonImageFeature[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pyt
     format match {
       case "NCHW" => ImageMatToTensor(toRGB, tensorKey, shareBuffer, DataFormat.NCHW)
       case "NHWC" => ImageMatToTensor(toRGB, tensorKey, shareBuffer, DataFormat.NHWC)
-      case other => throw new IllegalArgumentException(s"Unsupported format:" +
-        s" $format. Only NCHW and NHWC are supported.")
+      case other =>
+        Log4Error.invalidInputError(false, s"Unsupported format:" +
+          s" $format. Only NCHW and NHWC are supported.")
+        null
     }
   }
 
@@ -309,11 +303,11 @@ class PythonImageFeature[T: ClassTag](implicit ev: TensorNumeric[T]) extends Pyt
     ImageRandomAspectScale(scales.asScala.toArray, scaleMultipleOf, maxSize)
   }
 
-  def createImageChannelNormalize(meanR: Double, meanG: Double, meanB: Double,
-                             stdR: Double = 1, stdG: Double = 1,
-                                stdB: Double = 1): ImageChannelNormalize = {
-    ImageChannelNormalize(meanR.toFloat, meanG.toFloat, meanB.toFloat,
-      stdR.toFloat, stdG.toFloat, stdB.toFloat)
+  def createImageChannelNormalize(meanB: Double, meanG: Double, meanR: Double,
+                             stdB: Double = 1, stdG: Double = 1,
+                                stdR: Double = 1): ImageChannelNormalize = {
+    ImageChannelNormalize(meanB.toFloat, meanG.toFloat, meanR.toFloat,
+      stdB.toFloat, stdG.toFloat, stdR.toFloat)
   }
 
   def createImagePixelNormalize(means: JList[Double]): ImagePixelNormalizer = {

@@ -31,7 +31,8 @@ import com.intel.analytics.bigdl.dllib.optim.parameters.AllReduceParameter
 import com.intel.analytics.bigdl.dllib.tensor.{DenseTensor, DnnStorage, Storage, Tensor}
 import com.intel.analytics.bigdl.dllib.utils._
 import com.intel.analytics.bigdl.dllib.visualization.TrainSummary
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.scalatest.{BeforeAndAfter, FlatSpec, Matchers}
@@ -129,8 +130,8 @@ class DistriOptimizerSpec extends FlatSpec with Matchers with BeforeAndAfter {
   import DistriOptimizerSpec._
   import DistriOptimizerSpecModel._
 
-  Logger.getLogger("org").setLevel(Level.WARN)
-  Logger.getLogger("akka").setLevel(Level.WARN)
+  Configurator.setLevel("org", Level.WARN)
+  Configurator.setLevel("akka", Level.WARN)
 
   private var sc: SparkContext = _
 
@@ -186,8 +187,8 @@ class DistriOptimizerSpec extends FlatSpec with Matchers with BeforeAndAfter {
       .add(new LogSoftMax[Float]())
     val sampleDataSet = (dataSet -> toTensor).asInstanceOf[DistributedDataSet[MiniBatch[Float]]]
     val batchDataSet = DataSet.rdd(sampleDataSet.data(train = false))
-    assert(sampleDataSet.size() == numSamples)
-    assert(batchDataSet.size() == numSamples / batchSize * numPartitions)
+    TestUtils.conditionFailTest(sampleDataSet.size() == numSamples)
+    TestUtils.conditionFailTest(batchDataSet.size() == numSamples / batchSize * numPartitions)
 
     Seq(sampleDataSet, batchDataSet).foreach { dataset =>
       RandomGenerator.RNG.setSeed(10)
@@ -658,8 +659,9 @@ class DistriOptimizerSpec extends FlatSpec with Matchers with BeforeAndAfter {
 
   "Train with Plateau" should "work properly" in {
     LoggerFilter.redirectSparkInfoLogs()
-    Logger.getLogger("com.intel.analytics.bigdl.dllib.optim").setLevel(Level.INFO)
-    Logger.getLogger("com.intel.analytics.bigdl").setLevel(Level.INFO)
+
+    Configurator.setLevel("com.intel.analytics.bigdl.dllib.optim", Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl", Level.INFO)
 
     RandomGenerator.RNG.setSeed(10)
     val logdir = com.google.common.io.Files.createTempDir()
@@ -687,8 +689,8 @@ class DistriOptimizerSpec extends FlatSpec with Matchers with BeforeAndAfter {
 
   "Train with Plateau Score" should "work properly" in {
     LoggerFilter.redirectSparkInfoLogs()
-    Logger.getLogger("com.intel.analytics.bigdl.dllib.optim").setLevel(Level.INFO)
-    Logger.getLogger("com.intel.analytics.bigdl").setLevel(Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl.dllib.optim", Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl", Level.INFO)
 
     RandomGenerator.RNG.setSeed(10)
     val logdir = com.google.common.io.Files.createTempDir()
@@ -718,8 +720,8 @@ class DistriOptimizerSpec extends FlatSpec with Matchers with BeforeAndAfter {
 
   "Train with L1Regularization" should "work properly in DistriOptimizer" in {
     LoggerFilter.redirectSparkInfoLogs()
-    Logger.getLogger("com.intel.analytics.bigdl.dllib.optim").setLevel(Level.INFO)
-    Logger.getLogger("com.intel.analytics.bigdl").setLevel(Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl.dllib.optim", Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl", Level.INFO)
 
     RandomGenerator.RNG.setSeed(10)
     val logdir = com.google.common.io.Files.createTempDir()
@@ -797,8 +799,8 @@ class DistriOptimizerSpec extends FlatSpec with Matchers with BeforeAndAfter {
     val newW = model.getParameters()._1
     val newG = model.getParameters()._2
 
-    assert(newW.almostEqual(oriW, 0.0), "weight should keep the same")
-    assert(newG.almostEqual(oriW.fill(0.0), 0.0), "gradient should be 0")
+    TestUtils.conditionFailTest(newW.almostEqual(oriW, 0.0), "weight should keep the same")
+    TestUtils.conditionFailTest(newG.almostEqual(oriW.fill(0.0), 0.0), "gradient should be 0")
   }
 
   "Train with MSE" should "generate correct gradients with l2norm clipping" in {
@@ -827,7 +829,8 @@ class DistriOptimizerSpec extends FlatSpec with Matchers with BeforeAndAfter {
 
     val model2 = optimizer2.optimize()
     val newG = model2.getParameters()._2
-    assert(expectedG.almostEqual(newG, 0.0), "clipbynorm2 should generate correct gradient")
+    TestUtils.conditionFailTest(expectedG.almostEqual(newG, 0.0),
+      "clipbynorm2 should generate correct gradient")
   }
 
   "Train with MSE and SGD with constant clipping" should "be trained with good result" in {
@@ -868,8 +871,8 @@ class DistriOptimizerSpec extends FlatSpec with Matchers with BeforeAndAfter {
 
   "optimMethod state" should "be updated correctly after optimize" in {
     LoggerFilter.redirectSparkInfoLogs()
-    Logger.getLogger("com.intel.analytics.bigdl.dllib.optim").setLevel(Level.INFO)
-    Logger.getLogger("com.intel.analytics.bigdl").setLevel(Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl.dllib.optim", Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl", Level.INFO)
 
     val mm = Sequential[Double]().add(Linear(4, 1))
       .add(Sigmoid())
@@ -916,8 +919,8 @@ class DistriOptimizerSpec extends FlatSpec with Matchers with BeforeAndAfter {
 
   "reserve optimMethod for each worker" should "be correct" in {
     LoggerFilter.redirectSparkInfoLogs()
-    Logger.getLogger("com.intel.analytics.bigdl.dllib.optim").setLevel(Level.INFO)
-    Logger.getLogger("com.intel.analytics.bigdl").setLevel(Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl.dllib.optim", Level.INFO)
+    Configurator.setLevel("com.intel.analytics.bigdl", Level.INFO)
 
     val mm = Sequential[Double]().add(Linear(4, 1))
       .add(Sigmoid())

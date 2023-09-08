@@ -19,7 +19,8 @@ import com.intel.analytics.bigdl.dllib.feature.dataset.ArraySample
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.ImageFeature
-import org.apache.log4j.Logger
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
+import org.apache.logging.log4j.{LogManager, Logger}
 
 import scala.reflect.ClassTag
 
@@ -45,7 +46,8 @@ class ImageSetToSample[T: ClassTag](inputKeys: Array[String] = Array(ImageFeatur
     try {
       val inputs = inputKeys.map(key => {
         val input = feature[Tensor[T]](key)
-        require(input.isInstanceOf[Tensor[T]], s"the input $key should be tensor")
+        Log4Error.invalidOperationError(input.isInstanceOf[Tensor[T]],
+          s"the input $key should be tensor")
         input.asInstanceOf[Tensor[T]]
       })
       val sample = if (targetKeys == null) {
@@ -58,7 +60,8 @@ class ImageSetToSample[T: ClassTag](inputKeys: Array[String] = Array(ImageFeatur
         val targets = targetKeys.flatMap(key => {
           if (feature.contains(key)) {
             val target = feature[Tensor[T]](key)
-            require(target.isInstanceOf[Tensor[T]], s"the target $key should be tensor")
+            Log4Error.invalidOperationError(target.isInstanceOf[Tensor[T]],
+              s"the target $key should be tensor")
             Some(target.asInstanceOf[Tensor[T]])
           }
           else {
@@ -75,7 +78,7 @@ class ImageSetToSample[T: ClassTag](inputKeys: Array[String] = Array(ImageFeatur
       case e: Exception =>
         e.printStackTrace()
         val uri = feature.uri()
-        logger.error(s"The conversion from ImageFeature to Sample fails for $uri")
+        logger.info(s"The conversion from ImageFeature to Sample fails for $uri")
         feature(ImageFeature.originalSize) = (-1, -1, -1)
         feature.isValid = false
     }
@@ -84,7 +87,7 @@ class ImageSetToSample[T: ClassTag](inputKeys: Array[String] = Array(ImageFeatur
 }
 
 object ImageSetToSample {
-  val logger: Logger = Logger.getLogger(getClass)
+  val logger: Logger = LogManager.getLogger(getClass)
 
   def apply[T: ClassTag](inputKeys: Array[String] = Array(ImageFeature.imageTensor),
             targetKeys: Array[String] = Array(ImageFeature.label),

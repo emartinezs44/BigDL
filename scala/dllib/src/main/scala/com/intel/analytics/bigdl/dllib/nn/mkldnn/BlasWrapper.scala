@@ -29,7 +29,7 @@ import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.utils.Engine
 import com.intel.analytics.bigdl.dllib.utils.{Util => NNUtils, _}
 import com.intel.analytics.bigdl.dllib.utils._
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
 
 /**
  * wrap blas module to dnn module,
@@ -39,7 +39,8 @@ import org.apache.log4j.Logger
 private[bigdl] class BlasWrapper(val module: AbstractModule[Activity, Activity, Float])
   extends MklDnnLayer {
 
-  require(!module.isInstanceOf[MklDnnModule], "Only support wrapper blas layer to dnn layer")
+  Log4Error.invalidInputError(!module.isInstanceOf[MklDnnModule],
+    "Only support wrapper blas layer to dnn layer")
 
   output = module.output
   gradInput = module.gradInput
@@ -51,7 +52,10 @@ private[bigdl] class BlasWrapper(val module: AbstractModule[Activity, Activity, 
       case 3 => Memory.Format.ntc
       case 2 => Memory.Format.nc
       case 1 => Memory.Format.x
-      case _ => throw new UnsupportedOperationException(s"UnSupported dims ${dims}")
+      case _ =>
+        Log4Error.invalidInputError(false,
+        s"UnSupported dims ${dims}", "only support dim with 1, 2, 3, 4")
+        Memory.Format.x
     }
   }
 
@@ -62,7 +66,7 @@ private[bigdl] class BlasWrapper(val module: AbstractModule[Activity, Activity, 
   }
 
   private[mkldnn] var needOutputFormats: Boolean = true
-  @transient private lazy val logger = Logger.getLogger(getClass)
+  @transient private lazy val logger = LogManager.getLogger(getClass)
 
   @transient private var subModels: Array[Module[Float]] = _
   @transient private var subModelNumber : Int = 1
@@ -115,7 +119,8 @@ private[bigdl] class BlasWrapper(val module: AbstractModule[Activity, Activity, 
     initEnv = true
     val multiThread = System.getProperty("multiThread", "false").toBoolean
     if (this.train && multiThread) {
-      throw new IllegalArgumentException("Please not set multiThread to true for model training")
+      Log4Error.invalidOperationError(false,
+        "Please not set multiThread to true for model training")
     }
     if (this.train
       || !multiThread

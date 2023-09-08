@@ -16,16 +16,15 @@
 package com.intel.analytics.bigdl.orca.utils
 
 import java.util.concurrent.{ExecutorService, Executors, ThreadFactory}
-
 import jep.{JepConfig, JepException, NamingConventionClassEnquirer, SharedInterpreter}
-import org.apache.commons.lang.exception.ExceptionUtils
-import org.apache.log4j.{Level, Logger}
+import org.apache.logging.log4j.LogManager
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.reflect.ClassTag
 
 object PythonInterpreter {
-  protected val logger = Logger.getLogger(this.getClass)
+  protected val logger = LogManager.getLogger(this.getClass)
 
   private var threadPool: ExecutorService = null
 
@@ -82,7 +81,7 @@ object PythonInterpreter {
     threadExecute(createInterp)
   }
 
-  private def threadExecute[T](task: () => T,
+  private def threadExecute[T: ClassTag](task: () => T,
                                timeout: Duration = Duration("100s")): T = {
     try {
       val re = Array(task).map(t => Future {

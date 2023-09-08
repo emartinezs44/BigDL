@@ -20,7 +20,7 @@ from sklearn.preprocessing import StandardScaler
 
 from bigdl.orca import init_orca_context, stop_orca_context
 from bigdl.chronos.autots.autotsestimator import AutoTSEstimator
-from bigdl.chronos.data.repo_dataset import get_public_dataset
+from bigdl.chronos.data import get_public_dataset
 
 
 def get_tsdata():
@@ -49,7 +49,7 @@ if __name__ == '__main__':
 
     parser.add_argument("--epochs", type=int, default=2,
                         help="Max number of epochs to train in each trial.")
-    parser.add_argument("--n_sampling", type=int, default=1,
+    parser.add_argument("--n_sampling", type=int, default=6,
                         help="Number of times to sample from the search_space.")
     args = parser.parse_args()
 

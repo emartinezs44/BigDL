@@ -28,7 +28,9 @@ import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.label.roi.
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.util.BboxUtil
 import com.intel.analytics.bigdl.dllib.utils.serializer._
 import com.intel.analytics.bigdl.dllib.utils.serializer.converters.DataConverter
-import com.intel.analytics.bigdl.dllib.utils.{T, Table}
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, T, Table}
+import com.intel.analytics.bigdl.dllib.models.maskrcnn.Utils
+
 import scala.reflect.ClassTag
 import scala.reflect.runtime._
 
@@ -235,7 +237,8 @@ class MaskRCNN(val inChannels: Int,
         val classPerImg = labels.narrow(1, start, boxNumber)
         val scorePerImg = scores.narrow(1, start, boxNumber)
 
-        require(maskPerImg.size(1) == bboxPerImg.size(1), s"mask number ${maskPerImg.size(1)} " +
+        Log4Error.invalidInputError(maskPerImg.size(1) == bboxPerImg.size(1),
+          s"mask number ${maskPerImg.size(1)} " +
           s"should be the same with box number ${bboxPerImg.size(1)}")
 
         // resize bbox to original size
@@ -265,7 +268,8 @@ class MaskRCNN(val inChannels: Int,
   }
 
   override def updateGradInput(input: Activity, gradOutput: Activity): Activity = {
-    throw new UnsupportedOperationException("MaskRCNN model only support inference now")
+    Log4Error.invalidInputError(false, "MaskRCNN model only support inference now")
+    null
   }
 }
 

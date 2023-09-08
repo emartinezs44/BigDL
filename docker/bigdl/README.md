@@ -1,4 +1,4 @@
---------
+---------
 # Docker images and builders for BigDL
 
 ## BigDL in Docker
@@ -7,7 +7,7 @@
 * git
 * maven
 * Oracle jdk 1.8.0_152 (in /opt/jdk1.8.0_152)
-* python 2.7.6
+* python 3.6.9
 * pip
 * numpy
 * scipy
@@ -17,67 +17,181 @@
 * seaborn
 * jupyter
 * wordcloud
+* moviepy
+* requests
+* tensorflow
 * spark-${SPARK_VERSION} (in /opt/work/spark-${SPARK_VERSION})
-* bigdl distribution (in /opt/work/bigdl-${BIGDL_VERSION})
-* BigDL-Tutorials (in /opt/work/BigDL-Tutorials)
+* BigDL distribution (in /opt/work/BigDL-${BigDL_VERSION})
+* BigDL source code (in /opt/work/BigDL)
 
 ### The work dir for BigDL is /opt/work.
 
-* download-bigdl.sh is used for downloading BigDL distributions.
+* downlown-bigdl.sh is used for downloading BigDL distributions.
 * start-notebook.sh is used for starting the jupyter notebook. You can specify the environment settings and spark settings to start a specified jupyter notebook.
-* bigdl-${BIGDL_VERSION} is the BigDL home of BigDL distribution.
-* dist-spark-x.x.x-scala-x.x.x-all-x.x.x-dist.zip is the zip file of BigDL distribution.
+* BigDL-${BigDL_VERSION} is the BigDL home of BigDL distribution.
+* BigDL-SPARK_x.x-x.x.x-dist.zip is the zip file of BigDL distribution.
 * spark-${SPARK_VERSION} is the Spark home.
-* BigDL-Tutorials is cloned from https://github.com/intel-analytics/BigDL-Tutorials, contains the Deep Leaning Tutorials on Apache Spark using BigDL.
+* BigDL is cloned from https://github.com/intel-analytics/BigDL, contains apps, examples using BigDL.
 
 ## How to build it.
 
-### By default, you can build a bigdl:default image with latest nightly-build BigDL distributions:
+### By default, you can build a BigDL:default image with latest nightly-build BigDL distributions, you also need to provide jdk version and jdk download url:
 
-    sudo docker build --rm -t bigdl/bigdl:default .
+    sudo docker build \
+        --build-arg JDK_VERSION=8u192 \
+        --build-arg JDK_URL=http://your-http-url-to-download-jdk \
+        --rm -t intelanalytics/bigdl:default .
 
 ### If you need http and https proxy to build the image:
 
     sudo docker build \
         --build-arg http_proxy=http://your-proxy-host:your-proxy-port \
         --build-arg https_proxy=https://your-proxy-host:your-proxy-port \
-        --rm -t bigdl/bigdl:default .
+        --build-arg JDK_VERSION=8u192 \
+        --build-arg JDK_URL=http://your-http-url-to-download-jdk \
+        --build-arg no_proxy=x.x.x.x \
+        --rm -t intelanalytics/bigdl:default .
 
-### You can also specify the BIGDL_VERSION and SPARK_VERSION to build a specific BigDL image:
+### You can also specify the BigDL_VERSION and SPARK_VERSION to build a specific BigDL image:
 
     sudo docker build \
         --build-arg http_proxy=http://your-proxy-host:your-proxy-port \
         --build-arg https_proxy=https://your-proxy-host:your-proxy-port \
-        --build-arg BIGDL_VERSION=0.2.0 \
-        --build-arg SPARK_VERSION=2.1.1 \
-        --rm -t bigdl/bigdl:0.2.0-spark-2.1.1 .
+        --build-arg JDK_VERSION=8u192 \
+        --build-arg JDK_URL=http://your-http-url-to-download-jdk \
+        --build-arg no_proxy=x.x.x.x \
+        --build-arg BIGDL_VERSION=0.14.0 \
+        --build-arg SPARK_VERSION=2.4.6 \
+        --rm -t intelanalytics/bigdl:latest .
 
 ## How to use the image.
 
 ### To start a notebook directly with a specified port(e.g. 12345). You can view the notebook on http://[host-ip]:12345
 
-    sudo docker run -it --rm -p 12345:12345 -e NotebookPort=12345 -e NotebookToken=your-token bigdl/bigdl:default
+    sudo docker run -it --rm -p 12345:12345 \
+        intelanalytics/bigdl:default
 
-    sudo docker run -it --rm --net=host -e NotebookPort=12345 -e NotebookToken=your-token bigdl/bigdl:default
+    sudo docker run -it --rm --net=host \
+        intelanalytics/bigdl:default
 
-    sudo docker run -it --rm -p 12345:12345 -e NotebookPort=12345 -e NotebookToken=your-token bigdl/bigdl:0.2.0-spark-2.1.1
+    sudo docker run -it --rm -p 12345:12345 \
+        intelanalytics/bigdl:latest
 
-    sudo docker run -it --rm --net=host -e NotebookPort=12345 -e NotebookToken=your-token bigdl/bigdl:0.2.0-spark-2.1.1
+    sudo docker run -it --rm --net=host \
+        intelanalytics/bigdl:spark_2.4.6
 
 ### If you need http and https proxy in your environment:
 
-    sudo docker run -it --rm -p 12345:12345 -e NotebookPort=12345 -e NotebookToken=your-token -e http_proxy=http://your-proxy-host:your-proxy-port -e https_proxy=https://your-proxy-host:your-proxy-port bigdl/bigdl:default
+    sudo docker run -it --rm -p 12345:12345 \
+        -e http_proxy=http://your-proxy-host:your-proxy-port \
+        -e https_proxy=https://your-proxy-host:your-proxy-port \
+        intelanalytics/bigdl:default
 
-    sudo docker run -it --rm --net=host -e NotebookPort=12345 -e NotebookToken=your-token -e http_proxy=http://your-proxy-host:your-proxy-port -e https_proxy=https://your-proxy-host:your-proxy-port  bigdl/bigdl:default
+    sudo docker run -it --rm --net=host \
+        -e http_proxy=http://your-proxy-host:your-proxy-port \
+        -e https_proxy=https://your-proxy-host:your-proxy-port \
+        intelanalytics/bigdl:default
 
-    sudo docker run -it --rm -p 12345:12345 -e NotebookPort=12345 -e NotebookToken=your-token -e http_proxy=http://your-proxy-host:your-proxy-port -e https_proxy=https://your-proxy-host:your-proxy-port  bigdl/bigdl:0.2.0-spark-2.1.1
+    sudo docker run -it --rm -p 12345:12345 \
+        -e http_proxy=http://your-proxy-host:your-proxy-port \
+        -e https_proxy=https://your-proxy-host:your-proxy-port \
+        intelanalytics/bigdl:spark_2.4.6
 
-    sudo docker run -it --rm --net=host -e NotebookPort=12345 -e NotebookToken=your-token -e http_proxy=http://your-proxy-host:your-proxy-port -e https_proxy=https://your-proxy-host:your-proxy-port bigdl/bigdl:0.2.0-spark-2.1.1
+    sudo docker run -it --rm --net=host \
+        -e http_proxy=http://your-proxy-host:your-proxy-port \
+        -e https_proxy=https://your-proxy-host:your-proxy-port \
+        intelanalytics/bigdl:spark_2.4.6
 
 ### You can also start the container first
 
-    sudo docker run -it --rm --net=host -e NotebookPort=12345 -e NotebookToken=your-token bigdl/bigdl:default bash
+    sudo docker run -it --rm --net=host \
+        intelanalytics/bigdl:default bash
 
 ### In the container, after setting proxy and ports, you can start the Notebook by:
 
-    /opt/work/start-notebook.sh
+    /opt/work/start-notebook.sh --port=YOUR_PORT --token=YOUR_TOKEN
+
+## Notice
+
+### If you need nightly build version of BigDL, please pull the image form Dockerhub with:
+
+    sudo docker pull intelanalytics/bigdl:latest
+
+### Please follow the readme in each app folder to test the jupyter notebooks !!!
+
+### With 0.3+ version of BigDL Docker image, you can specify the runtime conf of spark
+
+    sudo docker run -itd --net=host \
+        -e http_proxy=http://your-proxy-host:your-proxy-port  \
+        -e https_proxy=https://your-proxy-host:your-proxy-port  \
+        -e RUNTIME_SPARK_MASTER=spark://your-spark-master-host:your-spark-master-port or local[*] \
+        -e RUNTIME_DRIVER_CORES=4 \
+        -e RUNTIME_DRIVER_MEMORY=20g \
+        -e RUNTIME_EXECUTOR_CORES=4 \
+        -e RUNTIME_EXECUTOR_MEMORY=20g \
+        -e RUNTIME_EXECUTOR_INSTANCES=1 \
+        intelanalytics/bigdl:latest
+
+
+## Run Notebook On K8s
+### Deploy notebook
+Execute the command to deploy notebook service
+```bash
+kubectl apply -f deployment.yaml
+```
+
+> you should replace the nfs `claimName` with your nfs `claimName` on `deployment.yaml` file.
+
+### Port forward
+you can execute `kubectl get pods | grep bigdl` to find the pod name likes `bigdl-notebook-XXX`, then to forward the port:
+```bash
+kubectl port-forward --namespace default bigdl-notebook-XXX 12345:12345 --address 0.0.0.0
+```
+
+## Run Notebook On K8S and Start Jupyter Task On K8S
+### 1. Prepare the k8s config
+Create `bigdl` namespace:  
+```bash
+kubectl create namespace bigdl
+```
+Store k8s config configuration with secret to be able to start pods on k8s cluster.
+```bash
+kubectl create secret generic kubeconf --from-file=/root/.kube/config -n bigdl
+```
+### 2. Prepare the NFS
+Steps:
+1. please install nfs first.
+2. create nfs pvc with `deployment-nfs.yaml`, the namespace on this file all named `bigdl` and you can replace that namespace with other namespace.  
+```bash
+kubectl apply -f deployment-nfs.yaml
+```
+
+### 3. Start Notebook On K8S
+#### Create Deployment On K8S
+Create `Deployment` with `deployment-k8s.yaml` file.  
+```bash
+kubectl apply -f deployment-k8s.yaml
+```
+
+You can find the pod started by running the following command:  
+```bash
+kubectl get pods -n bigdl | grep bigdl-notebook
+```
+> The example of pod name: bigdl-notebook-XXXX（JupyterLab runs on this pod）
+
+Check the pod's logs:
+```bash
+kubectl logs bigdl-notebook-XXXX -n bigdl
+```
+
+### 4. Access Service
+#### Access services through k8s svc
+You can find the svc named "bigdl-notebook" and access the service through the way provided by the svc of k8s.
+```bash
+kubectl get svc -n bigdl
+```
+
+|Service|Port|
+---|---
+|NoteBook|NodePort|
+|TensorBoard|NodePort|

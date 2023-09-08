@@ -14,14 +14,25 @@
 # limitations under the License.
 #
 
-from bigdl.dllib.utils.file_utils import get_file_list
+from contextlib import closing
+import socket
+import sys
+import tempfile
+import shutil
+
+from bigdl.dllib.utils import log4Error
+from bigdl.dllib.utils.file_utils import get_file_list, is_local_path
 from bigdl.orca.data import SparkXShards
 from bigdl.orca.data.utils import get_size
+from bigdl.orca.data.file import put_local_dir_tree_to_remote, put_local_file_to_remote,\
+    get_remote_file_to_local, get_remote_dir_to_local
 from bigdl.dllib.utils.utils import convert_row_to_numpy
+from functools import partial
 import numpy as np
 import pickle
 import os
 import subprocess
+from bigdl.dllib.utils.log4Error import *
 
 
 def find_latest_checkpoint(model_dir, model_type="bigdl"):
@@ -72,7 +83,6 @@ def find_latest_checkpoint(model_dir, model_type="bigdl"):
 
 def convert_predict_rdd_to_xshard(data, prediction_rdd):
     import numpy as np
-    from bigdl.orca.data import SparkXShards
 
     def group_index(iter):
         for data in iter:
@@ -116,13 +126,29 @@ def convert_predict_rdd_to_xshard(data, prediction_rdd):
     return SparkXShards(result_rdd)
 
 
-def update_predict_xshards(xshard, pred_xshards):
-    def updates(d1_d2):
+def update_predict_xshards(xshards, pred_xshards):
+    def update_dict(d1_d2):
         d1, d2 = d1_d2
         d1.update(d2)
         return d1
 
-    result = SparkXShards(xshard.rdd.zip(pred_xshards.rdd).map(updates))
+    result = SparkXShards(xshards.rdd.zip(pred_xshards.rdd).map(update_dict),
+                          class_name="builtins.dict")
+    return result
+
+
+def add_predict_to_pd_xshards(xshards, pred_xshards):
+    def add_prediction(df_preds):
+        df, preds = df_preds
+        preds = preds["prediction"]
+        if isinstance(preds[0], np.ndarray):
+            df["prediction"] = [pred.tolist() for pred in preds]
+        else:
+            df["prediction"] = [pred for pred in preds]
+        return df
+
+    result = SparkXShards(xshards.rdd.zip(pred_xshards.rdd).map(add_prediction),
+                          class_name="pandas.core.frame.DataFrame")
     return result
 
 
@@ -154,19 +180,17 @@ def convert_predict_xshards_to_dataframe(df, pred_shards):
 
 def convert_predict_rdd_to_dataframe(df, prediction_rdd):
     from pyspark.sql import Row
-    from pyspark.sql.types import StructType, StructField, FloatType, ArrayType
-    from pyspark.ml.linalg import VectorUDT, Vectors
+    from pyspark.sql.types import FloatType, ArrayType
+    from pyspark.ml.linalg import Vectors
 
     def combine(pair):
         # list of np array
         if isinstance(pair[1], list):
             row = Row(*([pair[0][col] for col in pair[0].__fields__] +
                         [[Vectors.dense(elem) for elem in pair[1]]]))
-            return row, ArrayType(VectorUDT())
         # scalar
         elif len(pair[1].shape) == 0:
             row = Row(*([pair[0][col] for col in pair[0].__fields__] + [float(pair[1].item(0))]))
-            return row, FloatType()
         # np ndarray
         else:
             dim = len(pair[1].shape)
@@ -174,83 +198,182 @@ def convert_predict_rdd_to_dataframe(df, prediction_rdd):
                 # np 1-D array
                 row = Row(*([pair[0][col] for col in pair[0].__fields__] +
                             [Vectors.dense(pair[1])]))
-                return row, VectorUDT()
             else:
                 # multi-dimensional array
                 structType = FloatType()
                 for _ in range(dim):
                     structType = ArrayType(structType)
                 row = Row(*([pair[0][col] for col in pair[0].__fields__] + [pair[1].tolist()]))
-                return row, structType
+        return row
 
     combined_rdd = df.rdd.zip(prediction_rdd).map(combine)
-    type = combined_rdd.map(lambda data: data[1]).first()
-    result_rdd = combined_rdd.map(lambda data: data[0])
-    schema = StructType(df.schema.fields + [StructField('prediction', type)])
-    result_df = result_rdd.toDF(schema)
+    columns = df.columns + ["prediction"]
+    # Converting to DataFrame will trigger the computation
+    # to infer the schema of the prediction column.
+    result_df = combined_rdd.toDF(columns)
     return result_df
 
 
-def arrays2dict(iter, feature_cols, label_cols, shard_size=None):
-    def init_result_lists():
-        feature_lists = [[] for col in feature_cols]
-        if label_cols is not None:
-            label_lists = [[] for col in label_cols]
-        else:
-            label_lists = None
-        return feature_lists, label_lists
+def _stack_arrs(arrs):
+    if isinstance(arrs, list):
+        # stack arrs if arrs is a list.
+        return np.stack(arrs)
+    else:
+        # do nothing if arrs are not a list.
+        return arrs
 
-    def add_row(data, results):
+
+def _merge_rows(results):
+    try:
+        result_arrs = [_stack_arrs(l) for l in results]
+    except ValueError:
+        log4Error.invalidInputError(False, "Elements in the same column must have the same "
+                                           "shape, please drop, pad or truncate the columns "
+                                           "that do not meet this requirement.")
+    if len(result_arrs) == 1:
+        result_arrs = result_arrs[0]
+    else:
+        result_arrs = tuple(result_arrs)
+    return result_arrs
+
+
+def _generate_output_dict(feature_lists, label_lists, feature_cols=None, label_cols=None):
+    feature_arrs = _merge_rows(feature_lists)
+    if label_cols is not None:
+        label_arrs = _merge_rows(label_lists)
+        return {"x": feature_arrs, "y": label_arrs}
+    else:
+        return {"x": feature_arrs}
+
+
+def _generate_feature_dict(feature_lists, label_lists, feature_cols=None, label_cols=None):
+    cols = feature_cols
+    feature_arrs = _merge_rows(feature_lists)
+    if feature_cols and len(feature_cols) == 1:
+        feature_arrs = tuple(feature_arrs)
+    data = feature_arrs
+    if label_cols is not None:
+        cols = cols + label_cols
+        label_arrs = _merge_rows(label_lists)
+        if len(label_cols) == 1:
+            label_arrs = tuple(label_arrs)
+        data = data + label_arrs
+    result = dict()
+    for i in range(0, len(cols)):
+        result[cols[i]] = data[i]
+    return result
+
+
+def _generate_output_pandas_df(feature_lists, label_lists, feature_cols, label_cols=None):
+    import pandas as pd
+    feature_arrs = _merge_rows(feature_lists)
+    label_cols = [] if label_cols is None else label_cols
+    df = pd.DataFrame(columns=feature_cols + label_cols)
+    if isinstance(feature_arrs, np.ndarray):
+        feature_arrs = feature_arrs.reshape(-1)
+    else:
+        feature_arrs = list(map(lambda x: x.reshape(-1), feature_arrs))
+    for i, feature_col in enumerate(feature_cols):
+        df[feature_col] = feature_arrs[i]
+    if label_cols:
+        label_arrs = _merge_rows(label_lists)
+    for i, label_col in enumerate(label_cols):
+        df[label_col] = label_arrs[i]
+    return df
+
+
+def arrays2others(iter, feature_cols, label_cols, shard_size=None, generate_func=None):
+    def init_result_lists(first_row, cols):
+        if shard_size:
+            # pre allocate numpy array when shard_size is provided
+            if isinstance(first_row, np.ndarray):
+                return [np.empty((shard_size,) + first_row.shape, first_row.dtype)]
+            else:
+                return [np.empty((shard_size,) + r.shape, r.dtype) for r in first_row]
+        else:
+            return [[] for r in cols]
+
+    def add_row(data, results, current):
         if not isinstance(data, list):
             arrays = [data]
         else:
             arrays = data
 
         for i, arr in enumerate(arrays):
-            results[i].append(arr)
+            if shard_size:
+                current = current % shard_size
+                results[i][current] = arr
+            else:
+                results[i].append(arr)
 
-    def merge_rows(results):
-        result_arrs = [np.stack(l) for l in results]
-        if len(result_arrs) == 1:
-            result_arrs = result_arrs[0]
-        else:
-            result_arrs = tuple(result_arrs)
-        return result_arrs
-
-    def generate_output(feature_lists, label_lists):
-        feature_arrs = merge_rows(feature_lists)
-        if label_cols is not None:
-            label_arrs = merge_rows(label_lists)
-            return {"x": feature_arrs, "y": label_arrs}
-        else:
-            return {"x": feature_arrs}
-
-    feature_lists, label_lists = init_result_lists()
+    feature_lists = None
+    label_lists = None
     counter = 0
 
     for row in iter:
-        counter += 1
-        add_row(row[0], feature_lists)
+        if feature_lists is None:
+            feature_lists = init_result_lists(row[0], feature_cols)
+        add_row(row[0], feature_lists, counter)
         if label_cols is not None:
-            add_row(row[1], label_lists)
+            if label_lists is None:
+                label_lists = init_result_lists(row[1], label_cols)
+            add_row(row[1], label_lists, counter)
+        counter += 1
 
         if shard_size and counter % shard_size == 0:
-            yield generate_output(feature_lists, label_lists)
-            feature_lists, label_lists = init_result_lists()
+            # output put a shard when current shard is full
+            yield generate_func(feature_lists, label_lists, feature_cols, label_cols)
+            feature_lists = None
+            label_lists = None
 
-    if feature_lists[0]:
-        yield generate_output(feature_lists, label_lists)
+    if feature_lists is not None:
+        if shard_size:
+            # remove empty part of the ndarray in the last shard
+            rest_size = counter % shard_size
+            feature_lists = [feature[0:rest_size] for feature in feature_lists]
+            if label_cols is not None:
+                label_lists = [label[0:rest_size] for label in label_lists]
+        # output last shard
+        yield generate_func(feature_lists, label_lists, feature_cols, label_cols)
+
+
+arrays2dict = partial(arrays2others, generate_func=_generate_output_dict)
+arrays2feature_dict = partial(arrays2others, generate_func=_generate_feature_dict)
+arrays2pandas = partial(arrays2others, generate_func=_generate_output_pandas_df)
 
 
 def transform_to_shard_dict(data, feature_cols, label_cols=None):
+    def single_col_to_numpy(col_series, dtype):
+        if dtype == np.ndarray:
+            # In this case, directly calling to_numpy will make the result
+            # ndarray have type np.object.
+            # Need to explicitly specify the dtype.
+            dtype = col_series.iloc[0].dtype
+            return np.array([i.tolist() for i in col_series], dtype=dtype)
+        else:
+            return col_series.to_numpy()
+
     def to_shard_dict(df):
         result = dict()
-        result["x"] = [df[feature_col].to_numpy() for feature_col in feature_cols]
+        col_types = df.dtypes
+        if len(feature_cols) == 1:
+            featureLists = df[feature_cols[0]].tolist()
+            result["x"] = np.stack(featureLists, axis=0)
+        else:
+            result["x"] = [single_col_to_numpy(df[feature_col], col_types[feature_col])
+                           for feature_col in feature_cols]
+
         if label_cols:
-            result["y"] = df[label_cols[0]].to_numpy()
+            y = [single_col_to_numpy(df[label_col], col_types[label_col])
+                 for label_col in label_cols]
+            if len(label_cols) == 1:
+                y = y[0]
+            result["y"] = y
+
         return result
 
     data = data.transform_shard(to_shard_dict)
+    data._set_class_name("builtins.dict")
     return data
 
 
@@ -258,19 +381,19 @@ def process_xshards_of_pandas_dataframe(data, feature_cols, label_cols=None, val
                                         mode=None):
     data = transform_to_shard_dict(data, feature_cols, label_cols)
     if mode == "fit":
-        if validation_data:
-            assert validation_data._get_class_name() == 'pandas.core.frame.DataFrame', \
-                "train data and validation data should be both XShards of Pandas DataFrame"
+        if validation_data is not None:
+            invalidInputError(validation_data._get_class_name() == 'pandas.core.frame.DataFrame',
+                              "train data and validation data should be both XShards of Pandas"
+                              " DataFrame")
             validation_data = transform_to_shard_dict(validation_data, feature_cols, label_cols)
         return data, validation_data
     else:
         return data
 
 
-def _dataframe_to_xshards(data, feature_cols, label_cols=None, accept_str_col=False):
-    from bigdl.orca import OrcaContext
+def _dataframe_to_xshards(data, feature_cols, label_cols=None,
+                          accept_str_col=False, shard_size=None):
     schema = data.schema
-    shard_size = OrcaContext._shard_size
     numpy_rdd = data.rdd.map(lambda row: convert_row_to_numpy(row,
                                                               schema,
                                                               feature_cols,
@@ -280,23 +403,80 @@ def _dataframe_to_xshards(data, feature_cols, label_cols=None, accept_str_col=Fa
                                                               feature_cols,
                                                               label_cols,
                                                               shard_size))
+    return SparkXShards.lazy(shard_rdd, class_name="builtins.dict")
+
+
+def dataframe_to_xshards_of_feature_dict(data, feature_cols, label_cols=None,
+                                         accept_str_col=False):
+    '''
+    This function transforms a spark dataframe to xshards of feature dict (all feature_cols
+    and label_cols will be merged to one dictionary).
+    :param data: a spark dataframe
+    :param feature_cols: the col names you would like to select and transform to ndarray
+    :param label_cols: the target col name you would like to select and transform to ndarray
+           typically, you may leave this to None since there is no difference to use
+           feature_cols directly.
+    :param accept_str_col: bool, states if allow str to be a valid type.
+
+    :return: a sparkxshards of ndarray dictionary with feature_cols+label_cols as keys.
+    '''
+    from bigdl.orca import OrcaContext
+    schema = data.schema
+    shard_size = OrcaContext._shard_size
+    numpy_rdd = data.rdd.map(lambda row: convert_row_to_numpy(row,
+                                                              schema,
+                                                              feature_cols,
+                                                              label_cols,
+                                                              accept_str_col))
+    shard_rdd = numpy_rdd.mapPartitions(lambda x: arrays2feature_dict(x,
+                                                                      feature_cols,
+                                                                      label_cols,
+                                                                      shard_size))
+    return SparkXShards(shard_rdd)
+
+
+def dataframe_to_xshards_of_pandas_df(data, feature_cols, label_cols=None, accept_str_col=False):
+    '''
+    This function transform a spark dataframe to xshards of pandas dataframe.
+    :param data: a spark dataframe
+    :param feature_cols: the col names you would like to select and transform to pandas
+    :param label_cols: the target col name you would like to select and transform to pandas
+           typically, you may leave this to None since there is no difference to use
+           feature_cols directly.
+    :param accept_str_col: bool, states if allow str to be a valid type.
+
+    :return: a sparkxshards of pandas dataframe with feature_cols+label_cols as header.
+    '''
+    from bigdl.orca import OrcaContext
+    schema = data.schema
+    shard_size = OrcaContext._shard_size
+    numpy_rdd = data.rdd.map(lambda row: convert_row_to_numpy(row,
+                                                              schema,
+                                                              feature_cols,
+                                                              label_cols,
+                                                              accept_str_col))
+    shard_rdd = numpy_rdd.mapPartitions(lambda x: arrays2pandas(x,
+                                                                feature_cols,
+                                                                label_cols,
+                                                                shard_size))
     return SparkXShards(shard_rdd)
 
 
 def dataframe_to_xshards(data, validation_data, feature_cols, label_cols, mode="fit",
-                         num_workers=None, accept_str_col=False):
+                         num_workers=None, accept_str_col=False, shard_size=None):
     from pyspark.sql import DataFrame
     valid_mode = {"fit", "evaluate", "predict"}
-    assert mode in valid_mode, f"invalid mode {mode} " \
-                               f"mode should be one of {valid_mode}"
-    assert validation_data is None or isinstance(validation_data, DataFrame), \
-        "validation data must be a spark DataFrame when data is a DataFrame"
-    assert feature_cols is not None, \
-        "feature_col must be provided if data is a spark dataframe"
+    invalidInputError(mode in valid_mode,
+                      f"invalid mode {mode} "
+                      f"mode should be one of {valid_mode}")
+    invalidInputError(validation_data is None or isinstance(validation_data, DataFrame),
+                      "validation data must be a spark DataFrame when data is a DataFrame")
+    invalidInputError(feature_cols is not None,
+                      "feature_col must be provided if data is a spark dataframe")
 
     if mode != "predict":
-        assert label_cols is not None, \
-            "label_cols must be provided if data is a spark dataframe"
+        invalidInputError(label_cols is not None,
+                          "label_cols must be provided if data is a spark dataframe")
         # avoid empty partition for worker
         if data.rdd.getNumPartitions() < num_workers:
             data = data.repartition(num_workers)
@@ -304,16 +484,16 @@ def dataframe_to_xshards(data, validation_data, feature_cols, label_cols, mode="
             num_data_part = data.rdd.getNumPartitions()
             validation_data = validation_data.repartition(num_data_part)
 
-    data = _dataframe_to_xshards(data, feature_cols, label_cols, accept_str_col)
+    data = _dataframe_to_xshards(data, feature_cols, label_cols, accept_str_col, shard_size)
     if validation_data is not None:
         validation_data = _dataframe_to_xshards(validation_data, feature_cols, label_cols,
-                                                accept_str_col)
+                                                accept_str_col, shard_size)
 
     return data, validation_data
 
 
 def maybe_dataframe_to_xshards(data, validation_data, feature_cols, label_cols, mode="fit",
-                               num_workers=None, accept_str_col=False):
+                               num_workers=None, accept_str_col=False, shard_size=None):
     from pyspark.sql import DataFrame
     if isinstance(data, DataFrame):
         data, validation_data = dataframe_to_xshards(data, validation_data,
@@ -321,7 +501,8 @@ def maybe_dataframe_to_xshards(data, validation_data, feature_cols, label_cols, 
                                                      label_cols=label_cols,
                                                      mode=mode,
                                                      num_workers=num_workers,
-                                                     accept_str_col=accept_str_col)
+                                                     accept_str_col=accept_str_col,
+                                                     shard_size=shard_size)
     return data, validation_data
 
 
@@ -336,6 +517,29 @@ def make_data_creator(refs):
     return data_creator
 
 
+def make_dataloader_list_wrapper(func):
+    import torch
+
+    def make_feature_list(batch):
+        if func is not None:
+            batch = func(batch)
+        *features, target = batch
+        if len(features) == 1 and torch.is_tensor(features[0]):
+            features = features[0]
+        return features, target
+
+    return make_feature_list
+
+
+def reload_dataloader_creator(dataloader_func):
+    def reload_dataloader(config, batch_size):
+        dataloader = dataloader_func(config, batch_size)
+        dataloader.collate_fn = make_dataloader_list_wrapper(dataloader.collate_fn)
+        return dataloader
+
+    return reload_dataloader if dataloader_func else None
+
+
 def data_length(data):
     x = data["x"]
     if isinstance(x, np.ndarray):
@@ -344,67 +548,14 @@ def data_length(data):
         return x[0].shape[0]
 
 
-# def save_weights_tf(model, path, overwrite=True, save_format=None):
-#     import tempfile
-#     import os
-#     filename = os.path.basename(path)
-#     tmp_dir = tempfile.mkdtemp()
-#     tmp_file = os.path.join(tmp_dir, filename)
-#     model.save_weights(tmp_file, overwrite=overwrite, save_format=save_format)
-#     if save_format is None:
-#         if (path.endswith('.h5') or path.endswith('.keras') or
-#                 path.endswith('.hdf5')):
-#             save_format = 'h5'
-#         else:
-#             save_format = 'tf'
-#     else:
-#         user_format = save_format.lower().strip()
-#         if user_format in ('tensorflow', 'tf'):
-#             save_format = 'tf'
-#         elif user_format in ('hdf5', 'h5', 'keras'):
-#             save_format = 'h5'
-#     if save_format == 'tf':
-#         raise Exception("Cannot save to tensorflow format at this time")
-#
-#     with open(tmp_file, "rb") as f:
-#         content = f.read()
-#     if path.startswith("hdfs"):  # hdfs://url:port/file_path
-#         import pyarrow as pa
-#         fs = pa.hdfs.connect()
-#         with fs.open(path, 'wb') as f:
-#             result = f.write(content)
-#             f.close()
-#             return result
-#     elif path.startswith("s3"):  # s3://bucket/file_path
-#         access_key_id = os.environ["AWS_ACCESS_KEY_ID"]
-#         secret_access_key = os.environ["AWS_SECRET_ACCESS_KEY"]
-#         import boto3
-#         s3_client = boto3.Session(
-#             aws_access_key_id=access_key_id,
-#             aws_secret_access_key=secret_access_key).client('s3', verify=False)
-#         path_parts = path.split("://")[1].split('/')
-#         bucket = path_parts.pop(0)
-#         key = "/".join(path_parts)
-#         return s3_client.put_object(Bucket=bucket, Key=key, Body=content)
-#     else:
-#         if path.startswith("file://"):
-#             path = path[len("file://"):]
-#         with open(path, 'wb') as f:
-#             result = f.write(content)
-#             f.close()
-#             return result
-
-
 def save_pkl(data, path):
     if path.startswith("hdfs"):  # hdfs://url:port/file_path
-        import pyarrow as pa
-        host_port = path.split("://")[1].split("/")[0].split(":")
-        classpath = subprocess.Popen(["hadoop", "classpath", "--glob"],
-                                     stdout=subprocess.PIPE).communicate()[0]
-        os.environ["CLASSPATH"] = classpath.decode("utf-8")
-        fs = pa.hdfs.connect(host=host_port[0], port=int(host_port[1]))
-        with fs.open(path, 'wb') as f:
+        import uuid
+        file_name = str(uuid.uuid1()) + ".pkl"
+        temp_path = os.path.join(tempfile.gettempdir(), file_name)
+        with open(temp_path, 'wb') as f:
             pickle.dump(data, f)
+        put_local_file_to_remote(temp_path, path)
     elif path.startswith("s3"):  # s3://bucket/file_path
         access_key_id = os.environ["AWS_ACCESS_KEY_ID"]
         secret_access_key = os.environ["AWS_SECRET_ACCESS_KEY"]
@@ -422,3 +573,231 @@ def save_pkl(data, path):
             path = path[len("file://"):]
         with open(path, 'wb') as f:
             pickle.dump(data, f)
+
+
+def find_free_port():
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        s.bind(("", 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return s.getsockname()[1]
+
+
+def find_ip_and_free_port(pre_iter):
+    from pyspark import BarrierTaskContext
+    tc = BarrierTaskContext().get()
+    infos = tc.getLocalProperty("addresses").split(",")
+    address = infos[tc.partitionId()].split(":")[0]
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        s.bind(("", 0))
+        return [f"{address}:{s.getsockname()[1]}"]
+
+
+def get_rank(cluster_info):
+    # As task placement may not be identical between two different jobs,
+    # we cannot simply index cluster_info using partitionId to get current
+    # ip and port.
+    # The approach here is to first get all tasks' ip in this job and compute
+    # a local rank by counting how many tasks has the same ip but with lower id.
+    # We then use the local rank to find the right slot in cluster_info to find
+    # the right global_rank.
+    from pyspark import BarrierTaskContext
+    tc = BarrierTaskContext().get()
+    infos = tc.getLocalProperty("addresses").split(",")
+    idx = tc.partitionId()
+    local_ip = infos[idx].split(":")[0]
+    local_rank = 0
+    for i in range(0, idx):
+        if infos[i].startswith(local_ip):
+            local_rank += 1
+    global_rank = -1
+    local_count = 0
+    for node in cluster_info:
+        if node.startswith(local_ip):
+            local_count += 1
+        global_rank += 1
+        if local_count == local_rank + 1:
+            break
+    return global_rank
+
+
+def duplicate_stdout_stderr_to_file(log_path):
+    tee = subprocess.Popen(["tee", log_path], stdin=subprocess.PIPE)
+    os.dup2(tee.stdin.fileno(), sys.stdout.fileno())
+    os.dup2(tee.stdin.fileno(), sys.stderr.fileno())
+
+
+def get_specific_object_from_callbacks(class_type, callbacks):
+    for c in callbacks:
+        if isinstance(c, class_type):
+            return c
+    return None
+
+
+def replace_specific_object_from_callbacks(callbacks, original_class_type,
+                                           new_class_type, rank=None):
+    for c in callbacks:
+        if isinstance(c, original_class_type):
+            callbacks.remove(c)
+            new_callback = new_class_type(c, rank)
+            callbacks.append(new_callback)
+
+
+def get_replaced_path(original_filepath):
+    base_name = os.path.basename(original_filepath)
+    temp_dir = tempfile.mkdtemp()
+    return os.path.join(temp_dir, base_name)
+
+
+def process_tensorboard_in_callbacks(callbacks, mode="train", rank=None):
+    import tensorflow as tf
+
+    class EpochCopyCallback(tf.keras.callbacks.Callback):
+        def __init__(self, local_dir, remote_dir, rank=None):
+            super(EpochCopyCallback, self).__init__()
+            self.local_dir = local_dir
+            self.remote_dir = remote_dir
+            self.rank = rank
+
+        def on_epoch_end(self, epoch, logs=None):
+            if self.rank is not None:
+                if self.rank == 0:
+                    put_local_dir_tree_to_remote(self.local_dir, self.remote_dir)
+
+    class TrainBatchCopyCallback(tf.keras.callbacks.Callback):
+        def __init__(self, local_dir, remote_dir, freq, rank=None):
+            super(TrainBatchCopyCallback, self).__init__()
+            self.local_dir = local_dir
+            self.remote_dir = remote_dir
+            self.freq = freq
+            self.rank = rank
+
+        def on_train_batch_end(self, batch, logs=None):
+            if self.rank is not None:
+                if self.rank == 0:
+                    if batch % self.freq == 0:
+                        put_local_dir_tree_to_remote(self.local_dir, self.remote_dir)
+
+    class BatchCopyCallback(tf.keras.callbacks.Callback):
+        def __init__(self, local_dir, remote_dir, freq, rank=None):
+            super(BatchCopyCallback, self).__init__()
+            self.local_dir = local_dir
+            self.remote_dir = remote_dir
+            self.freq = freq
+            self.rank = rank
+
+        def on_test_batch_end(self, batch, logs=None):
+            if self.rank is not None:
+                if self.rank == 0:
+                    if batch % self.freq == 0:
+                        put_local_dir_tree_to_remote(self.local_dir, self.remote_dir)
+
+    tensorboard = get_specific_object_from_callbacks(tf.keras.callbacks.TensorBoard,
+                                                     callbacks)
+    if tensorboard:
+        original_log_dir = tensorboard.log_dir
+        replaced_log_dir = get_replaced_path(original_log_dir)
+        tensorboard.log_dir = replaced_log_dir
+
+        if tensorboard.update_freq == 'epoch':
+            # create copy callback for epoch
+            copy_callback = EpochCopyCallback(replaced_log_dir, original_log_dir, rank)
+        else:
+            # to avoid frequent copy, set update freq > 10
+            update_freq = tensorboard.update_freq if tensorboard.update_freq > 10 \
+                else 10
+            if mode == "fit":
+                # create copy callback for batch
+                copy_callback = TrainBatchCopyCallback(replaced_log_dir, original_log_dir,
+                                                       update_freq, rank)
+            else:
+                copy_callback = BatchCopyCallback(replaced_log_dir, original_log_dir,
+                                                  update_freq, rank)
+        callbacks.append(copy_callback)
+        return replaced_log_dir
+    return None
+
+
+def get_latest_checkpoint(checkpoint_dir):
+    import tensorflow as tf
+    if is_local_path(checkpoint_dir):
+        checkpoint_path = tf.train.latest_checkpoint(checkpoint_dir)
+        return checkpoint_path
+    else:
+        try:
+            temp_dir = tempfile.mkdtemp()
+            # get checkpoint file
+            remote_checkpoint_file = os.path.join(checkpoint_dir, "checkpoint")
+            local_checkpoint_file = os.path.join(temp_dir, "checkpoint")
+            get_remote_file_to_local(remote_checkpoint_file, local_checkpoint_file)
+            ckpt_name = None
+            with open(local_checkpoint_file) as f:
+                import re
+                lines = f.readlines()
+                for line in lines:
+                    m = re.compile("^model_checkpoint_path: \"(.*)\"$").match(line)
+                    if m:
+                        ckpt_name = m.group(1)
+                        break
+            if ckpt_name:
+                return os.path.join(checkpoint_dir, ckpt_name)
+            return None
+        finally:
+            shutil.rmtree(temp_dir)
+
+
+def load_model(filepath, custom_objects=None, compile=True):
+    import tensorflow as tf
+    if is_local_path(filepath):
+        model = tf.keras.models.load_model(filepath,
+                                           custom_objects=custom_objects,
+                                           compile=compile
+                                           )
+    else:
+        file_name = os.path.basename(filepath)
+        temp_dir = tempfile.mkdtemp()
+        temp_path = os.path.join(temp_dir, file_name)
+        try:
+            if filepath.endswith('.h5') or filepath.endswith('.keras'):
+                get_remote_file_to_local(filepath, temp_path)
+            else:
+                get_remote_dir_to_local(filepath, temp_path)
+
+            model = tf.keras.models.load_model(temp_path,
+                                               custom_objects=custom_objects,
+                                               compile=compile
+                                               )
+        finally:
+            shutil.rmtree(temp_dir)
+    return model
+
+
+def save_model(model, filepath, overwrite=True, include_optimizer=True, save_format=None,
+               signatures=None, options=None, filemode=None):
+    if is_local_path(filepath):
+        model.save(filepath, overwrite=overwrite, include_optimizer=include_optimizer,
+                   save_format=save_format, signatures=signatures, options=options)
+    else:
+        file_name = os.path.basename(filepath)
+        temp_dir = tempfile.mkdtemp()
+        temp_path = os.path.join(temp_dir, file_name)
+        try:
+            model.save(temp_path, overwrite=overwrite, include_optimizer=include_optimizer,
+                       save_format=save_format, signatures=signatures, options=options)
+            if save_format == 'h5' or filepath.endswith('.h5') or filepath.endswith('.keras'):
+                # hdf5 format
+                put_local_file_to_remote(temp_path, filepath, filemode)
+            else:
+                # tf format
+                put_local_dir_tree_to_remote(temp_path, filepath)
+        finally:
+            shutil.rmtree(temp_dir)
+
+
+def get_driver_node_ip():
+    """
+    Returns the IP address of the current node.
+
+    :return: the IP address of the current node.
+    """
+    import ray
+    return ray._private.services.get_node_ip_address()

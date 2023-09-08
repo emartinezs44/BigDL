@@ -32,10 +32,11 @@ def impute_timeseries_dataframe(df,
            "linear": impute by linear interpolation.
     :param const_num: only effective when mode is set to "const".
     '''
-    assert dt_col in df.columns, f"dt_col {dt_col} can not be found in df."
-    assert pd.isna(df[dt_col]).sum() == 0, "There is N/A in datetime col"
-    assert mode in ['last', 'const', 'linear'],\
-        f"mode should be one of ['last', 'const', 'linear'], but found {mode}."
+    from bigdl.nano.utils.log4Error import invalidInputError
+    invalidInputError(dt_col in df.columns, f"dt_col {dt_col} can not be found in df.")
+    invalidInputError(pd.isna(df[dt_col]).sum() == 0, "There is N/A in datetime col")
+    invalidInputError(mode in ['last', 'const', 'linear'],
+                      f"mode should be one of ['last', 'const', 'linear'], but found {mode}.")
 
     res_df = None
     if mode == "last":
@@ -43,7 +44,7 @@ def impute_timeseries_dataframe(df,
     if mode == "const":
         res_df = _const_impute_timeseries_dataframe(df, const_num)
     if mode == "linear":
-        res_df = _linear_impute_timeseries_dataframe(df)
+        res_df = _linear_impute_timeseries_dataframe(df, dt_col)
 
     return res_df
 
@@ -60,6 +61,9 @@ def _const_impute_timeseries_dataframe(df, const_num):
     return res_df
 
 
-def _linear_impute_timeseries_dataframe(df):
-    res_df = df.interpolate(axis=0, limit_direction='both')
+def _linear_impute_timeseries_dataframe(df, dt_col):
+    res_df = df.copy()
+    res_df[dt_col] = 0
+    res_df = res_df.interpolate(method='linear', axis=0, limit_direction='both')
+    res_df[dt_col] = df[dt_col]
     return res_df

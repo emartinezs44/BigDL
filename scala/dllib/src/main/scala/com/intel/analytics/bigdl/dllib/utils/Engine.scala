@@ -20,10 +20,10 @@ import java.io.{FileOutputStream, InputStream, PrintWriter}
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.log4j.Logger
 import org.apache.spark._
 import com.intel.analytics.bigdl.mkl.MKL
 import com.intel.analytics.bigdl.mkl.hardware.{Affinity, CpuInfo}
+import org.apache.logging.log4j.LogManager
 import org.apache.spark.utils.SparkUtils
 import py4j.GatewayServer
 
@@ -36,6 +36,7 @@ sealed trait EngineType
 
 case object MklBlas extends EngineType
 case object MklDnn extends EngineType
+case object NoneMkl extends EngineType
 
 /**
  * define optimizer version trait
@@ -66,12 +67,12 @@ object Engine {
       "https://bigdl-project.github.io/master/#APIGuide/Engine/")
     setNodeAndCore(nExecutor, executorCores)
     val res = if (onSpark) {
-      require(localMode == false,
+      Log4Error.invalidInputError(localMode == false,
         s"Engine.init: bigdl.localMode should not be set while onSpark is " +
           s"true. Please set correct java property.")
       Some(createSparkConf())
     } else {
-      require(localMode == true,
+      Log4Error.invalidInputError(localMode == true,
         s"Engine.init: bigdl.localMode should be set while onSpark is " +
           s"false. Please set correct java property.")
       None
@@ -126,7 +127,7 @@ object Engine {
     }
   }
 
-  private val logger = Logger.getLogger(getClass)
+  private val logger = LogManager.getLogger(getClass)
   private val singletonCounter = new AtomicBoolean()
   private var physicalCoreNumber = -1
   private var nodeNum: Int = -1
@@ -165,10 +166,11 @@ object Engine {
         gatewayServer.start()
       } catch {
         case ct: ControlThrowable =>
-          throw ct
+          Log4Error.unKnowExceptionError(false, ct.getMessage, cause = ct)
         case t: Throwable =>
-          throw new Exception(s"Uncaught exception " +
-            s"in thread ${Thread.currentThread().getName}, when staring JavaGatewayServer", t)
+          Log4Error.unKnowExceptionError(false, s"Uncaught exception " +
+            s"in thread ${Thread.currentThread().getName}, when staring JavaGatewayServer",
+            cause = t)
       }
     })
     thread.setName("py4j-executor-gateway-init")
@@ -189,7 +191,8 @@ object Engine {
       createGatewayPortFile(gatewayServer.getListeningPort)
     } catch {
       case NonFatal(e) =>
-        throw new Exception("Could not create java gateway port file", e)
+        Log4Error.unKnowExceptionError(false, s"Could not create java gateway port file",
+          cause = e)
     }
   }
 
@@ -200,7 +203,9 @@ object Engine {
     System.getProperty("bigdl.localMode", "false").toLowerCase(Locale.ROOT) match {
       case "true" => true
       case "false" => false
-      case option => throw new IllegalArgumentException(s"Unknown bigdl.localMode $option")
+      case option =>
+        Log4Error.invalidOperationError(false, s"Unknown bigdl.localMode $option")
+        false
     }
   }
 
@@ -219,7 +224,10 @@ object Engine {
     System.getProperty("bigdl.engineType", "mklblas").toLowerCase(Locale.ROOT) match {
       case "mklblas" => MklBlas
       case "mkldnn" => MklDnn
-      case engineType => throw new IllegalArgumentException(s"Unknown engine type $engineType")
+      case "nonemkl" => NoneMkl
+      case engineType =>
+        Log4Error.invalidOperationError(false, s"Unknown engine type $engineType")
+        MklDnn
     }
   }
 
@@ -231,7 +239,9 @@ object Engine {
     System.getProperty("bigdl.optimizerVersion", "optimizerv1").toLowerCase(Locale.ROOT) match {
       case "optimizerv1" => OptimizerV1
       case "optimizerv2" => OptimizerV2
-      case optimizerVersion => throw new IllegalArgumentException(s"Unknown type $optimizerVersion")
+      case optimizerVersion =>
+        Log4Error.invalidOperationError(false, s"Unknown type $optimizerVersion")
+        OptimizerV2
     }
   }
 
@@ -274,7 +284,7 @@ object Engine {
 
   private def getNumMachineCores: Int = {
     val coreNum = Runtime.getRuntime().availableProcessors()
-    require(coreNum > 0, "Get a non-positive core number")
+    Log4Error.invalidInputError(coreNum > 0, "Get a non-positive core number")
     // We assume the HT is enabled
     // TODO: check the Hyper threading
     if (coreNum > 1) coreNum / 2 else 1
@@ -297,7 +307,7 @@ object Engine {
    * @return
    */
   private[bigdl] def coreNumber(): Int = {
-    require(physicalCoreNumber != -1, s"Engine.init: Core number is " +
+    Log4Error.invalidInputError(physicalCoreNumber != -1, s"Engine.init: Core number is " +
       s"not initialized. $NOT_INIT_ERROR")
     physicalCoreNumber
   }
@@ -308,9 +318,12 @@ object Engine {
    * @param n
    */
   private[bigdl] def setCoreNumber(n: Int): Unit = {
-    require(n > 0, "Engine.init: core number is smaller than zero")
+    Log4Error.invalidInputError(n > 0, "Engine.init: core number is smaller than zero")
     physicalCoreNumber = n
-    initThreadPool(n)
+    // won't init mkl if EngineType is not mkl.
+    if (getEngineType() != NoneMkl) {
+      initThreadPool(n)
+    }
   }
 
   /**
@@ -320,7 +333,8 @@ object Engine {
    * @return
    */
   private[bigdl] def nodeNumber(): Int = {
-    require(nodeNum != -1, s"Engine.init: Node number is not initialized. $NOT_INIT_ERROR")
+    Log4Error.invalidInputError(nodeNum != -1,
+      s"Engine.init: Node number is not initialized. $NOT_INIT_ERROR")
     nodeNum
   }
 
@@ -330,7 +344,7 @@ object Engine {
    * @param n
    */
   private[bigdl] def setNodeNumber(n : Int): Unit = {
-    require(n > 0)
+    Log4Error.invalidInputError(n > 0, s"n should greater than 0, but is $n")
     nodeNum = n
   }
 
@@ -373,8 +387,9 @@ object Engine {
 
   private[bigdl] def default: ThreadPool = {
     if (_default == null) {
-      throw new IllegalStateException(s"Engine.init: Thread engine is not " +
-        s"initialized. $NOT_INIT_ERROR")
+      Log4Error.invalidOperationError(false,
+        s"Engine.init: Thread engine is not " +
+          s"initialized. $NOT_INIT_ERROR")
     }
     _default
   }
@@ -440,7 +455,7 @@ object Engine {
     val existingSparkContext = !tmpContext.getConf.contains("bigdl.temp.context")
     if (!existingSparkContext) {
       tmpContext.stop()
-      throw new IllegalArgumentException("Engine.init: Cannot find an existing"
+      Log4Error.invalidOperationError(false, "Engine.init: Cannot find an existing"
         + " spark context. Do you call this method after create spark context?")
     }
     logger.info("Find existing spark context. Checking the spark conf...")
@@ -482,7 +497,7 @@ object Engine {
     if (conf.get("spark.dynamicAllocation.enabled", null) == "true") {
       val maxExecutors = conf.get("spark.dynamicAllocation.maxExecutors", "1").toInt
       val minExecutors = conf.get("spark.dynamicAllocation.minExecutors", "1").toInt
-      require(maxExecutors == minExecutors, "Engine.init: " +
+      Log4Error.invalidInputError(maxExecutors == minExecutors, "Engine.init: " +
         "spark.dynamicAllocation.maxExecutors and " +
         "spark.dynamicAllocation.minExecutors must be identical " +
         "in dynamic allocation for BigDL")
@@ -502,11 +517,13 @@ object Engine {
     } catch {
       case s: SparkException =>
         if (s.getMessage.contains("A master URL must be set in your configuration")) {
-          throw new IllegalArgumentException("A master URL must be set in your configuration." +
+          Log4Error.invalidOperationError(false,
+            "A master URL must be set in your configuration." +
             " Or if you want to run BigDL in a local JVM environment, you should set Java " +
             "property bigdl.localMode=true")
         }
-        throw s
+        Log4Error.unKnowExceptionError(false, s.getMessage, cause = s)
+        null
     }
   }
 
@@ -519,25 +536,38 @@ object Engine {
     val master = conf.get("spark.master", null)
     if (master.toLowerCase.startsWith("local")) {
       // Spark local mode
+      // patternLocalN example: local[4]
       val patternLocalN = "local\\[(\\d+)\\]".r
+      // patternLocalNF example: local[4,2]
+      val patternLocalNF = "local\\[(\\d+),\\s*(\\d+)\\]".r
+      // patternLocalStar example: local[*]
       val patternLocalStar = "local\\[\\*\\]".r
+      // patternLocalStarF example: local[*,4]
+      val patternLocalStarF = "local\\[\\*,\\s*(\\d+)\\]".r
       master match {
         case patternLocalN(n) => Some(1, n.toInt)
+        case patternLocalNF(n, f) => Some(1, n.toInt)
         case patternLocalStar(_*) => Some(1, getNumMachineCores)
-        case _ => throw new IllegalArgumentException(s"Can't parser master $master")
+        case patternLocalStarF(_*) => Some(1, getNumMachineCores)
+        case _ =>
+          Log4Error.invalidOperationError(false, s"Can't parse master $master")
+          Some(1, 0)
       }
     } else if (master.toLowerCase.startsWith("spark")) {
       // Spark standalone mode
       val coreString = conf.get("spark.executor.cores", null)
       val maxString = conf.get("spark.cores.max", null)
-      require(coreString != null, "Engine.init: Can't find executor core number" +
+      Log4Error.invalidInputError(coreString != null,
+        "Engine.init: Can't find executor core number" +
         ", do you submit with --executor-cores option")
-      require(maxString != null, "Engine.init: Can't find total core number" +
+      Log4Error.invalidInputError(maxString != null,
+        "Engine.init: Can't find total core number" +
         ". Do you submit with --total-executor-cores")
       val core = coreString.toInt
       val nodeNum = dynamicAllocationExecutor(conf).getOrElse {
         val total = maxString.toInt
-        require(total >= core && total % core == 0, s"Engine.init: total core " +
+        Log4Error.invalidInputError(total >= core && total % core == 0,
+          s"Engine.init: total core " +
           s"number($total) can't be divided " +
           s"by single core number($core) provided to spark-submit")
         total / core
@@ -546,13 +576,15 @@ object Engine {
     } else if (master.toLowerCase.startsWith("yarn")) {
       // yarn mode
       val coreString = conf.get("spark.executor.cores", null)
-      require(coreString != null, "Engine.init: Can't find executor core number" +
+      Log4Error.invalidInputError(coreString != null,
+        "Engine.init: Can't find executor core number" +
         ", do you submit with " +
         "--executor-cores option")
       val core = coreString.toInt
       val node = dynamicAllocationExecutor(conf).getOrElse {
         val numExecutorString = conf.get("spark.executor.instances", null)
-        require(numExecutorString != null, "Engine.init: Can't find executor number" +
+        Log4Error.invalidInputError(numExecutorString != null,
+          "Engine.init: Can't find executor number" +
           ", do you submit with " +
           "--num-executors option")
         numExecutorString.toInt
@@ -560,18 +592,22 @@ object Engine {
       Some(node, core)
     } else if (master.toLowerCase.startsWith("mesos")) {
       // mesos mode
-      require(conf.get("spark.mesos.coarse", null) != "false", "Engine.init: " +
+      Log4Error.invalidInputError(conf.get("spark.mesos.coarse", null) != "false",
+        "Engine.init: " +
         "Don't support mesos fine-grained mode")
       val coreString = conf.get("spark.executor.cores", null)
-      require(coreString != null, "Engine.init: Can't find executor core number" +
+      Log4Error.invalidInputError(coreString != null,
+        "Engine.init: Can't find executor core number" +
         ", do you submit with --executor-cores option")
       val core = coreString.toInt
       val nodeNum = dynamicAllocationExecutor(conf).getOrElse {
         val maxString = conf.get("spark.cores.max", null)
-        require(maxString != null, "Engine.init: Can't find total core number" +
+        Log4Error.invalidInputError(maxString != null,
+          "Engine.init: Can't find total core number" +
           ". Do you submit with --total-executor-cores")
         val total = maxString.toInt
-        require(total >= core && total % core == 0, s"Engine.init: total core " +
+        Log4Error.invalidInputError(total >= core && total % core == 0,
+          s"Engine.init: total core " +
           s"number($total) can't be divided " +
           s"by single core number($core) provided to spark-submit")
         total / core
@@ -581,21 +617,26 @@ object Engine {
       // Spark-on-kubernetes mode
       val coreString = conf.get("spark.executor.cores", null)
       val maxString = conf.get("spark.cores.max", null)
-      require(coreString != null, "Engine.init: Can't find executor core number" +
+      Log4Error.invalidInputError(coreString != null,
+        "Engine.init: Can't find executor core number" +
         ", do you submit with --conf spark.executor.cores option")
-      require(maxString != null, "Engine.init: Can't find total core number" +
+      Log4Error.invalidInputError(maxString != null,
+        "Engine.init: Can't find total core number" +
         ". Do you submit with --conf spark.cores.max option")
       val core = coreString.toInt
       val nodeNum = dynamicAllocationExecutor(conf).getOrElse {
         val total = maxString.toInt
-        require(total >= core && total % core == 0, s"Engine.init: total core " +
+        Log4Error.invalidInputError(total >= core && total % core == 0,
+          s"Engine.init: total core " +
           s"number($total) can't be divided " +
           s"by single core number($core) provided to spark-submit")
         total / core
       }
       Some(nodeNum, core)
     } else {
-      throw new IllegalArgumentException(s"Engine.init: Unsupported master format $master")
+      Log4Error.invalidOperationError(false,
+        s"Engine.init: Unsupported master format $master")
+      Some(1, 0)
     }
   }
 

@@ -17,7 +17,8 @@
 package com.intel.analytics.bigdl.grpc;
 
 import org.apache.commons.cli.*;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 
@@ -31,10 +32,10 @@ public abstract class AbstractGrpcBase {
 
     protected <T> T getConfigFromYaml(Class<T> valueType, String defaultConfigPath)
             throws IOException, IllegalAccessException, InstantiationException {
-        Logger logger = Logger.getLogger(getClass().getName());
+        Logger logger = LogManager.getLogger(getClass().getName());
         options.addOption(new Option(
                 "c", "config", true, "config path"));
-        CommandLineParser parser = new DefaultParser();
+        CommandLineParser parser = new BasicParser();
         HelpFormatter formatter = new HelpFormatter();
         cmd = null;
 
@@ -54,14 +55,15 @@ public abstract class AbstractGrpcBase {
             try {
                 return ConfigParser.loadConfigFromPath(configPath, valueType);
             } catch (IOException e) {
-                logger.info("Config is not provided, using default");
-                return valueType.newInstance();
+                logger.warn("loading config file failed: " + e.getMessage());
+                logger.warn("using default config parameters");
+                return null;
             }
 
         }
         else {
-            logger.info("Config is not provided, using default");
-            return valueType.newInstance();
+            logger.info("Config path is not provided, using default");
+            return null;
         }
     }
 

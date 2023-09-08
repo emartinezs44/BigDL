@@ -20,6 +20,7 @@ from argparse import ArgumentParser
 
 from bigdl.orca import init_orca_context, stop_orca_context
 from bigdl.friesian.feature import FeatureTable
+from bigdl.dllib.utils.log4Error import *
 
 
 LABEL_COL = 0
@@ -88,7 +89,7 @@ def preprocess_and_save(data_tbl, models, mode, save_path):
         elif mode == "test":
             save_path = os.path.join(save_path, "saved_data_test")
         else:
-            raise ValueError("mode should be either train or test")
+            invalidInputError(False, "mode should be either train or test")
         print("Saving {} data files to {}".format(mode, save_path))
         data_tbl.write_parquet(save_path)
     else:
@@ -112,6 +113,10 @@ if __name__ == "__main__":
                           conf=conf)
     elif args.cluster_mode == "spark-submit":
         init_orca_context("spark-submit")
+    else:
+        invalidInputError(False,
+                          "cluster_mode should be one of 'local', 'yarn', 'standalone' and"
+                          " 'spark-submit', but got " + args.cluster_mode)
 
     time_start = time()
 

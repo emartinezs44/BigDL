@@ -19,7 +19,7 @@ package com.intel.analytics.bigdl.dllib.net.python
 import java.util.{ArrayList, List => JList}
 
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
-import com.intel.analytics.bigdl.dllib.nn.keras.KerasLayer
+import com.intel.analytics.bigdl.dllib.nn.internal.KerasLayer
 import com.intel.analytics.bigdl.dllib.utils.python.api.JTensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.common.PythonZoo
@@ -43,11 +43,11 @@ class PythonDllibNet[T: ClassTag](implicit ev: TensorNumeric[T]) extends PythonZ
 
   def newGraph(model: NetUtils[T, _],
                outputs: JList[String]): NetUtils[T, _] = {
-    model.newGraph(outputs.asScala).asInstanceOf[NetUtils[T, _]]
+    model.newGraph(outputs.asScala.toSeq).asInstanceOf[NetUtils[T, _]]
   }
 
   def freezeUpTo(model: NetUtils[T, _], names: JList[String]): Unit = {
-    model.freezeUpTo(names.asScala: _*)
+    model.freezeUpTo(names.asScala.toSeq: _*)
   }
 
   def netLoadBigDL(

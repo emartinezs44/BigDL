@@ -14,11 +14,12 @@
 # limitations under the License.
 #
 
-from bigdl.chronos.autots.model.auto_arima import AutoARIMA
-
+from bigdl.chronos.utils import LazyImport
+AutoARIMA = LazyImport('bigdl.chronos.autots.model.auto_arima.AutoARIMA')
+hp = LazyImport('bigdl.orca.automl.hp')
 import numpy as np
 from unittest import TestCase
-from bigdl.orca.automl import hp
+from ... import op_distributed, op_diff_set_all
 
 
 def get_data():
@@ -30,6 +31,8 @@ def get_data():
     return data, validation_data
 
 
+@op_distributed
+@op_diff_set_all
 class TestAutoARIMA(TestCase):
     def setUp(self) -> None:
         from bigdl.orca import init_orca_context
@@ -42,6 +45,29 @@ class TestAutoARIMA(TestCase):
     def test_fit(self):
         data, validation_data = get_data()
         auto_arima = AutoARIMA(metric="mse",
+                               p=hp.randint(0, 4),
+                               q=hp.randint(0, 4),
+                               seasonality_mode=hp.choice([True, False]),
+                               P=hp.randint(5, 12),
+                               Q=hp.randint(5, 12),
+                               m=hp.choice([4, 7])
+                               )
+        auto_arima.fit(data=data,
+                       validation_data=validation_data,
+                       epochs=1,
+                       n_sampling=1,
+                       )
+        best_model = auto_arima.get_best_model()
+
+    def test_fit_metric(self):
+        data, validation_data = get_data()
+        from torchmetrics.functional import mean_squared_error
+        import torch
+        def customized_metric(y_true, y_pred):
+            return mean_squared_error(torch.from_numpy(y_pred),
+                                      torch.from_numpy(y_true)).numpy()
+        auto_arima = AutoARIMA(metric=customized_metric,
+                               metric_mode="min",
                                p=hp.randint(0, 4),
                                q=hp.randint(0, 4),
                                seasonality_mode=hp.choice([True, False]),

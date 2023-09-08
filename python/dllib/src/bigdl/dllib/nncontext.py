@@ -20,6 +20,7 @@
 from bigdl.dllib.utils.common import *
 from bigdl.dllib.utils.file_utils import callZooFunc
 from bigdl.dllib.utils.utils import set_python_home
+from bigdl.dllib.utils.log4Error import *
 import warnings
 import multiprocessing
 import os
@@ -31,7 +32,7 @@ import sys
 def init_spark_on_local(cores=2, conf=None, python_location=None, spark_log_level="WARN",
                         redirect_spark_log=True):
     """
-    Create a SparkContext with Analytics Zoo configurations on the local machine.
+    Create a SparkContext with BigDL configurations on the local machine.
 
     :param cores: The number of cores for Spark local. Default to be 2. You can also set it to "*"
            to use all the available cores. i.e `init_spark_on_local(cores="*")`
@@ -69,9 +70,10 @@ def init_spark_on_yarn(hadoop_conf,
                        spark_log_level="WARN",
                        redirect_spark_log=True,
                        jars=None,
-                       conf=None):
+                       conf=None,
+                       py_files=None):
     """
-    Create a SparkContext with Analytics Zoo configurations on Yarn cluster for yarn-client mode.
+    Create a SparkContext with BigDL configurations on Yarn cluster for yarn-client mode.
     You only need to create a conda environment and install the python dependencies in that
     environment beforehand on the driver machine. These dependencies would be automatically
     packaged and distributed to the whole Yarn cluster.
@@ -122,29 +124,31 @@ def init_spark_on_yarn(hadoop_conf,
         hadoop_user_name=hadoop_user_name,
         spark_yarn_archive=spark_yarn_archive,
         jars=jars,
-        conf=conf)
+        conf=conf,
+        py_files=py_files)
     return sc
 
 
 def init_spark_on_yarn_cluster(hadoop_conf,
-                       conda_name,
-                       num_executors,
-                       executor_cores,
-                       executor_memory="2g",
-                       driver_cores=4,
-                       driver_memory="2g",
-                       extra_executor_memory_for_ray=None,
-                       extra_python_lib=None,
-                       penv_archive=None,
-                       additional_archive=None,
-                       hadoop_user_name="root",
-                       spark_yarn_archive=None,
-                       spark_log_level="WARN",
-                       redirect_spark_log=True,
-                       jars=None,
-                       conf=None):
+                               conda_name,
+                               num_executors,
+                               executor_cores,
+                               executor_memory="2g",
+                               driver_cores=4,
+                               driver_memory="2g",
+                               extra_executor_memory_for_ray=None,
+                               extra_python_lib=None,
+                               penv_archive=None,
+                               additional_archive=None,
+                               hadoop_user_name="root",
+                               spark_yarn_archive=None,
+                               spark_log_level="WARN",
+                               redirect_spark_log=True,
+                               jars=None,
+                               conf=None,
+                               py_files=None):
     """
-    Create a SparkContext with Analytics Zoo configurations on Yarn cluster for yarn-cluster mode.
+    Create a SparkContext with BigDL configurations on Yarn cluster for yarn-cluster mode.
     You only need to create a conda environment and install the python dependencies in that
     environment beforehand on the driver machine. These dependencies would be automatically
     packaged and distributed to the whole Yarn cluster.
@@ -185,23 +189,23 @@ def init_spark_on_yarn_cluster(hadoop_conf,
         runner = SparkRunner(spark_log_level=spark_log_level,
                              redirect_spark_log=redirect_spark_log)
         return_value = runner.init_spark_on_yarn_cluster(
-          hadoop_conf=hadoop_conf,
-          conda_name=conda_name,
-          num_executors=num_executors,
-          executor_cores=executor_cores,
-          executor_memory=executor_memory,
-          driver_cores=driver_cores,
-          driver_memory=driver_memory,
-          extra_executor_memory_for_ray=extra_executor_memory_for_ray,
-          extra_python_lib=extra_python_lib,
-          penv_archive=penv_archive,
-          additional_archive=additional_archive,
-          hadoop_user_name=hadoop_user_name,
-          spark_yarn_archive=spark_yarn_archive,
-          jars=jars,
-          conf=conf)
+            hadoop_conf=hadoop_conf,
+            conda_name=conda_name,
+            num_executors=num_executors,
+            executor_cores=executor_cores,
+            executor_memory=executor_memory,
+            driver_cores=driver_cores,
+            driver_memory=driver_memory,
+            extra_executor_memory_for_ray=extra_executor_memory_for_ray,
+            extra_python_lib=extra_python_lib,
+            penv_archive=penv_archive,
+            additional_archive=additional_archive,
+            hadoop_user_name=hadoop_user_name,
+            spark_yarn_archive=spark_yarn_archive,
+            jars=jars,
+            conf=conf,
+            py_files=py_files)
     sys.exit(return_value)
-
 
 
 def init_spark_standalone(num_executors,
@@ -219,10 +223,10 @@ def init_spark_standalone(num_executors,
                           python_location=None,
                           enable_numa_binding=False):
     """
-    Create a SparkContext with Analytics Zoo configurations on Spark standalone cluster.
+    Create a SparkContext with BigDL configurations on Spark standalone cluster.
 
     You need to specify master if you already have a Spark standalone cluster. For a
-    standalone cluster with multiple nodes, make sure that analytics-zoo is installed via
+    standalone cluster with multiple nodes, make sure that BigDL is installed via
     pip in the Python environment on every node.
     If master is not specified, a new Spark standalone cluster on the current single node
     would be started first and the SparkContext would use its master address. You need to
@@ -276,27 +280,30 @@ def init_spark_standalone(num_executors,
 
 def init_spark_on_k8s(master,
                       container_image,
+                      conda_name,
                       num_executors,
                       executor_cores,
                       executor_memory="2g",
-                      driver_memory="1g",
+                      driver_memory="2g",
                       driver_cores=4,
                       extra_executor_memory_for_ray=None,
                       extra_python_lib=None,
+                      penv_archive=None,
                       spark_log_level="WARN",
                       redirect_spark_log=True,
                       jars=None,
                       conf=None,
                       python_location=None):
     """
-    Create a SparkContext with Analytics Zoo configurations on Kubernetes cluster for k8s client
-    mode. You are recommended to use the Docker image intelanalytics/hyperzoo:latest.
-    You can refer to https://github.com/intel-analytics/analytics-zoo/tree/master/docker/hyperzoo
+    Create a SparkContext with BigDL configurations on Kubernetes cluster for k8s client
+    mode. You are recommended to use the Docker image intelanalytics/bigdl-k8s:latest.
+    You can refer to https://github.com/intel-analytics/BigDL/tree/main/docker/bigdl-k8s
     to build your own Docker image.
 
     :param master: The master address of your k8s cluster.
     :param container_image: The name of the docker container image for Spark executors.
-           For example, intelanalytics/hyperzoo:latest
+           For example, intelanalytics/bigdl-k8s:latest
+    :param conda_name: The name of the conda environment.
     :param num_executors: The number of Spark executors.
     :param executor_cores: The number of cores for each executor.
     :param executor_memory: The memory for each executor. Default to be '2g'.
@@ -304,6 +311,9 @@ def init_spark_on_k8s(master,
     :param driver_memory: The memory for the Spark driver. Default to be '1g'.
     :param extra_executor_memory_for_ray: The extra memory for Ray services. Default to be None.
     :param extra_python_lib: Extra python files or packages needed for distribution.
+           Default to be None.
+    :param penv_archive: Ideally, the program would auto-pack the conda environment specified by
+           'conda_name', but you can also pass the path to a packed file in "tar.gz" format here.
            Default to be None.
     :param spark_log_level: The log level for Spark. Default to be 'WARN'.
     :param redirect_spark_log: Whether to redirect the Spark log to local file. Default to be True.
@@ -323,6 +333,7 @@ def init_spark_on_k8s(master,
     sc = runner.init_spark_on_k8s(
         master=master,
         container_image=container_image,
+        conda_name=conda_name,
         num_executors=num_executors,
         executor_cores=executor_cores,
         executor_memory=executor_memory,
@@ -330,10 +341,79 @@ def init_spark_on_k8s(master,
         driver_cores=driver_cores,
         extra_executor_memory_for_ray=extra_executor_memory_for_ray,
         extra_python_lib=extra_python_lib,
+        penv_archive=penv_archive,
         jars=jars,
         conf=conf,
         python_location=python_location)
     return sc
+
+
+def init_spark_on_k8s_cluster(master,
+                              container_image,
+                              num_executors,
+                              executor_cores,
+                              executor_memory="2g",
+                              driver_memory="2g",
+                              driver_cores=4,
+                              extra_executor_memory_for_ray=None,
+                              extra_python_lib=None,
+                              penv_archive=None,
+                              spark_log_level="WARN",
+                              redirect_spark_log=True,
+                              jars=None,
+                              conf=None,
+                              python_location=None):
+    """
+    Create a SparkContext with BigDL configurations on Kubernetes cluster for k8s cluster
+    mode. You are recommended to use the Docker image intelanalytics/bigdl-k8s:latest.
+    You can refer to https://github.com/intel-analytics/BigDL/tree/main/docker/bigdl-k8s
+    to build your own Docker image.
+    :param master: The master address of your k8s cluster.
+    :param container_image: The name of the docker container image for Spark executors.
+           For example, intelanalytics/bigdl-k8s:latest
+    :param executor_cores: The number of cores for each executor.
+    :param executor_memory: The memory for each executor. Default to be '2g'.
+    :param driver_cores: The number of cores for the Spark driver. Default to be 4.
+    :param driver_memory: The memory for the Spark driver. Default to be '1g'.
+    :param extra_executor_memory_for_ray: The extra memory for Ray services. Default to be None.
+    :param extra_python_lib: Extra python files or packages needed for distribution.
+           Default to be None.
+    :param penv_archive: the path to a packed conda file in "tar.gz" format here. The path should be
+           that k8s pod can access.
+           Default to be None.
+    :param spark_log_level: The log level for Spark. Default to be 'WARN'.
+    :param redirect_spark_log: Whether to redirect the Spark log to local file. Default to be True.
+    :param jars: Comma-separated list of jars to be included on driver and executor's classpath.
+           Default to be None.
+    :param conf: You can append extra conf for Spark in key-value format.
+           i.e conf={"spark.executor.extraJavaOptions": "-XX:+PrintGCDetails"}.
+           Default to be None.
+    :param python_location: The path to your running Python executable. If not specified, the
+           default Python interpreter in effect would be used.
+    :return: An instance of SparkContext.
+    """
+    if os.environ.get("onDriver", "False") == "True":
+        sc = init_internal_nncontext()
+        return sc
+    else:
+        from bigdl.dllib.utils.spark import SparkRunner
+        runner = SparkRunner(spark_log_level=spark_log_level,
+                             redirect_spark_log=redirect_spark_log)
+        return_value = runner.init_spark_on_k8s_cluster(
+            master=master,
+            container_image=container_image,
+            num_executors=num_executors,
+            executor_cores=executor_cores,
+            executor_memory=executor_memory,
+            driver_memory=driver_memory,
+            driver_cores=driver_cores,
+            extra_executor_memory_for_ray=extra_executor_memory_for_ray,
+            extra_python_lib=extra_python_lib,
+            penv_archive=penv_archive,
+            jars=jars,
+            conf=conf,
+            python_location=python_location)
+        sys.exit(return_value)
 
 
 def stop_spark_standalone():
@@ -345,7 +425,6 @@ def stop_spark_standalone():
 
 
 class ZooContextMeta(type):
-
     _log_output = False
     _barrier_mode = True
 
@@ -353,19 +432,15 @@ class ZooContextMeta(type):
     def log_output(cls):
         """
         Whether to redirect Spark driver JVM's stdout and stderr to the current
-        python process. This is useful when running Analytics Zoo in jupyter notebook.
+        python process. This is useful when running BigDL in jupyter notebook.
         Default to be False. Needs to be set before initializing SparkContext.
         """
         return cls._log_output
 
     @log_output.setter
     def log_output(cls, value):
-        if SparkContext._active_spark_context is not None:
-            msg = "Setting log_output takes no effect after the context has been initialized." \
-                  " You need to set log_output before initializing the context" \
-                  " (e.g., before calling init_orca_context, init_nncontext, etc.)"
-            warnings.warn(msg)
-        assert isinstance(value, bool), "log_output should either be True or False"
+        invalidInputError(isinstance(value, bool),
+                          "log_output should either be True or False")
         cls._log_output = value
 
     @property
@@ -379,7 +454,8 @@ class ZooContextMeta(type):
 
     @barrier_mode.setter
     def barrier_mode(cls, value):
-        assert isinstance(value, bool), "barrier_mode should either be True or False"
+        invalidInputError(isinstance(value, bool),
+                          "barrier_mode should either be True or False")
         cls._barrier_mode = value
 
 
@@ -407,10 +483,11 @@ def _read_stream(fd, fn):
         # and greater than a single system page.
         buff = fd.read(8192)
         if buff:
-            fn(buff.decode('utf-8'))
+            fn(buff)
 
 
-def init_nncontext(conf=None, cluster_mode="spark-submit", spark_log_level="WARN", redirect_spark_log=True, **kwargs):
+def init_nncontext(conf=None, cluster_mode="spark-submit", spark_log_level="WARN",
+                   redirect_spark_log=True, **kwargs):
     """
     Creates or gets a SparkContext with optimized configurations for BigDL performance.
     This method will also initialize the BigDL engine.
@@ -419,10 +496,10 @@ def init_nncontext(conf=None, cluster_mode="spark-submit", spark_log_level="WARN
     before your code, you have to set the Spark configurations through command line options
     or the properties file before calling this method. In this case, you are recommended
     to use the launch scripts we provide:
-    https://github.com/intel-analytics/analytics-zoo/tree/master/scripts.
+    https://github.com/intel-analytics/BigDL/tree/main/scripts.
 
     :param conf: An instance of SparkConf. If not specified, a new SparkConf with
-           Analytics Zoo and BigDL configurations would be created and used.
+           BigDL configurations would be created and used.
            You can also input a string here to indicate the name of the application.
     :param cluster_mode: The mode for the Spark cluster. One of "local", "yarn-client",
        "yarn-cluster", "k8s-client", "standalone" and "spark-submit". Default to be "local".
@@ -431,9 +508,9 @@ def init_nncontext(conf=None, cluster_mode="spark-submit", spark_log_level="WARN
        In this case, please set the Spark configurations through command line options or
        the properties file. You need to use "spark-submit" for yarn-cluster or k8s-cluster mode.
        To make things easier, you are recommended to use the launch scripts we provide:
-       https://github.com/intel-analytics/analytics-zoo/tree/master/scripts.
+       https://github.com/intel-analytics/BigDL/tree/main/scripts.
 
-       For other cluster modes, you are recommended to install and run analytics-zoo through
+       For other cluster modes, you are recommended to install and run BigDL through
        pip, which is more convenient.
     :param spark_log_level: The log level for Spark. Default to be 'WARN'.
     :param redirect_spark_log: Whether to redirect the Spark log to local file. Default to be True.
@@ -471,9 +548,10 @@ def init_nncontext(conf=None, cluster_mode="spark-submit", spark_log_level="WARN
     elif cluster_mode in ("yarn-client", "yarn-cluster"):  # yarn-cluster or yarn-client
         hadoop_conf = os.environ.get("HADOOP_CONF_DIR")
         if not hadoop_conf:
-            assert "hadoop_conf" in kwargs, \
-                "Directory path to hadoop conf not found for yarn-client mode. Please either " \
-                "specify argument hadoop_conf or set the environment variable HADOOP_CONF_DIR"
+            invalidInputError("hadoop_conf" in kwargs,
+                              "Directory path to hadoop conf not found for yarn-client"
+                              " mode. Please either specify argument hadoop_conf or"
+                              "set the environment variable HADOOP_CONF_DIR")
             hadoop_conf = kwargs["hadoop_conf"]
         from bigdl.dllib.utils.utils import detect_conda_env_name
 
@@ -497,21 +575,33 @@ def init_nncontext(conf=None, cluster_mode="spark-submit", spark_log_level="WARN
                                             executor_memory=memory,
                                             conf=spark_args)
     elif cluster_mode.startswith("k8s"):  # k8s or k8s-client
-        if cluster_mode == "k8s-cluster":
-            raise ValueError('For k8s-cluster mode, please set cluster_mode to "spark-submit" '
-                             'and submit the application via spark-submit instead')
-        assert "master" in kwargs, "Please specify master for k8s-client mode"
-        assert "container_image" in kwargs, "Please specify container_image for k8s-client mode"
+        invalidInputError("master" in kwargs,
+                          "master is not set in k8s mode", "Please specify master for k8s mode")
+        invalidInputError("container_image" in kwargs,
+                          "container_image is not set in k8s mode",
+                          "Please specify container_image for k8s mode")
         for key in ["driver_cores", "driver_memory", "extra_executor_memory_for_ray",
-                    "extra_python_lib", "jars", "python_location"]:
+                    "extra_python_lib", "penv_archive", "jars", "python_location"]:
             if key in kwargs:
                 spark_args[key] = kwargs[key]
-        from bigdl.dllib.nncontext import init_spark_on_k8s
-
-        sc = init_spark_on_k8s(master=kwargs["master"],
-                               container_image=kwargs["container_image"],
-                               num_executors=num_nodes, executor_cores=cores,
-                               executor_memory=memory, **spark_args)
+        from bigdl.dllib.nncontext import init_spark_on_k8s, init_spark_on_k8s_cluster
+        if cluster_mode == "k8s-cluster":
+            sc = init_spark_on_k8s_cluster(master=kwargs["master"],
+                                           container_image=kwargs["container_image"],
+                                           num_executors=num_nodes,
+                                           executor_cores=cores,
+                                           executor_memory=memory,
+                                           **spark_args)
+        else:
+            from bigdl.dllib.utils.utils import detect_conda_env_name
+            conda_env_name = detect_conda_env_name()
+            sc = init_spark_on_k8s(master=kwargs["master"],
+                                   container_image=kwargs["container_image"],
+                                   conda_name=conda_env_name,
+                                   num_executors=num_nodes,
+                                   executor_cores=cores,
+                                   executor_memory=memory,
+                                   **spark_args)
     elif cluster_mode == "standalone":
         for key in ["driver_cores", "driver_memory", "extra_executor_memory_for_ray",
                     "extra_python_lib", "jars", "master", "python_location", "enable_numa_binding"]:
@@ -522,8 +612,10 @@ def init_nncontext(conf=None, cluster_mode="spark-submit", spark_log_level="WARN
         sc = init_spark_standalone(num_executors=num_nodes, executor_cores=cores,
                                    executor_memory=memory, **spark_args)
     else:
-        raise ValueError("cluster_mode can only be local, yarn-client, yarn-cluster, standalone or spark-submit, "
-                         "but got: %s".format(cluster_mode))
+        invalidInputError(False,
+                          "cluster_mode can only be local, yarn-client, yarn-cluster, standalone "
+                          "or spark-submit, "
+                          "but got: %s".format(cluster_mode))
     return sc
 
 
@@ -536,10 +628,10 @@ def init_internal_nncontext(conf=None, spark_log_level="WARN", redirect_spark_lo
     before your code, you have to set the Spark configurations through command line options
     or the properties file before calling this method. In this case, you are recommended
     to use the launch scripts we provide:
-    https://github.com/intel-analytics/analytics-zoo/tree/master/scripts.
+    https://github.com/intel-analytics/BigDL/tree/main/scripts.
 
     :param conf: An instance of SparkConf. If not specified, a new SparkConf with
-           Analytics Zoo and BigDL configurations would be created and used.
+           BigDL configurations would be created and used.
            You can also input a string here to indicate the name of the application.
     :param spark_log_level: The log level for Spark. Default to be 'WARN'.
     :param redirect_spark_log: Whether to redirect the Spark log to local file. Default to be True.
@@ -547,31 +639,6 @@ def init_internal_nncontext(conf=None, spark_log_level="WARN", redirect_spark_lo
     :return: An instance of SparkContext.
     """
     has_activate_sc = SparkContext._active_spark_context is not None
-    # The following code copied and modified from
-    # https://github.com/Valassis-Digital-Media/spylon-kernel/blob/master/
-    # spylon_kernel/scala_interpreter.py
-    if ZooContext.log_output and not has_activate_sc:
-        import subprocess
-        import pyspark.java_gateway
-        spark_jvm_proc = None
-
-        def Popen(*args, **kwargs):
-            """Wraps subprocess.Popen to force stdout and stderr from the child process
-            to pipe to this process without buffering.
-            """
-            nonlocal spark_jvm_proc
-            # Override these in kwargs to avoid duplicate value errors
-            # Set streams to unbuffered so that we read whatever bytes are available
-            # when ready, https://docs.python.org/3.6/library/subprocess.html#popen-constructor
-            kwargs['bufsize'] = 0
-            # Capture everything from stdout for display in the notebook
-            kwargs['stdout'] = subprocess.PIPE
-            # Optionally capture stderr, otherwise it'll go to the kernel log
-            kwargs['stderr'] = subprocess.PIPE
-            spark_jvm_proc = subprocess.Popen(*args, **kwargs)
-            return spark_jvm_proc
-
-        pyspark.java_gateway.Popen = Popen
 
     if isinstance(conf, six.string_types):
         sc = getOrCreateSparkContext(conf=None, appName=conf)
@@ -579,21 +646,20 @@ def init_internal_nncontext(conf=None, spark_log_level="WARN", redirect_spark_lo
         sc = getOrCreateSparkContext(conf=conf)
     sc.setLogLevel(spark_log_level)
 
-    if ZooContext.log_output and not has_activate_sc and spark_jvm_proc is not None:
-        if spark_jvm_proc.stdout is not None:
-            stdout_reader = threading.Thread(target=_read_stream,
-                                             daemon=True,
-                                             kwargs=dict(
-                                                 fd=spark_jvm_proc.stdout,
-                                                 fn=sys.stdout.write))
-            stdout_reader.start()
-        if spark_jvm_proc.stderr is not None:
-            stderr_reader = threading.Thread(target=_read_stream,
-                                             daemon=True,
-                                             kwargs=dict(
-                                                 fd=spark_jvm_proc.stderr,
-                                                 fn=sys.stderr.write))
-            stderr_reader.start()
+    if ZooContext.log_output:
+        import uuid
+        uuidStr = str(uuid.uuid4())
+        log_path = "bigdl" + uuidStr + ".log"
+        abs_path = "/tmp/" + log_path
+        logger.info(f"log path {abs_path}")
+        stderr_reader = threading.Thread(target=_read_stream,
+                                         daemon=True,
+                                         kwargs=dict(
+                                             fd=open(abs_path, 'w+'),
+                                             fn=sys.stdout.write))
+        stderr_reader.start()
+        sc.setSystemProperty("logFilename", log_path)
+
     check_version()
     if redirect_spark_log:
         redire_spark_logs()
@@ -607,7 +673,7 @@ def getOrCreateSparkContext(conf=None, appName=None):
     """
     Get the current active SparkContext or create a new SparkContext.
     :param conf: An instance of SparkConf. If not specified, a new SparkConf with
-           Analytics Zoo and BigDL configurations would be created and used.
+           BigDL configurations would be created and used.
     :param appName: The name of the application if any.
 
     :return: An instance of SparkContext.
@@ -684,7 +750,13 @@ def init_spark_conf(conf=None):
     init_env(spark_conf)
     zoo_conf = get_analytics_zoo_conf()
     # Set bigDL and TF conf
-    spark_conf.setAll(zoo_conf.items())
+    if conf and "spark.driver.extraJavaOptions" in conf:
+        extraJavaOptions = conf["spark.driver.extraJavaOptions"]
+        spark_conf.setAll(zoo_conf.items())
+        concatJavaOptions = extraJavaOptions + " " + zoo_conf.get("spark.driver.extraJavaOptions")
+        spark_conf.set("spark.driver.extraJavaOptions", concatJavaOptions)
+    else:
+        spark_conf.setAll(zoo_conf.items())
 
     if os.environ.get("BIGDL_JARS", None) and not is_spark_below_2_2():
         if 'PYSPARK_SUBMIT_ARGS' in os.environ:
@@ -742,9 +814,7 @@ def _check_spark_version(sc, report_warn):
         """ % (version_info['spark_version'], sc.version)
     if c_major != r_major:
         if not report_warn:
-            print("***************************Usage Error*****************************")
-            print(error_message)
-            raise RuntimeError(error_message)
+            invalidInputError(False, error_message)
         else:
             warnings.warn(error_message)
     elif not (c_maintenance == r_maintenance and c_feature == r_feature):
@@ -770,10 +840,10 @@ def _get_bigdl_verion_conf():
                     if sys.version_info >= (3,):
                         content = str(content, 'latin-1')
                     return load_conf(content, "=")
-    raise RuntimeError("Error while locating file zoo-version-info.properties, " +
-                       "please make sure the mvn generate-resources phase" +
-                       " is executed and a zoo-version-info.properties file" +
-                       " is located in zoo/target/extra-resources")
+    invalidInputError(False, "Error while locating file zoo-version-info.properties, "
+                             "please make sure the mvn generate-resources phase is"
+                             " executed and a zoo-version-info.properties file is"
+                             " located in zoo/target/extra-resources")
 
 
 def load_conf(conf_str, split_char=None):

@@ -16,19 +16,17 @@
 
 package com.intel.analytics.bigdl.dllib.utils
 
-import java.io._
-
 import com.intel.analytics.bigdl._
 import com.intel.analytics.bigdl.dllib.nn.Container
 import com.intel.analytics.bigdl.dllib.nn.tf.Const
-import com.intel.analytics.bigdl.dllib.optim.DistriOptimizer.{Cache, CacheV1}
+import com.intel.analytics.bigdl.dllib.optim.DistriOptimizer.Cache
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.{NumericWildcard, TensorNumeric}
 import com.intel.analytics.bigdl.dllib.tensor._
-import org.apache.commons.lang.SerializationUtils
-import org.apache.commons.lang3.SerializationException
+import org.apache.commons.io.serialization.ValidatingObjectInputStream
 import org.apache.spark.rdd.RDD
 
-import scala.reflect.ClassTag
+import java.io._
+import scala.reflect.{ClassTag, classTag}
 import scala.util.Try
 
 object Util {
@@ -69,8 +67,10 @@ object Util {
   }
 
   private[bigdl] def shift[B](data : Array[B], from : Int, to : Int): Array[B] = {
-    require(from < data.length && from >= 0, s"invalid from $from array length is ${data.length}")
-    require(to < data.length && to >= 0, s"invalid to $to array length is ${data.length}")
+    Log4Error.unKnowExceptionError(from < data.length && from >= 0,
+      s"invalid from $from array length is ${data.length}")
+    Log4Error.unKnowExceptionError(to < data.length && to >= 0,
+      s"invalid to $to array length is ${data.length}")
     if (from == to) {
       data
     } else if (from < to) {
@@ -146,7 +146,8 @@ object Util {
       .map(v => (v, v.value.shallowClone()))
     moduleConsts.foreach(_._1.value.set())
     val result = moduleConsts.map(v => (v._1.getName(), v._2)).toMap[String, Tensor[_]]
-    require(result.size == moduleConsts.length, s"${model}'s Const node's name is duplicated," +
+    Log4Error.unKnowExceptionError(result.size == moduleConsts.length,
+      s"${model}'s Const node's name is duplicated," +
       s"please check your model.")
     result
   }
@@ -235,7 +236,7 @@ object Util {
    */
   def deserialize[T: ClassTag](objectData: Array[Byte]): T = {
     if (objectData == null) {
-      throw new IllegalArgumentException("The byte[] must not be null")
+      Log4Error.invalidOperationError(false, "The byte[] must not be null")
     }
     deserialize[T](new ByteArrayInputStream(objectData))
   }
@@ -247,22 +248,29 @@ object Util {
    */
   def deserialize[T: ClassTag](inputStream: InputStream): T = {
     if (inputStream == null) {
-      throw new IllegalArgumentException("The InputStream must not be null")
+      Log4Error.invalidOperationError(false, "The InputStream must not be null")
     }
-    var in: ObjectInputStream = null
+    var in: ValidatingObjectInputStream = null
     try {
       // stream closed in the finally
-      in = new ObjectInputStream(inputStream) {
+      in = new ValidatingObjectInputStream(inputStream) {
         override def resolveClass(desc: ObjectStreamClass): Class[_] = {
           Try(Class.forName(desc.getName, false, getClass.getClassLoader)
           ).getOrElse(super.resolveClass(desc))
         }
       }
+      in.accept(classTag[T].runtimeClass)
       in.readObject().asInstanceOf[T]
     } catch {
-      case ex: ClassCastException => throw new SerializationException(ex)
-      case ex: ClassNotFoundException => throw new SerializationException(ex)
-      case ex: IOException => throw new SerializationException(ex)
+      case ex: ClassCastException =>
+        Log4Error.unKnowExceptionError(false, "class cast error", cause = ex)
+        0.asInstanceOf[T]
+      case ex: ClassNotFoundException =>
+        Log4Error.unKnowExceptionError(false, "class not found", cause = ex)
+        0.asInstanceOf[T]
+      case ex: IOException =>
+        Log4Error.unKnowExceptionError(false, "io exception", cause = ex)
+        0.asInstanceOf[T]
     } finally {
       if (in != null) Try(in.close())
     }

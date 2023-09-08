@@ -1,0 +1,281 @@
+#!/bin/bash
+
+## Usage ################################
+# source bigdl-nano-init [-o] [--option]
+# Example:
+# source bigdl-nano-init -t --disable-openmp # enable tcmalloc and disable intel-openmp
+#########################################
+
+
+# Get options
+function disable-openmp-var {
+    echo "Option: Disable opemMP and unset related variables"
+    DISABLE_OPENMP_VAR=1
+}
+
+function enable-jemalloc-var {
+    echo "Option: Enable jemalloc and set related variables"
+    ENABLE_JEMALLOC_VAR=1
+    unset ENABLE_TCMALLOC_VAR
+}
+
+function enable-tcmalloc-var {
+    echo "Option: Enable tcmalloc and set related variables"
+    ENABLE_TCMALLOC_VAR=1
+    unset ENABLE_JEMALLOC_VAR
+}
+
+function disable-allocator {
+    echo "Option: Disable jemalloc and tcmalloc and unset related variables"
+    unset ENABLE_JEMALLOC_VAR
+    unset ENABLE_TCMALLOC_VAR
+}
+
+function enable-perf-var {
+    echo "Option: Enable perf mode"
+    PERF_VAR=1
+}
+
+function set-allocator {
+    echo "Setting $1..."
+    if [ $OS = "linux" ]; then
+        local lib_name="lib$1.so"
+    elif [ $OS = "macos" ]; then
+        local lib_name="lib$1.dylib"
+    fi
+
+    if [ -f "${NANO_DIR}/libs/${lib_name}" ]; then
+        local lib_path="${NANO_DIR}/libs/${lib_name}"
+    elif [ -f "${LIB_DIR}/${lib_name}" ]; then
+        local lib_path="${LIB_DIR}/${lib_name}"
+    else
+        echo "Failed to find ${lib_name} in ${NANO_DIR}/libs and ${LIB_DIR}"
+    fi
+
+    if [ $OS = "linux" ]; then
+        # if `LD_PRELOAD` or `lib_path` is empty, there will be
+        # extra space on the left or right sides, use echo to remove them
+        export LD_PRELOAD=$(echo ${LD_PRELOAD} ${lib_path})
+    elif [ $OS = "macos" ] && [ ! -z $lib_path ]; then
+        export DYLD_INSERT_LIBRARIES=$(echo ${DYLD_INSERT_LIBRARIES}:${lib_path})
+    fi
+}
+
+function display-error {
+    echo "Invalid Option: -$1" 1>&2
+    echo ""
+    display-help
+}
+
+function display-help {
+    echo "Usage: source bigdl-nano-init [-o] [--option]"
+        echo ""
+        echo "bigdl-nano-init is a tool to automatically configure and run the subcommand under"
+        echo "environment variables for accelerating pytorch."
+        echo ""
+        echo "Optional options:"
+        echo "    -h, --help                Display this help message and exit."
+        echo "    -o, --disable-openmp      Disable openMP and unset related variables"
+        echo "    -j, --enable-jemalloc     Enable jemalloc and set related variables (default)"
+        echo "    -t, --enable-tcmalloc     Enable tcmalloc and set related variables"
+        echo "    -c, --disable-allocator   Use the system default allocator"
+        echo "    -p, --perf                Use performance mode"
+}
+
+# Init internel variables
+ENABLE_JEMALLOC_VAR=1
+unset ENABLE_TCMALLOC_VAR
+unset DISABLE_OPENMP_VAR
+unset PERF_VAR
+
+# Init exported variables
+export TF_ENABLE_ONEDNN_OPTS=1
+
+OPTIND=1
+
+while getopts ":ojhtcp-:" opt; do
+    case ${opt} in
+        - )
+            case "${OPTARG}" in
+                disable-openmp)
+                    disable-openmp-var
+                    ;;
+                enable-jemalloc)
+                    enable-jemalloc-var
+                    ;;
+                enable-tcmalloc)
+                    enable-tcmalloc-var
+                    ;;
+                disable-allocator)
+                    disable-allocator
+                    ;;
+                perf)
+                    enable-perf-var
+                    ;;
+                help)
+                    display-help
+                    return 0
+                    ;;
+                *)
+                    display-error $OPTARG
+                    return 1
+                    ;;
+            esac
+            ;;
+
+        o )
+            disable-openmp-var
+            ;;
+        j )
+            enable-jemalloc-var
+            ;;
+        t )
+            enable-tcmalloc-var
+            ;;
+        c )
+            disable-allocator
+            ;;
+        p )
+            enable-perf-var
+            ;;
+        h )
+            display-help
+            return 0
+            ;;
+        \? )
+            display-error $OPTARG
+            return 1
+            ;;
+    esac
+done
+
+shift $((OPTIND -1))
+
+# Find bigdl-nano-init dir
+if [ ! -z $BASH_SOURCE ]; then
+    # using bash
+    BIN_DIR="$(dirname $BASH_SOURCE)"
+else
+    # using zsh
+    BIN_DIR="$(dirname ${(%):-%N})"
+fi
+echo "Sourcing bigdl-nano-init in: $BIN_DIR"
+
+LIB_DIR=`dirname ${BIN_DIR}`/lib
+NANO_DIR=$(dirname $(python3 -c "import bigdl; print(bigdl.__file__)"))/nano
+PYTHON_VERSION=`python3 --version | awk '{print $2}'`
+
+uName=`uname -s`
+if [ ${uName: 0: 5} = "Linux" ]; then
+    OS="linux"
+elif [ ${uName: 0: 6} = "Darwin" ]; then
+    OS="macos"
+else
+    echo "Unsupported OS: ${uName}"
+    return 1
+fi
+
+# Detect Intel openMP library and init LD_PRELOAD
+OPENMP=0
+export LD_PRELOAD=""
+export DYLD_INSERT_LIBRARIES=""
+if [ ! -z "${DISABLE_OPENMP_VAR:-}" ]; then
+    : # do nothing
+elif [ $OS = "linux" ] && [ -f "${LIB_DIR}/libiomp5.so" ]; then
+    OPENMP=1
+    export LD_PRELOAD="${LIB_DIR}/libiomp5.so"
+elif [ $OS = "macos" ] && [ -f "${LIB_DIR}/libiomp5.dylib" ]; then
+    OPENMP=1
+    export DYLD_INSERT_LIBRARIES="${LIB_DIR}/libiomp5.dylib"
+else
+    echo "No OpenMP library found in ${LIB_DIR}."
+fi
+
+if [ "${OPENMP}" -eq 1 ]; then
+    echo "Setting OMP_NUM_THREADS..."
+    if [ $OS = "linux" ]; then 
+        cpu_infos=($(lscpu -p=CPU,Socket,Core | grep -P '^(\d*),(\d*),(\d*)$'))
+        max_cpu_info=($(echo ${cpu_infos[-1]} | sed 's/,/\ /g'))
+        # bash's array index starts from 0, while zsh's array index starts from 1,
+        # so we use -1, -2, -3 as index here for consistency
+        let cpu_=${max_cpu_info[-3]}+1
+        let sockets_=${max_cpu_info[-2]}+1
+        let core_=${max_cpu_info[-1]}+1
+        let threads_per_core=$cpu_/$core_
+        let cores_per_socket=$core_/$sockets_
+        export OMP_NUM_THREADS=$core_
+    elif [ $OS = "macos" ]; then
+        export OMP_NUM_THREADS=$(sysctl -n hw.physicalcpu)
+    else
+        unset OMP_NUM_THREADS
+    fi
+
+    echo "Setting KMP_AFFINITY..."
+    if [[ "${PERF_VAR}" -eq 1 ]]; then
+        # experiment variable to speed up performance.
+        export KMP_AFFINITY=granularity=fine,compact,1,0
+    else
+        export KMP_AFFINITY=granularity=fine,none
+    fi
+
+    echo "Setting KMP_BLOCKTIME..."
+    export KMP_BLOCKTIME=1
+fi
+
+# Set allocator
+if [[ ! -z "${ENABLE_JEMALLOC_VAR:-}" ]]; then
+    set-allocator jemalloc
+    export MALLOC_CONF="oversize_threshold:1,background_thread:false,metadata_thp:always,dirty_decay_ms:-1,muzzy_decay_ms:-1"
+elif [[ ! -z "${ENABLE_TCMALLOC_VAR:-}" ]]; then
+    set-allocator tcmalloc
+    unset MALLOC_CONF
+fi
+
+if [ -z "${CONDA_DEFAULT_ENV:-}" ]; then
+    echo "Not in a conda env"
+else
+    if [ -f $CONDA_PREFIX/etc/conda/activate.d/nano_vars.sh ];then
+        echo "nano_vars.sh already exists"
+    elif [ ! -f $CONDA_PREFIX/bin/bigdl-nano-init ]; then
+        echo "It seems that you are using bidl-nano installed by system's pip, "
+        echo "you may need to 'source bgidl-nano-init' before using bigdl-nano "
+        echo "and 'source bigdl-nano-unset-env' after using bigdl-nano yourself"
+    else
+        echo "Setting environment variables in current conda env"
+        ACTIVATED_PATH=$CONDA_PREFIX/etc/conda/activate.d
+        DEACTIVATED_PATH=$CONDA_PREFIX/etc/conda/deactivate.d
+        mkdir -p $ACTIVATED_PATH
+        mkdir -p $DEACTIVATED_PATH
+
+        # bigdl-nano-init
+        echo "if [ -f '${CONDA_PREFIX}/bin/bigdl-nano-init' ]; then" > $ACTIVATED_PATH/nano_vars.sh
+        echo "    source ${CONDA_PREFIX}/bin/bigdl-nano-init" >> $ACTIVATED_PATH/nano_vars.sh
+        echo "else" >> $ACTIVATED_PATH/nano_vars.sh
+        echo "    echo 'Cannot find bigdl-nano-init, if you have uninstalled bigdl-nano, you may want to delete $ACTIVATED_PATH/nano_vars.sh and $DEACTIVATED_PATH/nano_vars.sh'" >> $ACTIVATED_PATH/nano_vars.sh
+        echo "fi" >> $ACTIVATED_PATH/nano_vars.sh
+
+        #bigdl-nano-unset-env
+        echo "if [ -f '${CONDA_PREFIX}/bin/bigdl-nano-unset-env' ]; then" > $DEACTIVATED_PATH/nano_vars.sh
+        echo "    source ${CONDA_PREFIX}/bin/bigdl-nano-unset-env" >> $DEACTIVATED_PATH/nano_vars.sh
+        echo "else" >> $DEACTIVATED_PATH/nano_vars.sh
+        echo "    echo 'Cannot find bigdl-nano-init, if you have uninstalled bigdl-nano, you may want to delete $ACTIVATED_PATH/nano_vars.sh and $DEACTIVATED_PATH/nano_vars.sh'" >> $DEACTIVATED_PATH/nano_vars.sh
+        echo "fi" >> $DEACTIVATED_PATH/nano_vars.sh
+
+        # warning
+        echo "Added nano_vars.sh script to $ACTIVATED_PATH and $DEACTIVATED_PATH. You may want to delete them if you want to uninstall bigdl-nano."
+    fi
+fi
+
+echo "+++++ Env Variables +++++"
+if [ $OS = "linux" ]; then 
+    echo "LD_PRELOAD=${LD_PRELOAD}"
+elif [ $OS = "macos" ]; then
+    echo "DYLD_INSERT_LIBRARIES=${DYLD_INSERT_LIBRARIES}"
+fi
+echo "MALLOC_CONF=${MALLOC_CONF}"
+echo "OMP_NUM_THREADS=${OMP_NUM_THREADS}"
+echo "KMP_AFFINITY=${KMP_AFFINITY}"
+echo "KMP_BLOCKTIME=${KMP_BLOCKTIME}"
+echo "TF_ENABLE_ONEDNN_OPTS=${TF_ENABLE_ONEDNN_OPTS}"
+echo "+++++++++++++++++++++++++"
+echo "Complete."

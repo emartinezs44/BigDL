@@ -17,9 +17,11 @@
 import torch
 import torch.nn as nn
 
-from bigdl.orca.automl.model.base_pytorch_model import PytorchBaseModel, \
-    PYTORCH_REGRESSION_LOSS_MAP
+from .utils import PYTORCH_REGRESSION_LOSS_MAP
 import numpy as np
+from pytorch_lightning import seed_everything
+from bigdl.chronos.pytorch.model_wrapper.normalization import NormalizeTSModel
+from bigdl.chronos.pytorch.model_wrapper.decomposition import DecompositionTSModel
 
 
 class LSTMSeq2Seq(nn.Module):
@@ -30,8 +32,10 @@ class LSTMSeq2Seq(nn.Module):
                  lstm_hidden_dim=128,
                  lstm_layer_num=2,
                  dropout=0.25,
-                 teacher_forcing=False):
+                 teacher_forcing=False,
+                 seed=None):
         super(LSTMSeq2Seq, self).__init__()
+        seed_everything(seed, workers=True)
         self.lstm_encoder = nn.LSTM(input_size=input_feature_num,
                                     hidden_size=lstm_hidden_dim,
                                     num_layers=lstm_layer_num,
@@ -68,13 +72,30 @@ class LSTMSeq2Seq(nn.Module):
 
 
 def model_creator(config):
-    return LSTMSeq2Seq(input_feature_num=config["input_feature_num"],
-                       output_feature_num=config["output_feature_num"],
-                       future_seq_len=config["future_seq_len"],
-                       lstm_hidden_dim=config.get("lstm_hidden_dim", 128),
-                       lstm_layer_num=config.get("lstm_layer_num", 2),
-                       dropout=config.get("dropout", 0.25),
-                       teacher_forcing=config.get("teacher_forcing", False))
+    model = LSTMSeq2Seq(input_feature_num=config["input_feature_num"],
+                        output_feature_num=config["output_feature_num"],
+                        future_seq_len=config["future_seq_len"],
+                        lstm_hidden_dim=config.get("lstm_hidden_dim", 128),
+                        lstm_layer_num=config.get("lstm_layer_num", 2),
+                        dropout=config.get("dropout", 0.25),
+                        teacher_forcing=config.get("teacher_forcing", False),
+                        seed=config.get("seed", None))
+    if config.get("normalization", False):
+        model = NormalizeTSModel(model, config["output_feature_num"])
+    decomposition_kernel_size = config.get("decomposition_kernel_size", 0)
+    if decomposition_kernel_size > 1:
+        model_copy = LSTMSeq2Seq(input_feature_num=config["input_feature_num"],
+                                 output_feature_num=config["output_feature_num"],
+                                 future_seq_len=config["future_seq_len"],
+                                 lstm_hidden_dim=config.get("lstm_hidden_dim", 128),
+                                 lstm_layer_num=config.get("lstm_layer_num", 2),
+                                 dropout=config.get("dropout", 0.25),
+                                 teacher_forcing=config.get("teacher_forcing", False),
+                                 seed=config.get("seed", None))
+        if config.get("normalization", False):
+            model_copy = NormalizeTSModel(model_copy, config["output_feature_num"])
+        model = DecompositionTSModel((model, model_copy), decomposition_kernel_size)
+    return model
 
 
 def optimizer_creator(model, config):
@@ -87,41 +108,54 @@ def loss_creator(config):
     if loss_name in PYTORCH_REGRESSION_LOSS_MAP:
         loss_name = PYTORCH_REGRESSION_LOSS_MAP[loss_name]
     else:
-        raise RuntimeError(f"Got '{loss_name}' for loss name, "
-                           "where 'mse', 'mae' or 'huber_loss' is expected")
+        from bigdl.nano.utils.log4Error import invalidInputError
+        invalidInputError(False,
+                          f"Got '{loss_name}' for loss name, "
+                          "where 'mse', 'mae' or 'huber_loss' is expected")
     return getattr(torch.nn, loss_name)()
 
 
-class Seq2SeqPytorch(PytorchBaseModel):
-    def __init__(self, check_optional_config=False):
-        super().__init__(model_creator=model_creator,
-                         optimizer_creator=optimizer_creator,
-                         loss_creator=loss_creator,
-                         check_optional_config=check_optional_config)
+try:
+    from bigdl.orca.automl.model.base_pytorch_model import PytorchBaseModel
 
-    def _input_check(self, x, y):
-        if len(x.shape) < 3:
-            raise RuntimeError(f"Invalid data x with {len(x.shape)} dim where 3 dim is required.")
-        if len(y.shape) < 3:
-            raise RuntimeError(f"Invalid data y with {len(y.shape)} dim where 3 dim is required.")
-        if y.shape[-1] > x.shape[-1]:
-            raise RuntimeError("output dim should not larger than input dim, "
-                               f"while we get {y.shape[-1]} > {x.shape[-1]}.")
+    class Seq2SeqPytorch(PytorchBaseModel):
+        def __init__(self, check_optional_config=False):
+            super().__init__(model_creator=model_creator,
+                             optimizer_creator=optimizer_creator,
+                             loss_creator=loss_creator,
+                             check_optional_config=check_optional_config)
 
-    def _forward(self, x, y):
-        self._input_check(x, y)
-        return self.model(x, y)
+        def _input_check(self, x, y):
+            from bigdl.nano.utils.log4Error import invalidInputError
+            if len(x.shape) < 3:
+                invalidInputError(False,
+                                  f"Invalid data x with {len(x.shape)} "
+                                  "dim where 3 dim is required.")
+            if len(y.shape) < 3:
+                invalidInputError(False,
+                                  f"Invalid data y with {len(y.shape)} dim "
+                                  "where 3 dim is required.")
+            if y.shape[-1] > x.shape[-1]:
+                invalidInputError(False,
+                                  "output dim should not larger than input dim "
+                                  f"while we get {y.shape[-1]} > {x.shape[-1]}.")
 
-    def _get_required_parameters(self):
-        return {
-            "input_feature_num",
-            "future_seq_len",
-            "output_feature_num"
-        }
+        def _forward(self, x, y):
+            self._input_check(x, y)
+            return self.model(x, y)
 
-    def _get_optional_parameters(self):
-        return {
-            "lstm_hidden_dim",
-            "lstm_layer_num",
-            "teacher_forcing"
-        } | super()._get_optional_parameters()
+        def _get_required_parameters(self):
+            return {
+                "input_feature_num",
+                "future_seq_len",
+                "output_feature_num"
+            }
+
+        def _get_optional_parameters(self):
+            return {
+                "lstm_hidden_dim",
+                "lstm_layer_num",
+                "teacher_forcing"
+            } | super()._get_optional_parameters()
+except ImportError:
+    pass

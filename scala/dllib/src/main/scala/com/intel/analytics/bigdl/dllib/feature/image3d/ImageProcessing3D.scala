@@ -19,7 +19,8 @@ import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.FeatureTransformer._
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.ImageFeature
 import com.intel.analytics.bigdl.dllib.feature.image.{ImageProcessing, ImageSet}
-import org.apache.log4j.Logger
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
+import org.apache.logging.log4j.LogManager
 
 private[bigdl] abstract class ImageProcessing3D extends ImageProcessing {
 
@@ -77,7 +78,8 @@ private[bigdl] abstract class ImageProcessing3D extends ImageProcessing {
           logger.warn(s"failed ${path} in transformer ${getClass}")
           e.printStackTrace()
         } else {
-          throw e
+          Log4Error.unKnowExceptionError(false, s"failed in transformer ${getClass}",
+            cause = e)
         }
 
     }
@@ -92,5 +94,5 @@ private[bigdl] abstract class ImageProcessing3D extends ImageProcessing {
 }
 
 object ImageProcessing3D {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 }

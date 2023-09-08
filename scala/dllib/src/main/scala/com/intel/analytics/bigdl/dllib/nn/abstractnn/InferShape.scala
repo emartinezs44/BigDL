@@ -16,9 +16,9 @@
 
 package com.intel.analytics.bigdl.dllib.nn.abstractnn
 
-import com.intel.analytics.bigdl.dllib.nn.keras.{Input => KInput, Sequential => KSequential}
+import com.intel.analytics.bigdl.dllib.nn.internal.{Input => KInput, Sequential => KSequential}
 import com.intel.analytics.bigdl.dllib.nn.{Input => TInput}
-import com.intel.analytics.bigdl.dllib.utils.Shape
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Shape}
 
 import scala.language.existentials
 import scala.reflect.ClassTag
@@ -48,7 +48,7 @@ trait InferShape {
    * Return the inputShape for the current Layer and the first dim is batch.
    */
   final def getInputShape(): Shape = {
-    require(this.isKerasStyle(),
+    Log4Error.invalidInputError(this.isKerasStyle(),
       "Torch style definition doesn't support getInputShape for now.")
     _inputShapeValue
   }
@@ -57,9 +57,14 @@ trait InferShape {
    * Return the outputShape for the current Layer and the first dim is batch.
    */
   final def getOutputShape(): Shape = {
-    require(this.isKerasStyle(),
-      "Torch style definition doesn't support getOutputShape for now.")
-    require(this.isBuilt(), "This module hasn't been built.")
+//    Log4Error.invalidInputError(this.isKerasStyle(),
+//      "Torch style definition doesn't support getOutputShape for now.")
+//    Log4Error.invalidInputError(this.isBuilt(), "This module hasn't been built.")
+    Log4Error.invalidOperationError(this.isKerasStyle(),
+      "Torch style definition doesn't support getOutputShape for now.",
+    "Please use keras style api")
+    Log4Error.invalidOperationError(this.isBuilt(), "This Layer hasn't been built",
+      "Please add this layer into a Sequential before use")
     outputShapeValue
   }
 
@@ -84,7 +89,9 @@ trait InferShape {
    * We suppose the first dim is batch
    */
   private[bigdl] def computeOutputShape(inputShape: Shape): Shape = {
-    throw new RuntimeException("Haven't been implemented yet. Do not use it with Keras Layer")
+    Log4Error.invalidOperationError(false,
+      "Haven't been implemented yet. Do not use it with Keras Layer")
+    null
   }
 
   private[bigdl] def excludeInvalidLayers[T: ClassTag]
@@ -95,7 +102,8 @@ trait InferShape {
       modules.filter{_.isKerasStyle()}
     }
     if (invalidNodes.length > 0) {
-      throw new InvalidLayer(s"""Do not mix ${this}(isKerasStyle=${isKerasStyle()}) with Layer
+      Log4Error.invalidOperationError(false,
+        s"""Do not mix ${this}(isKerasStyle=${isKerasStyle()}) with Layer
                            (isKerasStyle=${invalidNodes(0).isKerasStyle()}):
          ${invalidNodes.mkString(",")}""")
     }
@@ -103,7 +111,7 @@ trait InferShape {
 
   private[bigdl] def validateInput[T: ClassTag](modules : Seq[AbstractModule[_, _, T]]): Unit = {
     if (this.isKerasStyle()) {
-      require(modules != null && !modules.isEmpty, "Empty input is not allowed")
+      Log4Error.invalidInputError(modules != null && !modules.isEmpty, "Empty input is not allowed")
     }
     excludeInvalidLayers(modules)
   }

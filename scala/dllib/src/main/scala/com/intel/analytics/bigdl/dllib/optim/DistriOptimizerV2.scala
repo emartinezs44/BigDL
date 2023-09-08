@@ -30,7 +30,7 @@ import com.intel.analytics.bigdl.dllib.utils._
 import com.intel.analytics.bigdl.dllib.utils.intermediate.ConversionUtils
 import com.intel.analytics.bigdl.dllib.visualization.{TrainSummary, ValidationSummary}
 import com.intel.analytics.bigdl.{Module, _}
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.{LogManager, Logger}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{SparkContext, TaskContext}
 
@@ -56,7 +56,7 @@ object DistriOptimizerV2 extends AbstractOptimizer {
     parameterProcessers: Array[ParameterProcessor] = null) extends DistriOptimizer.Cache[T]
 
   import Optimizer._
-  val logger: Logger = Logger.getLogger(getClass)
+  val logger: Logger = LogManager.getLogger(getClass)
 
   private[optim] def optimize[T: ClassTag](
     cacheOfMaster: MasterCache[T],
@@ -353,7 +353,8 @@ object DistriOptimizerV2 extends AbstractOptimizer {
     }).reduce((a, b) => (a._1 ++ b._1, a._2 ++ b._2))
 
     val taskSize = parameters.size / partitionNum
-    require(taskSize != 0, "parameter length should not less than partition number")
+    Log4Error.invalidOperationError(taskSize != 0,
+      "parameter length should not less than partition number")
     val extraSize = parameters.size % partitionNum
 
     (0 until partitionNum).map(pid => {
@@ -688,7 +689,8 @@ class DistriOptimizerV2[T: ClassTag](
   }
 
   override def optimize(): Module[T] = {
-    require(validArgs(), "please check the args you set, there's some wrong")
+    Log4Error.invalidOperationError(validArgs(),
+      "please check the args you set, there's some wrong")
 
     val modelParameters = model.getParameters()
     val size = modelParameters._1.nElement()
@@ -806,7 +808,8 @@ class DistriOptimizerV2[T: ClassTag](
     val parameterSplits = if (optimMethods.size != 1) {
       val p = optimMethods.map { case (subModuleName, optimMethod) =>
         val subModule = model(subModuleName)
-        require(subModule.isDefined, s"Optimizer couldn't find $subModuleName in $model")
+        Log4Error.invalidOperationError(subModule.isDefined,
+          s"Optimizer couldn't find $subModuleName in $model")
         val subModuleWeights = subModule.get.getParameters()._1
         (subModuleName, subModuleWeights)
       }
@@ -814,7 +817,7 @@ class DistriOptimizerV2[T: ClassTag](
       // check the weights of submodule with whole model's weight, they should be the same
       val sortedWeights = p.values.toArray.sortWith((a, b) => a.storageOffset() < b.storageOffset())
       val compactWeights = Module.isCompact(sortedWeights)
-      require(parameters == compactWeights,
+      Log4Error.invalidOperationError(parameters == compactWeights,
         s"DistriOptimizer: All subModules should have an OptimMethod.")
 
       p.map { case (subModuleName, weights) =>
@@ -823,8 +826,9 @@ class DistriOptimizerV2[T: ClassTag](
     } else if (optimMethods.contains(model.getName())) {
       Map(model.getName() -> (1, parameters.nElement()))
     } else {
-      throw new IllegalArgumentException(s"${model.getName()} doesn't " +
+      Log4Error.invalidOperationError(false, s"${model.getName()} doesn't " +
         s"have corresponding OptimMethod")
+      Map(model.getName() -> (1, parameters.nElement()))
     }
 
     // LarsSSD will check the optimMethods and append LarsProcessor
@@ -853,7 +857,7 @@ class DistriOptimizerV2[T: ClassTag](
     val nodeNumber = Engine.nodeNumber()
     val executorCores = Engine.coreNumber()
     val partitionNumber = dataset.toDistributed().originRDD().partitions.length
-    require(partitionNumber == nodeNumber,
+    Log4Error.invalidOperationError(partitionNumber == nodeNumber,
       s"Passed in rdd partition number $partitionNumber " +
         s" is not equal to configured node number $nodeNumber")
 
@@ -861,7 +865,8 @@ class DistriOptimizerV2[T: ClassTag](
       Engine.setNodeAndCore(nodeNumber, executorCores)
       if (!Engine.checkSingleton()) {
         if (checkSingleton) {
-          require(Engine.checkSingleton(), "Partitions of the training data are not evenly" +
+          Log4Error.invalidOperationError(Engine.checkSingleton(),
+            "Partitions of the training data are not evenly" +
             "distributed across the executors in the Spark cluster; are there sufficient " +
             "training" +
             "data to be distributed? Set property \"bigdl.check.singleton\" to false to skip " +
@@ -896,12 +901,12 @@ class TrainingContext[T: ClassTag](
     val batch = data.next()
     val stackSize = batch.size() / subModelNumber
     // TODO performance call Engine.invoke
-    require((batch.size() >= subModelNumber) &&
+    Log4Error.invalidOperationError((batch.size() >= subModelNumber) &&
       (batch.size() % subModelNumber == 0), "total batch size: " +
       s"${batch.size()} should be divided by total core number: $subModelNumber")
 
     if (batch.size() < subModelNumber * 2) {
-      Logger.getLogger(this.getClass).warn(
+      LogManager.getLogger(this.getClass).warn(
         s"Warning: for better training speed, total batch size is recommended to be " +
           s"at least two times of core number $subModelNumber. " +
           s"please tune your batch size accordingly")
@@ -940,7 +945,7 @@ class TrainingContext[T: ClassTag](
         LossWithElapsedTime(i, loss, end - start)
       }
     ), Long.MaxValue)
-    trainingThreads.filter(!_.isCancelled).map(_.get())
+    trainingThreads.filter(!_.isCancelled).map(_.get()).toSeq
   }
 
   def update[T: ClassTag](
@@ -1122,23 +1127,23 @@ private object TrainingTrace {
 
 private class DistriLogger extends OptimizerLogger {
   override def info(message: String): Unit = {
-    Logger.getLogger(getClass).info(message)
+    LogManager.getLogger(getClass).info(message)
   }
 
   override def debug(message: String): Unit = {
-    Logger.getLogger(getClass).debug(message)
+    LogManager.getLogger(getClass).debug(message)
   }
 
   override def trace(message: String): Unit = {
-    Logger.getLogger(getClass).trace(message)
+    LogManager.getLogger(getClass).trace(message)
   }
 
   override def warn(message: String): Unit = {
-    Logger.getLogger(getClass).warn(message)
+    LogManager.getLogger(getClass).warn(message)
   }
 
   override def error(message: String): Unit = {
-    Logger.getLogger(getClass).error(message)
+    LogManager.getLogger(getClass).error(message)
   }
 }
 

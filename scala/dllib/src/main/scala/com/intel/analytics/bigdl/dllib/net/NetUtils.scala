@@ -20,7 +20,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 import com.intel.analytics.bigdl.Module
 import com.intel.analytics.bigdl.dllib.nn.Graph.ModuleNode
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
-import com.intel.analytics.bigdl.dllib.nn.keras.KerasLayer
+import com.intel.analytics.bigdl.dllib.nn.internal.KerasLayer
 import com.intel.analytics.bigdl.dllib.nn.{Container, Graph, StaticGraph}
 import com.intel.analytics.bigdl.serialization.Bigdl.BigDLModule
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
@@ -29,6 +29,7 @@ import com.intel.analytics.bigdl.dllib.utils.serializer._
 import com.intel.analytics.bigdl.dllib.keras.Predictable
 import com.intel.analytics.bigdl.dllib.keras.layers.KerasLayerWrapper
 import com.intel.analytics.bigdl.dllib.keras.layers.utils.KerasUtils
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 import org.apache.spark.utils.SparkUtils
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
@@ -120,7 +121,7 @@ object GraphNet extends ContainerSerializable {
     val labor = context.moduleData.module.
       asInstanceOf[GraphNet[T]].labor
     val subModule = ModuleSerializer.serialize(SerializeContext(ModuleData(labor,
-      new ArrayBuffer[String](), new ArrayBuffer[String]()), context.storages,
+      Seq[String](), Seq[String]()), context.storages,
       context.storageType, _copyWeightAndBias))
     builder.addSubModules(subModule.bigDLModule)
   }
@@ -177,17 +178,17 @@ object NetUtils {
   private[bigdl] def processTFFolder(folder: String): (String, Meta) = {
     val folderPath = Path(folder)
     if (!folderPath.exists) {
-      throw new IllegalArgumentException(s"$folder does not exist")
+      Log4Error.invalidInputError(false, s"$folder does not exist")
     }
 
     val modelPath = folderPath / Path("frozen_inference_graph.pb")
     if (!modelPath.exists) {
-      throw new IllegalArgumentException(
+      Log4Error.invalidOperationError(false,
         s"${modelPath.path} does not exist")
     }
     val metaPath = folderPath / Path("graph_meta.json")
     if (!metaPath.exists) {
-      throw new IllegalArgumentException(
+      Log4Error.invalidOperationError(false,
         s"${metaPath.path} does not exist")
     }
 
@@ -232,12 +233,14 @@ private[bigdl] case class Meta(inputNames: Array[String],
                              ) {
 
   for (name <- inputNames) {
-    require(name.split(":").length == 2, s"Input names require to be Tensor names, " +
+    Log4Error.invalidInputError(name.split(":").length == 2,
+      s"Input names Log4Error.invalidInputError to be Tensor names, " +
       s"but <${name}> looks like a operation name, please try <${name}:0> instead.")
   }
 
   for (name <- outputNames) {
-    require(name.split(":").length == 2, s"Output names require to be Tensor names, " +
+    Log4Error.invalidInputError(name.split(":").length == 2,
+      s"Output names Log4Error.invalidInputError to be Tensor names, " +
       s"but <${name}> looks like a operation name, please try <${name}:0> instead.")
   }
 
@@ -292,7 +295,7 @@ trait NetUtils[T, D <: Module[T] with NetUtils[T, D]] {
       override def hasNext: Boolean = stack.nonEmpty
 
       override def next(): ModuleNode[T] = {
-        require(hasNext, "No more elements in the graph")
+        Log4Error.invalidInputError(hasNext, "No more elements in the graph")
         val node = stack.pop()
         visited.add(node)
         val nextNodes = node.prevNodes

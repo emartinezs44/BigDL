@@ -18,6 +18,7 @@ package com.intel.analytics.bigdl.dllib.feature.transform.vision.image.augmentat
 
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image._
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.opencv.OpenCVMat
+import com.intel.analytics.bigdl.dllib.utils.TestUtils
 import org.scalatest.{FlatSpec, Matchers}
 
 class ChannelNormalizeSpec extends FlatSpec with Matchers {
@@ -25,7 +26,7 @@ class ChannelNormalizeSpec extends FlatSpec with Matchers {
 
   "ChannelNormalize" should "work properly" in {
     val data = ImageFrame.read(resource.getFile)
-    val transformer = ChannelNormalize(100, 200, 300) -> MatToFloats()
+    val transformer = ChannelNormalize(300, 200, 100) -> MatToFloats()
     val transformed = transformer(data)
     val imf = transformed.asInstanceOf[LocalImageFrame].array(0)
 
@@ -39,7 +40,7 @@ class ChannelNormalizeSpec extends FlatSpec with Matchers {
 
   "ChannelNormalize with std not 1" should "work properly" in {
     val data = ImageFrame.read(resource.getFile)
-    val transformer = ChannelNormalize(100, 200, 300, 2, 2, 2) -> MatToFloats()
+    val transformer = ChannelNormalize(300, 200, 100, 2, 2, 2) -> MatToFloats()
     val transformed = transformer(data)
     val imf = transformed.asInstanceOf[LocalImageFrame].array(0)
 
@@ -61,7 +62,7 @@ class MatToFloatsWithNorm(validHeight: Int = 300, validWidth: Int = 300, validCh
   private def normalize(img: Array[Float],
     meanR: Float, meanG: Float, meanB: Float): Array[Float] = {
     val content = img
-    require(content.length % 3 == 0)
+    TestUtils.conditionFailTest(content.length % 3 == 0)
     var i = 0
     while (i < content.length) {
       content(i + 2) = content(i + 2) - meanR

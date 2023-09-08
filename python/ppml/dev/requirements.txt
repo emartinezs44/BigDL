@@ -1,0 +1,8 @@
+pypandoc
+psutil
+numpy
+pandas
+grpcio
+pyyaml
+torch
+tensorflow

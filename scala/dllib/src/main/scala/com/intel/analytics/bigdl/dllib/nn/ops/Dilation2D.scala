@@ -18,7 +18,7 @@ package com.intel.analytics.bigdl.dllib.nn.ops
 import com.intel.analytics.bigdl.dllib.nn.Utils
 import com.intel.analytics.bigdl.dllib.tensor.{DoubleType, FloatType, Tensor}
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.Table
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Table}
 
 import scala.reflect.ClassTag
 
@@ -56,9 +56,11 @@ class Dilation2D[T: ClassTag, D: ClassTag](val strides: Array[Int],
 
   output = Tensor[D]()
 
-  require(strides.length == 4, s"strides must have a length of 4, but got ${strides.length}")
-  require(rates.length == 4, s"rates must have a lenght of 4, but got ${rates.length}")
-  require(padding.toLowerCase() == "same" || padding.toLowerCase() == "valid",
+  Log4Error.invalidInputError(strides.length == 4,
+    s"strides must have a length of 4, but got ${strides.length}")
+  Log4Error.invalidInputError(rates.length == 4,
+    s"rates must have a lenght of 4, but got ${rates.length}")
+  Log4Error.invalidInputError(padding.toLowerCase() == "same" || padding.toLowerCase() == "valid",
     s"padding must be one of same or valid, but got $padding")
 
   private def getOutputSize(inputSize: Int, filterSize: Int, stride: Int, padding: String) = {
@@ -239,8 +241,8 @@ class Dilation2D[T: ClassTag, D: ClassTag](val strides: Array[Int],
     val input = inputs[Tensor[D]](1)
     val filter = inputs[Tensor[D]](2)
 
-    require(input.dim() == 4, "input must have 4 dims")
-    require(filter.dim() == 3, "filter must have 3 dims")
+    Log4Error.invalidInputError(input.dim() == 4, "input must have 4 dims")
+    Log4Error.invalidInputError(filter.dim() == 3, "filter must have 3 dims")
 
 
     val strideRows = strides(1)
@@ -262,7 +264,7 @@ class Dilation2D[T: ClassTag, D: ClassTag](val strides: Array[Int],
       dilationDouble(inputTensor, filterTensor, outputTensor,
         strideRows, strideCols, rateRows, rateCols)
     } else {
-      throw new IllegalArgumentException(s"does not support datatype ${ev2.getType()}")
+      Log4Error.invalidOperationError(false, s"does not support datatype ${ev2.getType()}")
     }
     output
   }
@@ -474,8 +476,8 @@ private[bigdl] class Dilation2DBackpropFilter[T: ClassTag, D: ClassTag](
     val filter = inputs[Tensor[D]](2)
     val outBackprop = inputs[Tensor[D]](3)
 
-    require(input.dim() == 4, "input must have 4 dims")
-    require(filter.dim() == 3, "filter must have 3 dims")
+    Log4Error.invalidInputError(input.dim() == 4, "input must have 4 dims")
+    Log4Error.invalidInputError(filter.dim() == 3, "filter must have 3 dims")
 
 
     val strideRows = strides(1)
@@ -499,7 +501,7 @@ private[bigdl] class Dilation2DBackpropFilter[T: ClassTag, D: ClassTag](
       dilation2DBackpropFilterDouble(inputTensor, filterTensor, outBackpropTensor, outputTensor,
         strideRows, strideCols, rateRows, rateCols)
     } else {
-      throw new IllegalArgumentException(s"does not support datatype ${ev2.getType()}")
+      Log4Error.invalidOperationError(false, s"does not support datatype ${ev2.getType()}")
     }
 
     output
@@ -715,8 +717,8 @@ private[bigdl] class Dilation2DBackpropInput[T: ClassTag, D: ClassTag](strides: 
     val filter = inputs[Tensor[D]](2)
     val outBackprop = inputs[Tensor[D]](3)
 
-    require(input.dim() == 4, "input must have 4 dims")
-    require(filter.dim() == 3, "filter must have 3 dims")
+    Log4Error.invalidInputError(input.dim() == 4, "input must have 4 dims")
+    Log4Error.invalidInputError(filter.dim() == 3, "filter must have 3 dims")
 
 
     val strideRows = strides(1)
@@ -740,7 +742,7 @@ private[bigdl] class Dilation2DBackpropInput[T: ClassTag, D: ClassTag](strides: 
       dilationBackpropInputDouble(inputTensor, filterTensor, outBackpropTensor, outputTensor,
         strideRows, strideCols, rateRows, rateCols)
     } else {
-      throw new IllegalArgumentException(s"does not support datatype ${ev2.getType()}")
+      Log4Error.invalidOperationError(false, s"does not support datatype ${ev2.getType()}")
     }
 
     output

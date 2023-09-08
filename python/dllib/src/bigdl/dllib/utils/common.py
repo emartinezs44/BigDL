@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 
+import re
 import os
 import sys
 import six
@@ -33,6 +34,8 @@ import threading
 import tempfile
 import traceback
 from bigdl.dllib.utils.engine import get_bigdl_classpath, is_spark_below_2_2
+from bigdl.dllib.utils.log4Error import *
+
 
 INTMAX = 2147483647
 INTMIN = -2147483648
@@ -64,11 +67,12 @@ class GatewayWrapper(SingletonMixin):
 
 
 class JavaCreator(SingletonMixin):
-    __creator_class=[
+    __creator_class = [
         "com.intel.analytics.bigdl.dllib.utils.python.api.PythonBigDLKeras",
         "com.intel.analytics.bigdl.dllib.utils.python.api.PythonBigDLOnnx",
         "com.intel.analytics.bigdl.dllib.common.PythonZoo",
         "com.intel.analytics.bigdl.dllib.nnframes.python.PythonNNFrames",
+        "com.intel.analytics.bigdl.dllib.nnframes.python.PythonTreeModel",
         "com.intel.analytics.bigdl.dllib.feature.python.PythonImageFeature",
         "com.intel.analytics.bigdl.dllib.feature.python.PythonTextFeature",
         "com.intel.analytics.bigdl.dllib.feature.python.PythonFeatureSet",
@@ -106,7 +110,7 @@ class JavaCreator(SingletonMixin):
             elif bigdl_type == "double":
                 self.value.append(getattr(jclass, "ofDouble")())
             else:
-                raise Exception("Not supported bigdl_type: %s" % bigdl_type)
+                invalidInputError(False, "Not supported bigdl_type: %s" % bigdl_type)
 
 
 class JavaValue(object):
@@ -128,6 +132,7 @@ class EvaluatedResult():
     """
     A testing result used to benchmark the model quality.
     """
+
     def __init__(self, result, total_num, method):
         """
 
@@ -167,6 +172,7 @@ class JTensor(object):
     >>> np.random.seed(123)
     >>>
     """
+
     def __init__(self, storage, shape, bigdl_type="float", indices=None):
         """
 
@@ -187,8 +193,9 @@ class JTensor(object):
         elif isinstance(indices, bytes):
             self.indices = np.frombuffer(indices, dtype=np.int32)
         else:
-            assert isinstance(indices, np.ndarray), \
-            "indices should be a np.ndarray, not %s, %s" % (type(a_ndarray), str(indices))
+            invalidInputError(isinstance(indices, np.ndarray),
+                              f"indices should be a np.ndarray, not ${type(indices)},"
+                              f" ${str(indices)}")
             self.indices = np.array(indices, dtype=np.int32)
         self.bigdl_type = bigdl_type
 
@@ -203,7 +210,8 @@ class JTensor(object):
         >>> np.random.seed(123)
         >>> data = np.random.uniform(0, 1, (2, 3)).astype("float32")
         >>> result = JTensor.from_ndarray(data)
-        >>> expected_storage = np.array([[0.69646919, 0.28613934, 0.22685145], [0.55131477, 0.71946895, 0.42310646]])
+        >>> expected_storage = np.array([[0.69646919, 0.28613934, 0.22685145], [0.55131477,
+        ... 0.71946895, 0.42310646]])
         >>> expected_shape = np.array([2, 3])
         >>> np.testing.assert_allclose(result.storage, expected_storage, rtol=1e-6, atol=1e-6)
         >>> np.testing.assert_allclose(result.shape, expected_shape)
@@ -217,8 +225,8 @@ class JTensor(object):
         """
         if a_ndarray is None:
             return None
-        assert isinstance(a_ndarray, np.ndarray), \
-            "input should be a np.ndarray, not %s" % type(a_ndarray)
+        invalidInputError(isinstance(a_ndarray, np.ndarray),
+                          f"input should be a np.ndarray, not ${type(a_ndarray)}")
         return cls(a_ndarray,
                    a_ndarray.shape if a_ndarray.shape else (a_ndarray.size),
                    bigdl_type)
@@ -266,12 +274,13 @@ class JTensor(object):
         """
         if a_ndarray is None:
             return None
-        assert isinstance(a_ndarray, np.ndarray), \
-            "values array should be a np.ndarray, not %s" % type(a_ndarray)
-        assert isinstance(i_ndarray, np.ndarray), \
-            "indices array should be a np.ndarray, not %s" % type(a_ndarray)
-        assert i_ndarray.size == a_ndarray.size * shape.size, \
-            "size of values and indices should match."
+        invalidInputError(isinstance(a_ndarray, np.ndarray),
+                          f"input should be a np.ndarray, not ${type(a_ndarray)}")
+        invalidInputError(isinstance(i_ndarray, np.ndarray),
+                          f"indices should be a np.ndarray, not ${type(i_ndarray)}")
+        invalidInputError(i_ndarray.size == a_ndarray.size * shape.size,
+                          f"size of values ${a_ndarray.size * shape.size} and"
+                          f" indices ${i_ndarray.size} should match")
         return cls(a_ndarray,
                    shape,
                    bigdl_type,
@@ -280,24 +289,27 @@ class JTensor(object):
     def to_ndarray(self):
         """
         Transfer JTensor to ndarray.
-        As SparseTensor may generate an very big ndarray, so we don't support this function for SparseTensor.
+        As SparseTensor may generate an very big ndarray, so we don't support this function for
+        SparseTensor.
         :return: a ndarray
         """
-        assert self.indices is None, "sparseTensor to ndarray is not supported"
+        invalidInputError(self.indices is None, "sparseTensor to ndarray is not supported")
         return np.array(self.storage, dtype=get_dtype(self.bigdl_type)).reshape(self.shape)  # noqa
 
     def __reduce__(self):
         if self.indices is None:
             return JTensor, (self.storage.tostring(), self.shape.tostring(), self.bigdl_type)
         else:
-            return JTensor, (self.storage.tostring(), self.shape.tostring(), self.bigdl_type, self.indices.tostring())
+            return JTensor, (self.storage.tostring(), self.shape.tostring(), self.bigdl_type,
+                             self.indices.tostring())
 
     def __str__(self):
         return self.__repr__()
 
     def __repr__(self):
         indices = "" if self.indices is None else " ,indices %s" % str(self.indices)
-        return "JTensor: storage: %s, shape: %s%s, %s" % (str(self.storage), str(self.shape), indices, self.bigdl_type)
+        return "JTensor: storage: %s, shape: %s%s, %s" % (
+            str(self.storage), str(self.shape), indices, self.bigdl_type)
 
 
 class Sample(object):
@@ -326,12 +338,15 @@ class Sample(object):
         >>> from bigdl.dllib.utils.common import callBigDlFunc
         >>> from numpy.testing import assert_allclose
         >>> np.random.seed(123)
-        >>> sample = Sample.from_ndarray(np.random.random((2,3)), np.random.random((2,3)))        
-        >>> expected_feature_storage = np.array(([[0.69646919, 0.28613934, 0.22685145], [0.55131477, 0.71946895, 0.42310646]]))
+        >>> sample = Sample.from_ndarray(np.random.random((2,3)), np.random.random((2,3)))
+        >>> expected_feature_storage = np.array(([[0.69646919, 0.28613934, 0.22685145], [0.55131477,
+        ... 0.71946895, 0.42310646]]))
         >>> expected_feature_shape = np.array([2, 3])
-        >>> expected_label_storage = np.array(([[0.98076421, 0.68482971, 0.48093191], [0.39211753, 0.343178, 0.72904968]]))
+        >>> expected_label_storage = np.array(([[0.98076421, 0.68482971, 0.48093191], [0.39211753,
+        ... 0.343178, 0.72904968]]))
         >>> expected_label_shape = np.array([2, 3])
-        >>> assert_allclose(sample.features[0].storage, expected_feature_storage, rtol=1e-6, atol=1e-6)
+        >>> assert_allclose(sample.features[0].storage, expected_feature_storage, rtol=1e-6,
+        ... atol=1e-6)
         >>> assert_allclose(sample.features[0].shape, expected_feature_shape)
         >>> assert_allclose(sample.labels[0].storage, expected_label_storage, rtol=1e-6, atol=1e-6)
         >>> assert_allclose(sample.labels[0].shape, expected_label_shape)
@@ -339,15 +354,15 @@ class Sample(object):
         if isinstance(features, np.ndarray):
             features = [features]
         else:
-            assert all(isinstance(feature, np.ndarray) for feature in features), \
-                "features should be a list of np.ndarray, not %s" % type(features)
+            invalidInputError(all(isinstance(feature, np.ndarray) for feature in features),
+                              "features should be a list of np.ndarray, not %s" % type(features))
         if np.isscalar(labels):  # in case labels is a scalar.
             labels = [np.array(labels)]
         elif isinstance(labels, np.ndarray):
             labels = [labels]
         else:
-            assert all(isinstance(label, np.ndarray) for label in labels), \
-                "labels should be a list of np.ndarray, not %s" % type(labels)
+            invalidInputError(all(isinstance(label, np.ndarray) for label in labels),
+                              "labels should be a list of np.ndarray, not %s" % type(labels))
         return cls(
             features=[JTensor.from_ndarray(feature) for feature in features],
             labels=[JTensor.from_ndarray(label) for label in labels],
@@ -372,15 +387,15 @@ class Sample(object):
         if isinstance(features, JTensor):
             features = [features]
         else:
-            assert all(isinstance(feature, JTensor) for feature in features), \
-                "features should be a list of JTensor, not %s" % type(features)
+            invalidInputError(all(isinstance(feature, JTensor) for feature in features),
+                              "features should be a list of JTensor, not %s" % type(features))
         if np.isscalar(labels):  # in case labels is a scalar.
             labels = [JTensor.from_ndarray(np.array(labels))]
         elif isinstance(labels, JTensor):
             labels = [labels]
         else:
-            assert all(isinstance(label, JTensor) for label in labels), \
-                "labels should be a list of np.ndarray, not %s" % type(labels)
+            invalidInputError(all(isinstance(label, JTensor) for label in labels),
+                              "labels should be a list of np.ndarray, not %s" % type(labels))
         return cls(
             features=features,
             labels=labels,
@@ -395,10 +410,12 @@ class Sample(object):
     def __repr__(self):
         return "Sample: features: %s, labels: %s" % (self.features, self.labels)
 
+
 class RNG():
     """
     generate tensor data with seed
     """
+
     def __init__(self, bigdl_type="float"):
         self.bigdl_type = bigdl_type
 
@@ -406,7 +423,7 @@ class RNG():
         callBigDlFunc(self.bigdl_type, "setModelSeed", seed)
 
     def uniform(self, a, b, size):
-        return callBigDlFunc(self.bigdl_type, "uniform", a, b, size).to_ndarray() # noqa
+        return callBigDlFunc(self.bigdl_type, "uniform", a, b, size).to_ndarray()  # noqa
 
 
 _picklable_classes = [
@@ -428,14 +445,18 @@ def init_engine(bigdl_type="float"):
     # Spark context is supposed to have been created when init_engine is called
     get_spark_context()._jvm.org.apache.spark.bigdl.api.python.BigDLSerDe.initialize()
 
+
 def get_bigdl_engine_type(bigdl_type="float"):
     return callBigDlFunc(bigdl_type, "getEngineType")
+
 
 def set_optimizer_version(optimizerVersion, bigdl_type="float"):
     return callBigDlFunc(bigdl_type, "setOptimizerVersion", optimizerVersion)
 
+
 def get_optimizer_version(bigdl_type="float"):
     return callBigDlFunc(bigdl_type, "getOptimizerVersion")
+
 
 def init_executor_gateway(sc, bigdl_type="float"):
     callBigDlFunc(bigdl_type, "initExecutorGateway", sc, sc._gateway._gateway_client.port)
@@ -446,11 +467,12 @@ def get_node_and_core_number(bigdl_type="float"):
     return result[0], result[1]
 
 
-def redire_spark_logs(bigdl_type="float", log_path=os.getcwd()+"/bigdl.log"):
+def redire_spark_logs(bigdl_type="float", log_path=os.getcwd() + "/bigdl.log"):
     """
     Redirect spark logs to the specified path.
     :param bigdl_type: "double" or "float"
-    :param log_path: the file path to be redirected to; the default file is under the current workspace named `bigdl.log`.
+    :param log_path: the file path to be redirected to; the default file is under the current
+     workspace named `bigdl.log`.
     """
     callBigDlFunc(bigdl_type, "redirectSparkLogs", log_path)
 
@@ -473,12 +495,14 @@ def get_bigdl_conf():
 
     for p in sys.path:
         if bigdl_conf_file in p and os.path.isfile(p):
-            with open(p) if sys.version_info < (3,) else open(p, encoding='latin-1') as conf_file: # noqa
+            with open(p) if sys.version_info < (3,) else open(p,
+                                                              encoding='latin-1') as conf_file:
+                # noqa
                 return load_conf(conf_file.read())
         if bigdl_python_wrapper in p and os.path.isfile(p):
             import zipfile
             with zipfile.ZipFile(p, 'r') as zip_conf:
-                if bigdl_conf_file  in zip_conf.namelist():
+                if bigdl_conf_file in zip_conf.namelist():
                     content = zip_conf.read(bigdl_conf_file)
                     if sys.version_info >= (3,):
                         content = str(content, 'latin-1')
@@ -527,7 +551,8 @@ def create_spark_conf():
     if python_lib:
         existing_py_files = sparkConf.get("spark.submit.pyFiles")
         if existing_py_files:
-            sparkConf.set(key="spark.submit.pyFiles", value="%s,%s" % (python_lib, existing_py_files))
+            sparkConf.set(key="spark.submit.pyFiles",
+                          value="%s,%s" % (python_lib, existing_py_files))
         else:
             sparkConf.set(key="spark.submit.pyFiles", value=python_lib)
 
@@ -573,10 +598,11 @@ def _get_port():
             port = int(f.readline())
     except IOError as e:
         traceback.print_exc()
-        raise RuntimeError("Could not open the file %s, which contains the listening port of"
-                           " local Java Gateway, please make sure the init_executor_gateway()"
-                           " function is called before any call of java function on the"
-                           " executor side." % e.filename)
+        invalidInputError(False,
+                          "Could not open the file %s, which contains the listening port of"
+                          " local Java Gateway, please make sure the init_executor_gateway()"
+                          " function is called before any call of java function on the"
+                          " executor side." % e.filename)
     return port
 
 
@@ -603,11 +629,12 @@ def callBigDlFunc(bigdl_type, name, *args):
             result = callJavaFunc(api, *args)
         except Exception as e:
             error = e
-            if "does not exist" not in str(e):
-                raise e
+            # if the invoked method exist but something else went wrong, throw the exception
+            if not re.match(r'.*Method.*does not exist', str(e), flags=re.DOTALL):
+                invalidOperationError(False, str(e), cause=e)
         else:
             return result
-    raise error
+    invalidOperationError(False, "Cannot find function: %s" % name, cause=error)
 
 
 def _java2py(gateway, r, encoding="bytes"):
@@ -678,6 +705,8 @@ def _py2java(gateway, obj):
         obj = obj._jdf
     elif isinstance(obj, SparkContext):
         obj = obj._jsc
+    elif isinstance(obj, SQLContext):
+        obj = obj._jsqlContext
     elif isinstance(obj, (list, tuple)):
         obj = ListConverter().convert([_py2java(gateway, x) for x in obj],
                                       gateway._gateway_client)
@@ -746,7 +775,7 @@ def get_activation_by_name(activation_name, activation_id=None):
     elif activation_name == "linear":
         activation = BLayer.Identity()
     else:
-        raise Exception("Unsupported activation type: %s" % activation_name)
+        invalidInputError(False, "Unsupported activation type: %s" % activation_name)
     if not activation_id:
         activation.set_name(activation_id)
     return activation

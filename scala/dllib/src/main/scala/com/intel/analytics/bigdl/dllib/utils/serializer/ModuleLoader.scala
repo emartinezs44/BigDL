@@ -27,7 +27,7 @@ import com.intel.analytics.bigdl.dllib.tensor.{DenseType, QuantizedTensor, Tenso
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.utils.serializer.converters.TensorConverter
 import com.intel.analytics.bigdl.dllib.utils.serializer.converters.DataReaderWriter
-import com.intel.analytics.bigdl.dllib.utils.{File, FileReader, FileWriter, Table}
+import com.intel.analytics.bigdl.dllib.utils.{File, FileReader, FileWriter, Table, Log4Error}
 import com.intel.analytics.bigdl.serialization.Bigdl._
 
 import scala.collection.mutable
@@ -79,7 +79,7 @@ object ModuleLoader {
       val dataInputStream = new DataInputStream(digestInputStream)
       digestInputStream.on(true)
       val magicNumber = dataInputStream.readInt
-      require(magicNumber == magicNo,
+      Log4Error.invalidInputError(magicNumber == magicNo,
         s"Magic number mismatch, expected $magicNo, actual $magicNumber")
 
       val totalCount = dataInputStream.readInt
@@ -102,10 +102,12 @@ object ModuleLoader {
 
       val calculatedDigest = digestInputStream.getMessageDigest.digest
 
-      require(calculatedDigest.length == digestLen, "checksum error, size mismatch")
+      Log4Error.invalidInputError(calculatedDigest.length == digestLen,
+        "checksum error, size mismatch")
 
       for (i <- 0 until digestLen) {
-        require(calculatedDigest(i) == storedDigest(i), "check sum error, please check weight file")
+        Log4Error.invalidInputError(calculatedDigest(i) == storedDigest(i),
+          "check sum error, please check weight file")
       }
 
     } finally {
@@ -130,7 +132,10 @@ object ModuleLoader {
       val tensorStorage = tensorValue.getTensorType match {
         case TensorType.DENSE => tensor.storage()
         case TensorType.QUANT => tensor.asInstanceOf[QuantizedTensor[_]].getStorage
-        case _ => throw new UnsupportedOperationException("Unsupported Tensor Type")
+        case _ =>
+          Log4Error.invalidOperationError(false,
+            s"Unsupported Tensor Type ${tensorValue.getTensorType}",
+          "only suupport DENSE and QUANT")
       }
       storages(tensorId) = tensor
       storages(storageId) = tensorStorage
@@ -179,7 +184,8 @@ object ModuleLoader {
     val copiedParameterTable = mirror.getParametersTable()
     layers.foreach(name => {
       if (parameterTable.contains(name)) {
-        require(copiedParameterTable.contains(name), s"$name does not exist in loaded module")
+        Log4Error.invalidInputError(copiedParameterTable.contains(name),
+          s"$name does not exist in loaded module")
         copyParams(parameterTable.get(name).get.asInstanceOf[Table],
           copiedParameterTable.get(name).get.asInstanceOf[Table])
       }
@@ -197,7 +203,7 @@ object ModuleLoader {
       // this is for quantization tensors where the weight might be an array
       if (copyParams.get(paraName).get
         .isInstanceOf[Array[Tensor[T]]]) {
-        require(params.get(paraName).get
+        Log4Error.invalidInputError(params.get(paraName).get
           .isInstanceOf[Array[Tensor[T]]], "param type mismatch!")
         val copies = params.get(paraName).get
           .asInstanceOf[Array[Tensor[T]]]
@@ -248,7 +254,7 @@ object ModulePersister {
   private def serializeModule[T : ClassTag](module: AbstractModule[Activity, Activity, T],
     storageType: StorageType)(implicit ev: TensorNumeric[T]): SerializeResult = {
     val bigDLModule = ModuleData(module
-      , new ArrayBuffer[String](), new ArrayBuffer[String]())
+      , Seq[String](), Seq[String]())
     val storages = new mutable.HashMap[Int, Any]()
     val context = SerializeContext(bigDLModule, storages, storageType)
     ModuleSerializer.serialize(context)
@@ -311,7 +317,8 @@ object ModulePersister {
       if (!storageIds.contains(storageId) && storageId != -1) {
         val tensorBuilder = BigDLTensor.newBuilder(bigdlTensor)
         tensorBuilder.clearStorage()
-        require(tensorStorages.contains(storageId), s"${storageId} does not exist")
+        Log4Error.invalidInputError(tensorStorages.contains(storageId),
+          s"${storageId} does not exist")
         tensorBuilder.setStorage(tensorStorages.get(storageId).
           get.asInstanceOf[TensorStorage])
         val attrValueBuilder = AttrValue.newBuilder
@@ -336,7 +343,7 @@ object ModulePersister {
   def saveModelDefinitionToFile[T: ClassTag](definitionPath : String,
     module : AbstractModule[Activity, Activity, T],
     overwrite : Boolean = false)(implicit ev: TensorNumeric[T]) : Unit = {
-    val bigDLModule = ModuleData(module, new ArrayBuffer[String](), new ArrayBuffer[String]())
+    val bigDLModule = ModuleData(module, Seq[String](), Seq[String]())
     val storages = new mutable.HashMap[Int, Any]()
     val context = SerializeContext(bigDLModule, storages, ProtoStorageType)
     val bigDLModel = ModuleSerializer.serialize(context).bigDLModule

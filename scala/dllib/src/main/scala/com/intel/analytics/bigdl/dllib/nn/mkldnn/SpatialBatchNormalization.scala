@@ -21,6 +21,7 @@ import com.intel.analytics.bigdl.dllib.nn.abstractnn.{Activity, DataFormat, Init
 import com.intel.analytics.bigdl.dllib.nn.mkldnn.Phase.{InferencePhase, TrainingPhase}
 import com.intel.analytics.bigdl.dllib.nn.{MklInt8Convertible, Ones, VariableFormat, Zeros}
 import com.intel.analytics.bigdl.dllib.tensor._
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -138,14 +139,16 @@ class SpatialBatchNormalization(
     val bias = init.select(1, 2)
 
     if (initWeight != null) {
-      require(initWeight.size(1) == nOutput)
+      Log4Error.invalidInputError(initWeight.size(1) == nOutput,
+        s"initWeight.size(1) ${initWeight.size(1)} doesn't match nOutput $nOutput")
       weight.copy(initWeight)
     } else {
       weightInitMethod.init(weight, VariableFormat.ONE_D)
     }
 
     if (initBias != null) {
-      require(initBias.size(1) == nOutput)
+      Log4Error.invalidInputError(initBias.size(1) == nOutput,
+        s"initBias.size(1) ${initBias.size(1)} doesn't match nOutput $nOutput")
       bias.copy(initBias)
     } else {
       biasInitMethod.init(bias, VariableFormat.ONE_D)
@@ -201,7 +204,8 @@ class SpatialBatchNormalization(
     // init once
     if (_inputFormats == null) {
       _inputFormats = new Array[MemoryData](1)
-      require(_outputFormats == null)
+      Log4Error.invalidInputError(_outputFormats == null,
+        "_outputFormats should not be null")
       _outputFormats = new Array[MemoryData](1)
     }
 
@@ -245,14 +249,16 @@ class SpatialBatchNormalization(
           val _updateOutputPrimitives = Array(primitive)
           (_updateOutputMemoryPrimitives, _updateOutputPrimitives)
         })
-      case _ => throw new UnsupportedOperationException
+      case _ =>
+        Log4Error.invalidOperationError(false, s"unexpected phase ${modelPhase}",
+        "only support InferencePhase and TrainingPhase")
     }
 
     // init once
     // if the output is not null, it means we have initialized the primitives before.
     // so we do not need create weightAndBias native space again.
     if (output == null || output.isInstanceOf[DnnTensor[_]] &&
-      output.toTensor[Float].size().deep != outputFormats()(0).shape.deep) {
+      !output.toTensor[Float].size().sameElements(outputFormats()(0).shape)) {
       output = initTensor(outputFormats()(0))
     }
 
@@ -346,7 +352,10 @@ class SpatialBatchNormalization(
           inputFormats()(0).getMemoryDescription(),
           inputFormats()(0).getMemoryDescription(), eps.toFloat,
           MklDnn.BatchNormFlag.mkldnn_use_scaleshift)
-      case _ => throw new UnsupportedOperationException
+      case _ =>
+        Log4Error.invalidOperationError(false, s"unexpected phase ${modelPhase}",
+          "SpatialBatchNormalization backward only support TrainingPhase")
+        0
     }
 
     val gradWeightAndBias: NativeData = NativeData(Array(nOutput * 2), Memory.Format.x)

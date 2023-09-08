@@ -24,6 +24,7 @@ from bigdl.dllib.nnframes import *
 
 from optparse import OptionParser
 import sys
+from bigdl.dllib.utils.log4Error import *
 
 
 def inference(image_path, model_path, batch_size, sc):
@@ -63,8 +64,10 @@ if __name__ == "__main__":
     conf = {}
     if options.clusterMode.startswith("yarn"):
         hadoop_conf = os.environ.get("HADOOP_CONF_DIR")
-        assert hadoop_conf, "Directory path to hadoop conf not found for yarn-client mode. Please " \
-                            "set the environment variable HADOOP_CONF_DIR"
+        invalidInputError(hadoop_conf,
+                          "Directory path to hadoop conf not found for yarn-client" \
+                          " mode.", "Please either specify argument hadoop_conf or" \
+                                    "set the environment variable HADOOP_CONF_DIR")
         spark_conf = create_spark_conf().set("spark.executor.memory", "5g") \
             .set("spark.executor.cores", 2) \
             .set("spark.executor.instances", 2) \
@@ -79,6 +82,8 @@ if __name__ == "__main__":
         spark_conf = SparkConf().set("spark.driver.memory", "10g") \
             .set("spark.driver.cores", 4)
         sc = init_nncontext(spark_conf, cluster_mode="local")
+    elif options.clusterMode == "spark-submit":
+        sc = init_nncontext(cluster_mode="spark-submit")
 
     image_path = options.image_path
     model_path = options.model_path

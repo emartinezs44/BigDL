@@ -21,6 +21,14 @@ from shutil import copytree, rmtree
 from setuptools import setup
 import fnmatch
 
+long_description = '''
+BigDL Cluster Serving is a lightweight distributed, real-time serving solution 
+that supports a wide range of deep learning models.
+
+See [here](https://bigdl.readthedocs.io/en/latest/doc/Serving/Overview/serving.html) 
+for more information.
+'''
+
 bigdl_home = os.path.abspath(__file__ + "/../../../..")
 exclude_patterns = ["*__pycache__*", "*ipynb_checkpoints*"]
 
@@ -58,6 +66,8 @@ def setup_package():
         name='bigdl-serving',
         version=VERSION,
         description='Distributed and Automated Model Inference on Big Data Streaming Frameworks',
+        long_description=long_description,
+        long_description_content_type="text/markdown",
         author='BigDL Authors',
         author_email='bigdl-user-group@googlegroups.com',
         license='Apache License, Version 2.0',
@@ -67,7 +77,7 @@ def setup_package():
         # package_data={"bigdl.conf": ['config.yaml']},
         include_package_data=False,
         scripts=scripts,
-        install_requires=['redis', 'pyyaml', 'httpx', 'pyarrow', 'opencv-python'],
+        install_requires=['redis', 'pyyaml', 'httpx', 'pyarrow', 'opencv-python', 'kafka-python'],
         classifiers=[
             'License :: OSI Approved :: Apache Software License',
             'Programming Language :: Python :: 3',

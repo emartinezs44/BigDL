@@ -16,12 +16,18 @@
 
 import pytest
 import numpy as np
-from bigdl.chronos.forecaster.tcmf_forecaster import TCMFForecaster
+
+from bigdl.chronos.utils import LazyImport
+TCMFForecaster=LazyImport('bigdl.chronos.forecaster.tcmf_forecaster.TCMFForecaster')
 from unittest import TestCase
 import tempfile
 import pandas as pd
 
+from .. import op_distributed, op_torch, op_diff_set_all
 
+
+@op_torch
+@op_distributed
 class TestChronosModelTCMFForecaster(TestCase):
 
     def setUp(self):
@@ -40,6 +46,27 @@ class TestChronosModelTCMFForecaster(TestCase):
                                max_FX_epoch=1,
                                max_TCN_epoch=1,
                                alt_iters=2)
+
+    def tearDown(self):
+        pass
+
+    @classmethod
+    def tearDownClass(cls):
+        # stop possible active_spark_context
+        from pyspark import SparkContext
+        from bigdl.orca.ray import OrcaRayContext
+        if SparkContext._active_spark_context is not None:
+            print("Stopping spark_orca context")
+            sc = SparkContext.getOrCreate()
+            if sc.getConf().get("spark.master").startswith("spark://"):
+                from bigdl.dllib.nncontext import stop_spark_standalone
+                stop_spark_standalone()
+            sc.stop()
+        if OrcaRayContext._active_ray_context is not None:
+            print("Stopping ray_orca context")
+            ray_ctx = OrcaRayContext.get(initialize=False)
+            if ray_ctx.initialized:
+                ray_ctx.stop()
 
     def test_forecast_tcmf_ndarray(self):
         ndarray_input = {'id': self.id, 'y': self.data}
@@ -120,6 +147,7 @@ class TestChronosModelTCMFForecaster(TestCase):
         # is_xshards_distributed
         with self.assertRaises(Exception) as context:
             self.model.is_xshards_distributed()
+        print(str(context.exception))
         self.assertTrue('You should run fit before calling is_xshards_distributed()'
                         in str(context.exception))
 
@@ -149,7 +177,7 @@ class TestChronosModelTCMFForecaster(TestCase):
 
         # fit_incremental
         data_id_diff = {'id': self.id - 1, 'y': self.data_new}
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(RuntimeError) as context:
             self.model.fit_incremental(data_id_diff)
         self.assertTrue('The input ids in fit_incremental differs from input ids in fit'
                         in str(context.exception))
@@ -186,7 +214,7 @@ class TestChronosModelTCMFForecaster(TestCase):
         np.testing.assert_raises(AssertionError, np.testing.assert_array_equal, yhat, yhat_incr)
 
         data_new_id = {'id': self.id, 'y': self.data_new}
-        with self.assertRaises(ValueError) as context:
+        with self.assertRaises(RuntimeError) as context:
             self.model.fit_incremental(data_new_id)
         self.assertTrue('Got valid id in fit_incremental and invalid id in fit.'
                         in str(context.exception))
@@ -243,7 +271,7 @@ class TestChronosModelTCMFForecaster(TestCase):
         self.assertTrue('This model has already been fully trained' in str(context.exception))
         with self.assertRaises(Exception) as context:
             self.model.fit_incremental(shard_train)
-        self.assertTrue('NotImplementedError' in context.exception.__class__.__name__)
+        self.assertTrue('Error' in context.exception.__class__.__name__)
         with tempfile.TemporaryDirectory() as tempdirname:
             self.model.save(tempdirname + "/model")
             loaded_model = TCMFForecaster.load(tempdirname + "/model", is_xshards_distributed=True)
@@ -266,6 +294,7 @@ class TestChronosModelTCMFForecaster(TestCase):
         assert final_df.shape == (300 * horizon, 3)
         OrcaContext.pandas_read_backend = "spark"
 
+    @op_diff_set_all
     def test_forecast_tcmf_distributed(self):
         input = dict({'id': self.id, 'y': self.data})
 

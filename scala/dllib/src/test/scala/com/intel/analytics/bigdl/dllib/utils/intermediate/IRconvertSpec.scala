@@ -20,7 +20,7 @@ import com.intel.analytics.bigdl.mkl.Memory
 import com.intel.analytics.bigdl.dllib.nn
 import com.intel.analytics.bigdl.dllib.nn._
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.DataFormat
-import com.intel.analytics.bigdl.dllib.nn.keras
+import com.intel.analytics.bigdl.dllib.nn.internal
 import com.intel.analytics.bigdl.dllib.nn.mkldnn.Phase.TrainingPhase
 import com.intel.analytics.bigdl.dllib.nn.mkldnn.{DnnGraph, Equivalent, Input, Output}
 import com.intel.analytics.bigdl.numeric.NumericFloat
@@ -93,8 +93,8 @@ class IRconvertSpec extends BigDLSpecHelper {
     Graph(conv1, output)
   }
 
-  def kerasLayer(classNum: Int, shape: Shape = Shape(28, 28, 3)): keras.Sequential[Float] = {
-    import com.intel.analytics.bigdl.dllib.nn.keras._
+  def kerasLayer(classNum: Int, shape: Shape = Shape(28, 28, 3)): internal.Sequential[Float] = {
+    import com.intel.analytics.bigdl.dllib.nn.internal._
     import com.intel.analytics.bigdl.dllib.utils.Shape
 
     val model = Sequential()
@@ -238,9 +238,9 @@ class IRconvertSpec extends BigDLSpecHelper {
 
     val blas = modelBlas().asInstanceOf[StaticGraph[Float]]
     val allNodes = blas.getSortedForwardExecutions()
-    require(BlasToIR[Float].convertingCheck(allNodes))
+    TestUtils.conditionFailTest(BlasToIR[Float].convertingCheck(allNodes))
     val irNodes = BlasToIR[Float].convert(allNodes).map(_._2).toArray
-    require(IRToDnn[Float].convertingCheck(irNodes))
+    TestUtils.conditionFailTest(IRToDnn[Float].convertingCheck(irNodes))
     val dnnNodes = IRToDnn[Float].convert(irNodes).map(_._2).toArray
 
     val inputsNodes = dnnNodes.filter(_.element.getName() == "input")(0)
@@ -272,10 +272,10 @@ class IRconvertSpec extends BigDLSpecHelper {
 
     val allNodes = modelIR()
     RandomGenerator.RNG.setSeed(1000)
-    require(IRToBlas[Float].convertingCheck(allNodes))
+    TestUtils.conditionFailTest(IRToBlas[Float].convertingCheck(allNodes))
     val blasNodes = IRToBlas[Float].convert(allNodes).map(_._2).toArray
     RandomGenerator.RNG.setSeed(1000)
-    require(IRToDnn[Float].convertingCheck(allNodes))
+    TestUtils.conditionFailTest(IRToDnn[Float].convertingCheck(allNodes))
     val dnnNodes = IRToDnn[Float].convert(allNodes).map(_._2).toArray
 
     val blas = Graph(blasNodes.filter(_.element.getName() == "input"),
@@ -311,10 +311,10 @@ class IRconvertSpec extends BigDLSpecHelper {
 
     val allNodes = modelIR2()
     RandomGenerator.RNG.setSeed(1000)
-    require(IRToBlas[Float].convertingCheck(allNodes))
+    TestUtils.conditionFailTest(IRToBlas[Float].convertingCheck(allNodes))
     val blasNodes = IRToBlas[Float].convert(allNodes).map(_._2).toArray
     RandomGenerator.RNG.setSeed(1000)
-    require(IRToDnn[Float].convertingCheck(allNodes))
+    TestUtils.conditionFailTest(IRToDnn[Float].convertingCheck(allNodes))
     val dnnNodes = IRToDnn[Float].convert(allNodes).map(_._2).toArray
 
     val blas = Graph(blasNodes.filter(_.element.getName() == "input"),

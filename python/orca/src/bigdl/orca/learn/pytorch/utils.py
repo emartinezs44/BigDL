@@ -28,17 +28,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This file is adapted from
+# Some code in this file is adapted from
 # https://github.com/ray-project/ray/blob/master/python/ray/util/sgd/utils.py
 
-import collections
-from contextlib import closing, contextmanager
-import logging
-import numpy as np
-import socket
 import time
-import torch.distributed as dist
+import numbers
+import socket
+import collections
+import numpy as np
+from contextlib import closing, contextmanager
+
+
 import torch
+from bigdl.dllib.utils.log4Error import *
 
 
 logger = logging.getLogger(__name__)
@@ -73,11 +75,11 @@ class TimerStat:
         self.count = 0
 
     def __enter__(self):
-        assert self._start_time is None, "concurrent updates not supported"
+        invalidInputError(self._start_time is None, "concurrent updates not supported")
         self._start_time = time.time()
 
     def __exit__(self, type, value, tb):
-        assert self._start_time is not None
+        invalidInputError(self._start_time is not None, "expect start time is not none")
         time_delta = time.time() - self._start_time
         self.push(time_delta)
         self._start_time = None
@@ -268,7 +270,51 @@ def check_for_failure(remote_values):
 
 def override(interface_class):
     def overrider(method):
-        assert (method.__name__ in dir(interface_class))
+        invalidInputError(method.__name__ in dir(interface_class),
+                          "method.__name__ doesn't exist in interface_class")
         return method
 
     return overrider
+
+
+def get_filesystem(filepath):
+    from fsspec.core import url_to_fs
+    fs, _ = url_to_fs(str(filepath))
+    return fs
+
+
+def get_batchsize(input):
+    if isinstance(input, (list, tuple)):
+        return get_batchsize(input[0])
+    elif isinstance(input, dict):
+        return get_batchsize(list(input.values())[0])
+    else:
+        return input.size(0)
+
+
+def process_stats(worker_stats):
+    stats = {
+        "num_samples": sum(
+            stats.pop("num_samples", np.nan) for stats in worker_stats)
+    }
+
+    stats = mean_reduce_stats(worker_stats, stats)
+
+    return stats
+
+
+def mean_reduce_stats(worker_stats, res_stats=None):
+    if not res_stats:
+        res_stats = {}
+    for stat_key, stat_value in worker_stats[0].items():
+        if isinstance(stat_value, numbers.Number):  # loss
+            res_stats[stat_key] = np.nanmean(
+                [s.get(stat_key, np.nan) for s in worker_stats])
+        elif isinstance(stat_value, torch.Tensor):  # Accuracy
+            res_stats[stat_key] = torch.mean(
+                torch.stack([stats[stat_key] for stats in worker_stats]))
+        elif isinstance(stat_value, dict):  # profile
+            res_stats[stat_key] = mean_reduce_stats([stats[stat_key] for stats in worker_stats])
+        else:
+            res_stats[stat_key] = stat_value
+    return res_stats

@@ -4,7 +4,7 @@ In this example, onnx speed up the inferencing for ~4X.
 
 ## Prepare the environment
 We recommend you to use Anaconda to prepare the environment, especially if you want to run on a yarn cluster.
-You can refer to [Chronos Install Guide](https://bigdl.readthedocs.io/en/latest/doc/Chronos/Overview/chronos.html#install)
+You can refer to [Chronos Install Guide](https://bigdl.readthedocs.io/en/latest/doc/Chronos/Overview/install.html)
 
 ## Prepare data
 **autotsest**: We are using the `nyc taxi` provided by NAB, from 2014-07-01 to 2015-01-31 taxi fare information For more details, please refer to [here](https://raw.githubusercontent.com/numenta/NAB/v1.0/data/realKnownCause/nyc_taxi.csv)
@@ -13,10 +13,9 @@ You can refer to [Chronos Install Guide](https://bigdl.readthedocs.io/en/latest/
 
 First, `get_public_dataset` automatically download the specified data set and return the tsdata that can be used directly after preprocessing.
 ```python
-# Just specify the name and path, (e.g. network_traffic)
+# Just specify the name, (e.g. network_traffic)
 name = 'network_traffic'
-path = '~/.chronos/dataset/'
-tsdata_train, _, tsdata_test = get_public_dataset(name, path, with_split=True, test_ratio=0.1)
+tsdata_train, _, tsdata_test = get_public_dataset(name)
 minmax = MinMaxScaler()
 for tsdata in [tsdata_train, tsdata_test]:
     tsdata.gen_dt_feature(one_hot_features=["HOUR", "WEEK"])\
@@ -59,7 +58,7 @@ forecaster.predict_with_onnx(x_test)
 
 ## Options
 * `--epochs` Max number of epochs to train in each trial. Default to be 2.
-* `--n_sampling` Number of times to sample from the search_space. Default to be 1.
+* `--n_sampling` Number of times to sample from the search_space. Default to be 6.
 * `--cpus_per_trail` Number of cpus for each trial. Default to be 2.
 * `--memory` The memory you want to use on each node. Default to be 10g.
 * `--cluster_mode` The mode for the Spark cluster. local or yarn. Default to be `local`. You can refer to OrcaContext documents [here](https://bigdl.readthedocs.io/en/latest/doc/Orca/Overview/orca-context.html) for details.

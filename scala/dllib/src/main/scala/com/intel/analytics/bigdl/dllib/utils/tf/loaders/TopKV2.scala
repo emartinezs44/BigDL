@@ -22,6 +22,7 @@ import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.dllib.nn.ops.{TopK => TopKOps}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 import com.intel.analytics.bigdl.dllib.utils.tf.Context
 import org.tensorflow.framework.{DataType, NodeDef}
 
@@ -45,7 +46,8 @@ class TopKV2 extends TensorflowOpsLoader {
     } else if (t == DataType.DT_DOUBLE) {
       "Double"
     } else {
-      throw new UnsupportedOperationException(s"Not support load Inv when type is ${t}")
+      Log4Error.invalidOperationError(false, s"Not support load Inv when type is ${t}")
+      ""
     }
 
     new TopKV2LoadTF[T](s, ts)
@@ -56,7 +58,7 @@ class TopKV2LoadTF[T: ClassTag](s: Boolean, t: String)(implicit ev: TensorNumeri
   extends Adapter[T](Array(2)) {
   override def build(tensorArrays: Array[Tensor[_]]): AbstractModule[Activity, Activity, T] = {
     val kTensor = tensorArrays(0).asInstanceOf[Tensor[Int]]
-    require(kTensor.isScalar, "Invalid input k")
+    Log4Error.invalidInputError(kTensor.isScalar, "Invalid input k")
     val k = kTensor.value()
 
     if (t == "Float") {
@@ -64,7 +66,8 @@ class TopKV2LoadTF[T: ClassTag](s: Boolean, t: String)(implicit ev: TensorNumeri
     } else if (t == "Double") {
       TopKOps[T, Double](k, s, startIndex = 0)
     } else {
-      throw new UnsupportedOperationException(s"Not support load Inv when type is ${t}")
+      Log4Error.invalidOperationError(false, s"Not support load Inv when type is ${t}")
+      null
     }
   }
 }

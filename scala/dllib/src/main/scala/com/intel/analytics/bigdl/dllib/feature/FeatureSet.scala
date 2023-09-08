@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import com.intel.analytics.bigdl.DataSet
 import com.intel.analytics.bigdl.dllib.feature.dataset.{AbstractDataSet, DistributedDataSet, MiniBatch, Transformer}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
-import com.intel.analytics.bigdl.dllib.utils.RandomGenerator
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, RandomGenerator}
 // import com.intel.analytics.bigdl.dllib.utils.PythonInterpreter
 import com.intel.analytics.bigdl.dllib.feature.common.{ArrayLike, ArrayLikeWrapper}
 // import com.intel.analytics.bigdl.dllib.feature.pmem._
@@ -236,9 +236,10 @@ class CachedDistributedFeatureSet[T: ClassTag]
   extends DistributedFeatureSet[T]{
 
   protected lazy val count: Long = buffer.mapPartitions(iter => {
-    require(iter.hasNext)
+    Log4Error.unKnowExceptionError(iter.hasNext, "unexpect empty iterator")
     val array = iter.next()
-    require(!iter.hasNext)
+//    require(!iter.hasNext)
+    Log4Error.unKnowExceptionError(!iter.hasNext, "there should be only 1 element in the iterator")
     Iterator.single(array.length)
   }).reduce(_ + _)
 
@@ -401,7 +402,7 @@ class CachedDistributedFeatureSet[T: ClassTag]
 //          Array()
 //        }
 //      case _ =>
-//        throw new IllegalArgumentException(s"supported type ${data.getClass()}")
+//        Log4Error.invalidOperationError(false,s"supported type ${data.getClass()}")
 //    }
 //  }
 //
@@ -556,11 +557,11 @@ class CachedDistributedFeatureSet[T: ClassTag]
 class DiskFeatureSet[T: ClassTag]
 (origin: RDD[T], val numSlice: Int)
   extends DistributedFeatureSet[T]{
-  require(numSlice != 1,
+  Log4Error.invalidInputError(numSlice != 1,
     s"Detected numSlice = 1, Please use MemoryType DRAM to " +
       s"cache all data into memory.")
 
-  require(numSlice == 0 || numSlice >= 2,
+  Log4Error.invalidInputError(numSlice == 0 || numSlice >= 2,
     s"excepted numSlice == 0 or >= 2, but got $numSlice")
 
   override def numOfSlice: Int = numSlice
@@ -587,9 +588,10 @@ class DiskFeatureSet[T: ClassTag]
   override def data(train: Boolean): RDD[T] = {
     if (numSlice == 0) {
       if (train) {
-        throw new IllegalArgumentException("No training data in memory," +
+        Log4Error.unKnowExceptionError(false, "No training data in memory," +
           "because numSlice is zero. numSlice should >= 2 " +
           "in a training FeatureSet.")
+        null
       } else {
         buffer
       }
@@ -672,22 +674,21 @@ object FeatureSet {
 //            PmemFeatureSet.rdd[T](repartitionedData, DIRECT, sequentialOrder, shuffle)
         case diskM: DISK_AND_DRAM =>
           logger.info(s"~~~~~~~ Caching with DISK_AND_DRAM(${diskM.numSlice}) ~~~~~~~")
-          if (sequentialOrder) {
-            throw new IllegalArgumentException("DiskFeatureSet does not support" +
-              " sequentialOrder.")
-          }
-
-          if (!shuffle) {
-            throw new IllegalArgumentException("DiskFeatureSet must use shuffle.")
-          }
+          Log4Error.invalidInputError(!sequentialOrder, "DiskFeatureSet does not support" +
+            " sequentialOrder.", "Please set sequentialOrder to false" +
+            "with memoryType=DISK_AND_DRAM")
+          Log4Error.invalidInputError(shuffle, "DiskFeatureSet must use shuffle",
+            "Please set shuffle to true with memoryType=DISK_AND_DRAM")
           new DiskFeatureSet[T](data, diskM.numSlice)
         case _ =>
-          throw new IllegalArgumentException(
-            s"MemoryType: ${memoryType} is not supported at the moment")
+          Log4Error.invalidInputError(false, s"MemoryType: ${memoryType} is not" +
+            s" supported at the moment",
+            "memoryType can only be (DISK_AND_DRAM, DRAM)")
+          null
       }
 
 //      case _ =>
-//        throw new IllegalArgumentException(
+//        Log4Error.invalidOperationError(false,
 //          s"DataStrategy ${dataStrategy} is not supported at the moment")
 
     }

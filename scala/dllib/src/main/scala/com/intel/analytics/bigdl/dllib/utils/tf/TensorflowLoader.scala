@@ -81,7 +81,7 @@ object TensorflowLoader{
     val context = binFile.map(loadBinFiles(_))
 
     // Build BigDL model from the tf node graph
-    buildBigDLModel(tfGraph, newInputs, outputs, byteOrder, graphPrototxt,
+    buildBigDLModel(tfGraph, newInputs.toSeq, outputs.toSeq, byteOrder, graphPrototxt,
       context, generatedBackward)
   }
 
@@ -90,7 +90,7 @@ object TensorflowLoader{
     // Get node list
     val nodeList = parse(graphFile)
 
-    new BigDLSessionImpl[T](nodeList.asScala, loadBinFiles(binFile), byteOrder)
+    new BigDLSessionImpl[T](nodeList.asScala.toSeq, loadBinFiles(binFile), byteOrder)
   }
 
   /**
@@ -99,14 +99,15 @@ object TensorflowLoader{
    * @return
    */
   private def getInputPorts(inputs: Seq[String]): mutable.Map[String, ArrayBuffer[Int]] = {
-    require(inputs.distinct.length == inputs.length,
+    Log4Error.invalidInputError(inputs.distinct.length == inputs.length,
       "input should not contain duplicated names")
     val inputPorts = inputs.filter(_.split(":").length == 2)
     val result = mutable.HashMap[String, ArrayBuffer[Int]]()
     inputPorts.foreach(s => {
       val name = s.split(":")(0)
       val pos = s.split(":")(1)
-      require(!inputs.contains(name), "You should not specify node name and node name " +
+      Log4Error.invalidInputError(!inputs.contains(name),
+        "You should not specify node name and node name " +
         "with port at same time")
       if (!result.isDefinedAt(name)) {
         result(name) = ArrayBuffer[Int]()
@@ -149,7 +150,10 @@ object TensorflowLoader{
           tensor.size(), "float")
         case DoubleType => new JTensor(tensor.asInstanceOf[Tensor[Double]].storage().array()
           .map(_.toFloat), tensor.size(), "double")
-        case t => throw new NotImplementedError(s"$t is not supported")
+        case t =>
+          Log4Error.invalidInputError(false, s"${ev.getType()} is not supported",
+          "only support FloatType and DoubleType")
+          null
       }
       save.put(n, saveTensor)
     })
@@ -163,7 +167,10 @@ object TensorflowLoader{
       val tensor = ev.getType() match {
         case FloatType => PythonBigDLUtils.toTensor(m(k), "float")
         case DoubleType => PythonBigDLUtils.toTensor(m(k), "double")
-        case t => throw new NotImplementedError(s"$t is not supported")
+        case t =>
+          Log4Error.invalidInputError(false, s"${ev.getType()} is not supported",
+            "only support FloatType and DoubleType")
+          null
       }
 
       map(k) = (tensor, tensor.clone(), None)
@@ -178,7 +185,7 @@ object TensorflowLoader{
    */
   private[bigdl] def parseTxt(graphProtoTxt: String) : List[NodeDef] = {
     val f = new java.io.File(graphProtoTxt)
-    require(f.exists(), graphProtoTxt + " does not exists")
+    Log4Error.invalidInputError(f.exists(), graphProtoTxt + " does not exists")
 
     val reader = new JFileReader(f)
 
@@ -211,7 +218,7 @@ object TensorflowLoader{
     } else {
       val results = name2Node.valuesIterator.toArray.filter(n =>
         outputs.contains(n.element.getName))
-      require(results.length == outputs.length, "Invalid outputNode names")
+      Log4Error.invalidInputError(results.length == outputs.length, "Invalid outputNode names")
       results
     }
     val (inputs, originInputs) = connect(outputNodes, name2Node, isInput, inputPorts)
@@ -240,7 +247,7 @@ object TensorflowLoader{
     val originInputs = new mutable.ArrayBuffer[String]()
 
     // Do a BFS to connect the nodes
-    queue.enqueue(nodes: _*)
+    nodes.foreach(queue.enqueue(_))
     while(queue.nonEmpty) {
       val node = queue.dequeue()
       if (!visited(node)) {
@@ -258,7 +265,7 @@ object TensorflowLoader{
             // if the predefined input node is not a Placeholder, add one to match the Input node
             val inputNum = getInputNumber(node.element)
             if (inputNum == 0) {
-              require(!inputPorts.isDefined ||
+              Log4Error.invalidInputError(!inputPorts.isDefined ||
                 !inputPorts.get.isDefinedAt(node.element.getName),
                   s"node ${node.element.getName} has no input")
               newInputs(node.element.getName).append(node.element.getName)
@@ -266,7 +273,7 @@ object TensorflowLoader{
               if (inputPorts.isDefined &&
                 inputPorts.get.isDefinedAt(node.element.getName)) {
                 val selectInputs = inputPorts.get(node.element.getName)
-                selectInputs.foreach(i => require(i < inputNum && i >= 0,
+                selectInputs.foreach(i => Log4Error.invalidInputError(i < inputNum && i >= 0,
                   s"invalid input port $i at ${node.element.getName}, it should between 0 and" +
                     s" ${inputNum - 1}"))
                 var i = 0
@@ -305,7 +312,7 @@ object TensorflowLoader{
         }
       }
     }
-    (newInputs, originInputs)
+    (newInputs, originInputs.toSeq)
   }
 
   private def pushPreNode(name: String, name2Node: Map[String, Node[NodeDef]],
@@ -400,7 +407,8 @@ object TensorflowLoader{
               (builder.build[T](n.element, byteOrder, context), Seq(n).asJava, Seq(n))
             } catch {
               case e: Throwable =>
-                throw new UnsupportedOperationException(errorMsg, e)
+                Log4Error.unKnowExceptionError(false, errorMsg, cause = e)
+                (null, Seq(n).asJava, Seq(n))
             }
           })
 
@@ -410,7 +418,7 @@ object TensorflowLoader{
           module.setName(removeColon(nodes.get(0).element.getName()))
         } else {
           // Many to one map
-          val name = removeColon(findCommonPrefix(nodes.asScala.map(_.element.getName)))
+          val name = removeColon(findCommonPrefix(nodes.asScala.map(_.element.getName).toSeq))
           if (name == "") {
             // Use a name combine nodes
             module.setName(s"[${nodes.asScala.map(_.element.getName).map(_.replaceAll("/", "\\\\"))
@@ -443,7 +451,7 @@ object TensorflowLoader{
     def connect(outputModuleNode: Seq[Node[AbstractModule[Activity, Activity, T]]]) = {
       val queue = new mutable.Queue[Node[AbstractModule[Activity, Activity, T]]]()
       val visited = mutable.Set[Node[AbstractModule[Activity, Activity, T]]]()
-      queue.enqueue(outputModuleNode: _*)
+      outputModuleNode.foreach(queue.enqueue(_))
 
       while (queue.nonEmpty) {
         val currNode = queue.dequeue()
@@ -457,7 +465,7 @@ object TensorflowLoader{
             .filterNot(n => allNodes(n._1))
             .map(n => (convertedNode(n._1), n._2.newInstance())).filter(n => n._1 != currNode)
           inputModuleNodes.foreach(n => n._1.add(currNode, n._2))
-          queue.enqueue(inputModuleNodes.map(_._1): _*)
+          inputModuleNodes.map(_._1).foreach(queue.enqueue(_))
         }
       }
     }
@@ -467,9 +475,15 @@ object TensorflowLoader{
     connect(outputModules)
 
     val inputNodes = inputs
-      .map(n => nameToNode.getOrElse(n, throw new IllegalArgumentException(s"Can't find node $n")))
+      .map(n => nameToNode.getOrElse(n, {
+        Log4Error.invalidOperationError(false, s"Can't find node $n")
+        null
+      }))
     val outputNodes = outputs
-      .map(n => nameToNode.getOrElse(n, throw new IllegalArgumentException(s"Can't find node $n")))
+      .map(n => nameToNode.getOrElse(n, {
+        Log4Error.invalidOperationError(false, s"Can't find node $n")
+        null
+      }))
 
 
     val weights = ArrayBuffer[Tensor[T]]()
@@ -483,7 +497,7 @@ object TensorflowLoader{
     val adjustOutputs = if (context.assignGrads.isDefined) {
       outputNodes.map(n => {
         val matchNode = context.assignGrads.get.filter(_._2 == n.element.getName())
-        require(matchNode.size <= 1, "Invalid gradients output")
+        Log4Error.invalidInputError(matchNode.size <= 1, "Invalid gradients output")
         if (matchNode.size == 1) {
           new AssignGrad[T](context(matchNode.head._1)._2).inputs(n)
         } else {
@@ -526,7 +540,7 @@ object TensorflowLoader{
 
   private def matchGraph(graph: DirectedGraph[NodeDef], pattern: DirectedGraph[String])
       : (List[Node[NodeDef]], Seq[Node[NodeDef]]) = {
-    require(graph.reverse && pattern.reverse, "Must pass in reversed graph")
+    Log4Error.invalidInputError(graph.reverse && pattern.reverse, "Must pass in reversed graph")
     val patternToGraph = new mutable.HashMap[Node[String], Node[NodeDef]]()
     val inputs = new ArrayBuffer[Node[NodeDef]]()
     patternToGraph(pattern.source) = graph.source
@@ -556,7 +570,8 @@ object TensorflowLoader{
         var j = 0
         while (i < patternNode.prevNodes.length) {
           if (patternNode.prevNodes(i).element == N_INPUT_PLACEHOLDER) {
-            require(patternNode.prevNodes.count(_.element == N_INPUT_PLACEHOLDER) == 1,
+            Log4Error.invalidInputError(
+              patternNode.prevNodes.count(_.element == N_INPUT_PLACEHOLDER) == 1,
               s"only support one $N_INPUT_PLACEHOLDER ")
             direction = 1
             // skip the left input nodes of graphNode,
@@ -586,7 +601,7 @@ object TensorflowLoader{
       }
     })
     import scala.collection.JavaConverters._
-    return (patternToGraph.valuesIterator.toList.asJava, inputs)
+    return (patternToGraph.valuesIterator.toList.asJava, inputs.toSeq)
   }
 
   private def findCommonPrefix(data: Seq[String]): String = {

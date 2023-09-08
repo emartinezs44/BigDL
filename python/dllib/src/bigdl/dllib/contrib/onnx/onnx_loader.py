@@ -14,16 +14,16 @@
 # limitations under the License.
 #
 
-import onnx
-from bigdl.dllib.nn.onnx.layer import *
 from bigdl.dllib.nn.layer import Identity, Model
 from .ops_mapping import _convert_map as convert_map
 from .converter_utils import parse_node_attr, parse_tensor_data
+from bigdl.dllib.utils.log4Error import *
 
 
 class OnnxLoader(object):
 
     def load_model(self, file_path):
+        import onnx
         model_proto = onnx.load_model(file_path)
         # self._ir_version = model_proto.ir_version
         # self._opset_import = model_proto.opset_import
@@ -37,7 +37,7 @@ class OnnxLoader(object):
 
     def load_graph(self, graph_proto):
         if not graph_proto:
-            raise ValueError("Graph proto is required")
+            invalidInputError(False, "Graph proto is required")
 
         input_nodes = list()
         output_nodes = list()
@@ -49,7 +49,7 @@ class OnnxLoader(object):
 
         for tensor in graph_proto.initializer:
             if not tensor.name.strip():
-                raise ValueError("Tensor's name is required")
+                invalidInputError(False, "Tensor's name is required")
             initialized_tensors.add(tensor.name)
             tensor_data = parse_tensor_data(tensor)
             tensor_map[tensor.name] = (tensor_data, tensor_data.shape)
@@ -77,9 +77,13 @@ class OnnxLoader(object):
                 root_nodes.append((name, op_type))
                 prev_modules = [dummy_root]
 
-            bigdl_module, outputs_shape = self._make_module_from_onnx_node(op_type, inputs, prev_modules, attrs, outputs)
+            bigdl_module, outputs_shape = self._make_module_from_onnx_node(op_type, inputs,
+                                                                           prev_modules, attrs,
+                                                                           outputs)
 
-            assert len(outputs) == len(outputs_shape)
+            invalidInputError(len(outputs) == len(outputs_shape),
+                              f"size of outputs {len(outputs)} doesn't match outputs_shape"
+                              f" ${len(outputs_shape)}")
 
             for out, out_shape in zip(outputs, outputs_shape):
                 module_map[out] = bigdl_module
@@ -97,7 +101,7 @@ class OnnxLoader(object):
         if op_type in convert_map:
             module, out_shapes = convert_map[op_type](inputs, prev_modules, attrs, outputs)
         else:
-            raise NotImplemented(op_type)
+            invalidInputError(False, "not implement yet")
         return module, out_shapes
 
 

@@ -21,16 +21,14 @@ from bigdl.chronos.data import TSDataset
 import bigdl.orca.automl.hp as hp
 from bigdl.chronos.autots.model import AutoModelFactory
 from bigdl.chronos.autots.tspipeline import TSPipeline
+from bigdl.chronos.autots.utils import recalculate_n_sampling
 
 
 class AutoTSEstimator:
     """
     Automated TimeSeries Estimator for time series forecasting task, which supports
     TSDataset and customized data creator as data input on built-in model (only
-    "lstm", "tcn", "seq2seq" for now) and 3rd party model.
-
-    Only backend="torch" is supported for now. Customized data creator has not been
-    fully supported by TSPipeline.
+    "lstm", "tcn", "seq2seq" for now) or 3rd party model.
 
     >>> # Here is a use case example:
     >>> # prepare train/valid/test tsdataset
@@ -48,9 +46,10 @@ class AutoTSEstimator:
                  model="lstm",
                  search_space=dict(),
                  metric="mse",
+                 metric_mode=None,
                  loss=None,
                  optimizer="Adam",
-                 past_seq_len=2,
+                 past_seq_len='auto',
                  future_seq_len=1,
                  input_feature_num=None,
                  output_target_num=None,
@@ -84,14 +83,26 @@ class AutoTSEstimator:
                parameter. search_space should contain those parameters other than the keyword
                arguments in this constructor in its key. If a 3rd parth model is used, then you
                must set search_space to a dict.
-        :param metric: String. The evaluation metric name to optimize. e.g. "mse"
-        :param loss: String or pytorch/tf.keras loss instance or pytorch loss creator function. The
-               default loss function for pytorch backend is nn.MSELoss().
-        :param optimizer: String or pyTorch optimizer creator function or
-               tf.keras optimizer instance.
+        :param metric: String or customized evaluation metric function.
+               If string, metric is the evaluation metric name to optimize, e.g. "mse".
+               If callable function, it signature should be func(y_true, y_pred), where y_true and
+               y_pred are numpy ndarray. The function should return a float value as evaluation
+               result.
+        :param metric_mode: One of ["min", "max"]. "max" means greater metric value is better.
+               You have to specify metric_mode if you use a customized metric function.
+               You don't have to specify metric_mode if you use the built-in metric in
+               bigdl.orca.automl.metrics.Evaluator.
+        :param loss: String or pytorch loss instance or pytorch loss creator function. The
+               default loss function for pytorch backend is nn.MSELoss(). If users use
+               backend="keras" and 3rd parth model this parameter will be ignored.
+        :param optimizer: String or pyTorch optimizer creator function or tf.keras optimizer
+               instance. If users use backend="keras" and 3rd parth model, this parameter will
+               be ignored.
         :param past_seq_len: Int or or hp sampling function. The number of historical steps (i.e.
                lookback) used for forecasting. For hp sampling, see bigdl.orca.automl.hp for more
-               details. The values defaults to 2.
+               details. The values defaults to 'auto', which will automatically infer the
+               cycle length of each time series and take the mode of them. The search space
+               will be automatically set to hp.randint(0.5*cycle_length, 2*cycle_length).
         :param future_seq_len: Int or List. The number of future steps to forecast. The value
                defaults to 1, if `future_seq_len` is a list, we will sample discretely according
                to the input list. 1 means the timestamp just after the observed data.
@@ -104,7 +115,8 @@ class AutoTSEstimator:
                is sampled randomly from all features for each trial. The parameter is ignored
                if not using chronos.data.TSDataset as input data type. The value defaults
                to "auto".
-        :param backend: The backend of the auto model. We only support backend as "torch" for now.
+        :param backend: The backend of the auto model. We only support backend as "torch" or
+                      "keras" for now.
         :param logs_dir: Local directory to save logs and results.
                It defaults to "/tmp/autots_estimator"
         :param cpus_per_trial: Int. Number of cpus for each trial. It defaults to 1.
@@ -113,10 +125,10 @@ class AutoTSEstimator:
                defaults to None and doesn't take effects while running in local. While running in
                cluster, it defaults to "hdfs:///tmp/{name}".
         """
-        # check backend and set default loss
-        if backend != "torch":
-            raise ValueError(f"We only support backend as torch. Got {backend}")
-        else:
+        from bigdl.nano.utils.log4Error import invalidInputError
+
+        # check backend and set default loss MSE
+        if backend == "torch":
             import torch
             if loss is None:
                 loss = torch.nn.MSELoss()
@@ -125,28 +137,36 @@ class AutoTSEstimator:
             search_space = AutoModelFactory.get_default_search_space(model, search_space)
 
         self._future_seq_len = future_seq_len  # for support future_seq_len list input.
-        assert isinstance(future_seq_len, int) or isinstance(future_seq_len, list),\
-            f"future_seq_len only support int or List, but found {type(future_seq_len)}"
+        invalidInputError(isinstance(future_seq_len, int) or isinstance(future_seq_len, list),
+                          f"future_seq_len only support int or List, but found"
+                          f" {type(future_seq_len)}")
         future_seq_len = future_seq_len if isinstance(future_seq_len, int) else len(future_seq_len)
 
-        if isinstance(model, types.FunctionType) and backend == "torch":
-            # pytorch 3rd party model
+        # 3rd party model
+        if isinstance(model, types.FunctionType):
             from bigdl.orca.automl.auto_estimator import AutoEstimator
-            self.model = AutoEstimator.from_torch(model_creator=model,
-                                                  optimizer=optimizer,
-                                                  loss=loss,
-                                                  logs_dir=logs_dir,
-                                                  resources_per_trial={"cpu": cpus_per_trial},
-                                                  name=name)
+            if backend == "torch":
+                self.model = AutoEstimator.from_torch(model_creator=model,
+                                                      optimizer=optimizer,
+                                                      loss=loss,
+                                                      logs_dir=logs_dir,
+                                                      resources_per_trial={"cpu": cpus_per_trial},
+                                                      name=name)
+            if backend == "keras":
+                self.model = AutoEstimator.from_keras(model_creator=model,
+                                                      logs_dir=logs_dir,
+                                                      resources_per_trial={"cpu": cpus_per_trial},
+                                                      name=name)
             self.metric = metric
+            self.metric_mode = metric_mode
             search_space.update({"past_seq_len": past_seq_len,
                                  "future_seq_len": future_seq_len,
                                  "input_feature_num": input_feature_num,
                                  "output_feature_num": output_target_num})
             self.search_space = search_space
 
+        # built-in model
         if isinstance(model, str):
-            # built-in model
             # update auto model common search space
             search_space.update({"past_seq_len": past_seq_len,
                                  "future_seq_len": future_seq_len,
@@ -154,6 +174,7 @@ class AutoTSEstimator:
                                  "output_target_num": output_target_num,
                                  "loss": loss,
                                  "metric": metric,
+                                 "metric_mode": metric_mode,
                                  "optimizer": optimizer,
                                  "backend": backend,
                                  "logs_dir": logs_dir,
@@ -166,6 +187,7 @@ class AutoTSEstimator:
 
         # save selected features setting for data creator generation
         self.selected_features = selected_features
+        self.backend = backend
         self._scaler = None
         self._scaler_index = None
 
@@ -187,7 +209,12 @@ class AutoTSEstimator:
         :param data: train data.
                For backend of "torch", data can be a TSDataset or a function that takes a
                config dictionary as parameter and returns a PyTorch DataLoader.
-               For backend of "keras", data can be a TSDataset.
+
+               For backend of "keras", data can be a TSDataset or a function that takes a
+               config dictionary as parameter and returns a Tensorflow Dataset.
+
+               Please notice that you should stick to the same data type when you
+               predict/evaluate/fit on the TSPipeline you get from `AutoTSEstimator.fit`.
         :param epochs: Max number of epochs to train in each trial. Defaults to 1.
                If you have also set metric_threshold, a trial will stop if either it has been
                optimized to the metric_threshold or it has been trained for {epochs} epochs.
@@ -195,8 +222,9 @@ class AutoTSEstimator:
                It defaults to 32.
         :param validation_data: Validation data. Validation data type should be the same as data.
         :param metric_threshold: a trial will be terminated when metric threshold is met.
-        :param n_sampling: Number of times to sample from the search_space. Defaults to 1.
-               If hp.grid_search is in search_space, the grid will be repeated n_sampling of times.
+        :param n_sampling: Number of trials to evaluate in total. Defaults to 1.
+               If hp.grid_search is in search_space, the grid will be run n_sampling of trials
+               and round up n_sampling according to hp.grid_search.
                If this is -1, (virtually) infinite samples are generated
                until a stopping condition is met.
         :param search_alg: str, all supported searcher provided by ray tune
@@ -226,11 +254,14 @@ class AutoTSEstimator:
 
         if is_third_party_model:
             self.search_space.update({"batch_size": batch_size})
+            n_sampling = recalculate_n_sampling(self.search_space,
+                                                n_sampling) if n_sampling != -1 else -1
             self.model.fit(
                 data=train_d,
                 epochs=epochs,
                 validation_data=val_d,
                 metric=self.metric,
+                metric_mode=self.metric_mode,
                 metric_threshold=metric_threshold,
                 n_sampling=n_sampling,
                 search_space=self.search_space,
@@ -254,10 +285,21 @@ class AutoTSEstimator:
                 scheduler_params=scheduler_params
             )
 
-        return TSPipeline(best_model=self._get_best_automl_model(),
-                          best_config=self.get_best_config(),
-                          scaler=self._scaler,
-                          scaler_index=self._scaler_index)
+        if self.backend == "torch":
+            best_model = self._get_best_automl_model()
+            return TSPipeline(model=best_model.model,
+                              loss=best_model.criterion,
+                              optimizer=best_model.optimizer,
+                              model_creator=best_model.model_creator,
+                              loss_creator=best_model.loss_creator,
+                              optimizer_creator=best_model.optimizer_creator,
+                              best_config=self.get_best_config(),
+                              scaler=self._scaler,
+                              scaler_index=self._scaler_index)
+
+        if self.backend == "keras":
+            best_model = self._get_best_automl_model()
+            return best_model
 
     def _prepare_data_creator(self, search_space, train_data, val_data=None):
         """
@@ -267,20 +309,23 @@ class AutoTSEstimator:
         :param val_data: validation data
         :return: data creators from train and validation data
         """
-        import torch
-        from torch.utils.data import TensorDataset, DataLoader
         import ray
+        from bigdl.nano.utils.log4Error import invalidInputError
 
         # automatically inference output_feature_num
         # input_feature_num will be set by base pytorch model according to selected features.
         search_space['output_feature_num'] = len(train_data.target_col)
+        if search_space['past_seq_len'] == 'auto':
+            cycle_length = train_data.get_cycle_length(aggregate='mode', top_k=3)
+            cycle_length = 2 if cycle_length < 2 else cycle_length
+            search_space['past_seq_len'] = hp.randint(cycle_length//2, cycle_length*2)
 
         # append feature selection into search space
         # TODO: more flexible setting
         all_features = train_data.feature_col
         if self.selected_features not in ('all', 'auto'):
-            raise ValueError("Only 'all' and 'auto' are supported for selected_features, "
-                             f"but found {self.selected_features}")
+            invalidInputError(False, "Only 'all' and 'auto' are supported for selected_features, "
+                                     f"but found {self.selected_features}")
         if self.selected_features == "auto":
             if len(all_features) == 0:
                 search_space['selected_features'] = all_features
@@ -295,33 +340,60 @@ class AutoTSEstimator:
         train_data_id = ray.put(train_data)
         valid_data_id = ray.put(val_data)
 
-        def train_data_creator(config):
-            train_d = ray.get(train_data_id)
+        if self.backend == "torch":
+            import torch
+            from torch.utils.data import TensorDataset, DataLoader
 
-            x, y = train_d.roll(lookback=config.get('past_seq_len'),
-                                horizon=self._future_seq_len,
-                                feature_col=config['selected_features']) \
-                          .to_numpy()
+            def train_data_creator(config):
+                train_d = ray.get(train_data_id)
 
-            return DataLoader(TensorDataset(torch.from_numpy(x).float(),
-                                            torch.from_numpy(y).float()),
-                              batch_size=config["batch_size"],
-                              shuffle=True)
+                x, y = train_d.roll(lookback=config.get('past_seq_len'),
+                                    horizon=self._future_seq_len,
+                                    feature_col=config['selected_features']) \
+                              .to_numpy()
 
-        def val_data_creator(config):
-            val_d = ray.get(valid_data_id)
+                return DataLoader(TensorDataset(torch.from_numpy(x).float(),
+                                                torch.from_numpy(y).float()),
+                                  batch_size=config["batch_size"],
+                                  shuffle=True)
 
-            x, y = val_d.roll(lookback=config.get('past_seq_len'),
-                              horizon=self._future_seq_len,
-                              feature_col=config['selected_features']) \
-                        .to_numpy()
+            def val_data_creator(config):
+                val_d = ray.get(valid_data_id)
 
-            return DataLoader(TensorDataset(torch.from_numpy(x).float(),
-                                            torch.from_numpy(y).float()),
-                              batch_size=config["batch_size"],
-                              shuffle=True)
+                x, y = val_d.roll(lookback=config.get('past_seq_len'),
+                                  horizon=self._future_seq_len,
+                                  feature_col=config['selected_features']) \
+                            .to_numpy()
 
-        return train_data_creator, val_data_creator
+                return DataLoader(TensorDataset(torch.from_numpy(x).float(),
+                                                torch.from_numpy(y).float()),
+                                  batch_size=config["batch_size"],
+                                  shuffle=True)
+
+            return train_data_creator, val_data_creator
+
+        if self.backend == "keras":
+            def train_data_creator(config):
+                train_d = ray.get(train_data_id)
+
+                train_d.roll(lookback=config.get('past_seq_len'),
+                             horizon=self._future_seq_len,
+                             feature_col=config['selected_features'])
+
+                return train_d.to_tf_dataset(batch_size=config["batch_size"],
+                                             shuffle=True)
+
+            def val_data_creator(config):
+                val_d = ray.get(valid_data_id)
+
+                val_d.roll(lookback=config.get('past_seq_len'),
+                           horizon=self._future_seq_len,
+                           feature_col=config['selected_features'])
+
+                return val_d.to_tf_dataset(batch_size=config["batch_size"],
+                                           shuffle=False)
+
+            return train_data_creator, val_data_creator
 
     def _get_best_automl_model(self):
         """

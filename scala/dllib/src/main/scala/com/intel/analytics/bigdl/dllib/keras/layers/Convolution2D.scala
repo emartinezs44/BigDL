@@ -20,11 +20,11 @@ import java.util
 
 import com.intel.analytics.bigdl.dllib.nn.{InitializationMethod, SpatialConvolution, Xavier, Zeros}
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, DataFormat}
-import com.intel.analytics.bigdl.dllib.nn.keras.KerasLayer
+import com.intel.analytics.bigdl.dllib.nn.internal.KerasLayer
 import com.intel.analytics.bigdl.dllib.optim.Regularizer
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
-import com.intel.analytics.bigdl.dllib.utils.Shape
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Shape}
 import com.intel.analytics.bigdl.dllib.keras.Net
 import com.intel.analytics.bigdl.dllib.keras.layers.utils.KerasUtils
 
@@ -77,10 +77,10 @@ class Convolution2D[T: ClassTag](
   val pads: Array[Int] = null)(implicit ev: TensorNumeric[T])
   extends KerasLayer[Tensor[T], Tensor[T], T](KerasUtils.addBatch(inputShape)) with Net {
   if (borderMode != null) {
-    require(borderMode == "valid" || borderMode == "same", s"Invalid border mode for " +
-      s"Convolution2D: $borderMode")
+    Log4Error.invalidInputError(borderMode == "valid" || borderMode == "same",
+      s"Invalid border mode for Convolution2D: $borderMode")
   }
-  require(subsample.length == 2,
+  Log4Error.invalidInputError(subsample.length == 2,
       s"For Convolution2D, subsample should be of length 2 but got length ${subsample.length}")
 
   override def doBuild(inputShape: Shape): AbstractModule[Tensor[T], Tensor[T], T] = {
@@ -124,8 +124,10 @@ object Convolution2D {
     val initValue = KerasUtils.getInitMethod(init)
     val activationValue = KerasUtils.getKerasActivation(activation)
     val subsampleArray = subsample match {
-      case null => throw new IllegalArgumentException("For Convolution2D, " +
-        "subsample can not be null, please input int tuple of length 2")
+      case null =>
+        Log4Error.invalidInputError(false, "For Convolution2D, " +
+          "subsample can not be null, please input int tuple of length 2")
+        null
       case _ => Array(subsample._1, subsample._2)
     }
     val dimOrderingValue = KerasUtils.toBigDLFormat(dimOrdering)

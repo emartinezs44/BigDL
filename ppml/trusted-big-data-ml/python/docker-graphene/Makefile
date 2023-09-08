@@ -4,6 +4,7 @@ ARCH_LIBDIR ?= /lib/$(shell $(CC) -dumpmachine)
 
 G_JAVA_XMX ?= 2G
 G_SGX_SIZE ?= 8G
+G_LOG_LEVEL ?= debug
 G_SGX_THREAD_NUM ?= 256
 
 THIS_DIR ?= /ppml/trusted-big-data-ml
@@ -26,7 +27,6 @@ all: bash.token
 endif
 
 include $(GRAPHENEDIR)/Scripts/Makefile.configs
-PYTHONVERSION = python3.6
 include /graphene/Scripts/Makefile.python
 
 bash.manifest: bash.manifest.template
@@ -44,6 +44,7 @@ bash.manifest: bash.manifest.template
              -e 's|$$(PYTHONHOME)|'"$(PYTHONHOME)"'|g' \
              -e 's|$$(PYTHONEXEC)|'"$(PYTHONEXEC)"'|g' \
              -e 's|$$(G_SGX_SIZE)|'"$(G_SGX_SIZE)"'|g' \
+             -e 's|$$(G_LOG_LEVEL)|'"$(G_LOG_LEVEL)"'|g' \
              $< > $@
 
 bash.manifest.sgx: bash.manifest

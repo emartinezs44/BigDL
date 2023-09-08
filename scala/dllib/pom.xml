@@ -5,7 +5,7 @@
     <parent>
         <artifactId>bigdl-parent-spark_${spark.version}</artifactId>
         <groupId>com.intel.analytics.bigdl</groupId>
-        <version>0.14.0-SNAPSHOT</version>
+        <version>2.3.0-SNAPSHOT</version>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
@@ -18,6 +18,7 @@
         <scoverage.aggregate>true</scoverage.aggregate>
         <runSpecsInParallel>false</runSpecsInParallel>
         <tagsToExclude>com.intel.analytics.bigdl.tags.Integration</tagsToExclude>
+        <bigdl.basedir>${project.parent.basedir}</bigdl.basedir>
     </properties>
 
     <dependencies>
@@ -28,24 +29,123 @@
         </dependency>
         <dependency>
             <groupId>com.twelvemonkeys.imageio</groupId>
-            <artifactId>imageio-jpeg</artifactId>
-            <version>3.2.1</version>
+            <artifactId>imageio-metadata</artifactId>
+            <version>3.7.1</version>
         </dependency>
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-            <version>3.4.0</version>
+            <version>3.19.6</version>
         </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-client</artifactId>
+	    <artifactId>hadoop-client</artifactId>
+	    <version>3.2.4</version>
             <scope>${spark-scope}</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>xerces</groupId>
+                    <artifactId>xercesImpl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty</artifactId>
+	        </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hadoop</groupId>
+                    <artifactId>hadoop-common</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.hadoop</groupId>
+            <artifactId>hadoop-common</artifactId>
+            <version>3.2.4</version>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.google.code.gson</groupId>
+                    <artifactId>gson</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.mortbay.jetty</groupId>
+                    <artifactId>jetty</artifactId>
+	        </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jettison</groupId>
+                    <artifactId>jettison</artifactId>
+	        </exclusion>
+                <exclusion>
+                    <groupId>com.jcraft</groupId>
+                    <artifactId>jsch</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>joda-time</groupId>
             <artifactId>joda-time</artifactId>
             <version>2.9.9</version>
             <scope>${spark-scope}</scope>
+    	</dependency>
+        <dependency>
+            <groupId>org.apache.zookeeper</groupId>
+            <artifactId>zookeeper</artifactId>
+            <version>3.6.2</version>
+            <scope>${spark-scope}</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-codec</artifactId>
+	    	</exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-handler</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>io.netty</groupId>
+                    <artifactId>netty-transport-native-epoll</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -69,17 +169,28 @@
                     <artifactId>joda-time</artifactId>
                 </exclusion>
             </exclusions>
+    	</dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>1.7.36</version>
+            <scope>${spark-scope}</scope>
         </dependency>
         <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
-            <version>3.0.1</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
             <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.module</groupId>
+            <artifactId>jackson-module-scala_${scala.major.version}</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
         <dependency>
             <groupId>com.intel.analytics.bigdl.core.dist</groupId>
             <artifactId>all</artifactId>
-            <version>0.14.0-SNAPSHOT</version>
+            <version>2.3.0-SNAPSHOT</version>
             <scope>${bigdl-core-all-scope}</scope>
         </dependency>
         <dependency>
@@ -87,22 +198,76 @@
             <artifactId>spark-core_${scala.major.version}</artifactId>
             <version>${spark.version}</version>
             <scope>${spark-scope}</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>log4j</groupId>
+                    <artifactId>log4j</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.zookeeper</groupId>
+                    <artifactId>zookeeper</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.glassfish.jersey.media</groupId>
+                    <artifactId>jersey-media-jaxb</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.codehaus.jackson</groupId>
+                    <artifactId>jackson-mapper-asl</artifactId>
+	        </exclusion>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-compress</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.ivy</groupId>
+                    <artifactId>ivy</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-mllib_${scala.major.version}</artifactId>
             <version>${spark.version}</version>
             <scope>${spark-scope}</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.glassfish.jersey.media</groupId>
+                    <artifactId>jersey-media-jaxb</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-databind</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.intel.analytics.bigdl.spark-version</groupId>
             <artifactId>${spark-version.project}</artifactId>
             <version>${project.version}</version>
+    	</dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>${commons-io.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-compress</artifactId>
+            <version>1.21</version>
+        </dependency>
+	<dependency>
             <groupId>org.scalanlp</groupId>
             <artifactId>breeze_${scala.major.version}</artifactId>
-            <version>${breeze.version}</version>
+	    <version>${breeze.version}</version>
             <exclusions>
                 <!-- This is included as a compile-scoped dependency by jtransforms, which is
                      a dependency of breeze. -->
@@ -113,30 +278,61 @@
                 <exclusion>
                     <groupId>org.apache.commons</groupId>
                     <artifactId>commons-math3</artifactId>
+	    	</exclusion>
+                <exclusion>
+                    <groupId>com.github.fommil.netlib</groupId>
+                    <artifactId>core</artifactId>
+	    	</exclusion>
+                <exclusion>
+                    <groupId>com.github.rwl</groupId>
+                    <artifactId>jtransforms</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>
-        <dependency>
+	<dependency>
             <groupId>ml.dmlc</groupId>
-            <artifactId>xgboost4j_${scala.major.version}</artifactId>
+            <artifactId>xgboost4j_2.12</artifactId>
             <version>1.1.2</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.esotericsoftware.kryo</groupId>
                     <artifactId>kryo</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.scala-lang</groupId>
+                    <artifactId>scala-compiler</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
         <dependency>
             <groupId>ml.dmlc</groupId>
-            <artifactId>xgboost4j-spark_${scala.major.version}</artifactId>
+            <artifactId>xgboost4j-spark_2.12</artifactId>
             <version>1.1.2</version>
             <exclusions>
                 <exclusion>
                     <groupId>com.esotericsoftware.kryo</groupId>
                     <artifactId>kryo</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.scala-lang</groupId>
+                    <artifactId>scala-compiler</artifactId>
+	    	</exclusion>
+                <exclusion>
+                    <groupId>com.typesafe.akka</groupId>
+                    <artifactId>akka-actor_2.11</artifactId>
+                </exclusion>
             </exclusions>
+    	</dependency>
+	<dependency>
+    	    <groupId>com.typesafe.akka</groupId>
+            <artifactId>akka-actor_${scala.major.version}</artifactId>
+            <version>2.5.32</version>
+	</dependency>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-compiler</artifactId>
+            <version>${scala.version}</version>
+            <scope>${spark-scope}</scope>
         </dependency>
         <dependency>
             <groupId>org.scalatest</groupId>
@@ -151,12 +347,12 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>11.0.2</version>
+            <version>31.0.1-jre</version>
         </dependency>
         <dependency>
             <groupId>com.github.scopt</groupId>
             <artifactId>scopt_${scala.major.version}</artifactId>
-            <version>3.5.0</version>
+            <version>${scopt.version}</version>
         </dependency>
         <dependency>
             <groupId>it.unimi.dsi</groupId>
@@ -176,12 +372,44 @@
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
-            <version>2.8.5</version>
+            <version>2.8.9</version>
         </dependency>
         <dependency>
             <groupId>org.tensorflow</groupId>
             <artifactId>proto</artifactId>
-            <version>1.15.0</version>
+	    <version>1.15.0</version>
+	    <exclusions>
+                <exclusion>
+                    <groupId>com.google.protobuf</groupId>
+                    <artifactId>protobuf-java</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>1.7.16</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.microsoft.azure</groupId>
+            <artifactId>synapseml-lightgbm_2.12</artifactId>
+            <version>0.10.1</version>
+            <scope>${lightgbm.scope}</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.spark</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.beanshell</groupId>
+                    <artifactId>bsh</artifactId>
+	        </exclusion>
+                <exclusion>
+                    <groupId>com.jcraft</groupId>
+                    <artifactId>jsch</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 
@@ -223,6 +451,14 @@
                             <artifact>com.google.protobuf</artifact>
                             <excludes>
                                 <exclude>META-INF/maven/com.google.protobuf/protobuf-java/*</exclude>
+                            </excludes>
+                        </filter>
+                        <filter>
+                            <artifact>*:*</artifact>
+                            <excludes>
+                                <exclude>META-INF/*.SF</exclude>
+                                <exclude>META-INF/*.DSA</exclude>
+                                <exclude>META-INF/*.RSA</exclude>
                             </excludes>
                         </filter>
                     </filters>
@@ -332,31 +568,6 @@
                 </configuration>
 
             </plugin>
-
-            <plugin>
-                <groupId>org.scalastyle</groupId>
-                <artifactId>scalastyle-maven-plugin</artifactId>
-                <version>0.8.0</version>
-                <configuration>
-                    <verbose>false</verbose>
-                    <failOnViolation>true</failOnViolation>
-                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
-                    <failOnWarning>false</failOnWarning>
-                    <sourceDirectory>${basedir}/src/main/scala</sourceDirectory>
-                    <testSourceDirectory>${basedir}/src/test/scala</testSourceDirectory>
-                    <configLocation>${project.parent.basedir}/scalastyle_config.xml</configLocation>
-                    <outputFile>${project.build.directory}/stylecheck/scalastyle-output.xml</outputFile>
-                    <inputEncoding>UTF-8</inputEncoding>
-                    <outputEncoding>UTF-8</outputEncoding>
-                </configuration>
-                <executions>
-                    <execution>
-                        <goals>
-                            <goal>check</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
         </plugins>
     </build>
 
@@ -383,14 +594,6 @@
             <properties>
               <bigdl-core-all-scope>provided</bigdl-core-all-scope>
             </properties>
-            <dependencies>
-              <dependency>
-                <groupId>com.intel.analytics.bigdl.core.dist</groupId>
-                <artifactId>linux64</artifactId>
-                <version>0.14.0-SNAPSHOT</version>
-                <type>pom</type>
-              </dependency>
-            </dependencies>
         </profile>
 
         <profile>
@@ -398,14 +601,6 @@
             <properties>
               <bigdl-core-all-scope>provided</bigdl-core-all-scope>
             </properties>
-            <dependencies>
-              <dependency>
-                <groupId>com.intel.analytics.bigdl.core.dist</groupId>
-                <artifactId>mac</artifactId>
-                <version>0.14.0-SNAPSHOT</version>
-                <type>pom</type>
-              </dependency>
-            </dependencies>
         </profile>
 
         <profile>

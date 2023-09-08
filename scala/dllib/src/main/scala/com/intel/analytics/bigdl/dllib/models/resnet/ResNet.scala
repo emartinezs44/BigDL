@@ -24,9 +24,9 @@ import com.intel.analytics.bigdl.numeric.NumericFloat
 import com.intel.analytics.bigdl.dllib.optim.L2Regularizer
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.tensor.{Storage, Tensor}
-import com.intel.analytics.bigdl.dllib.utils.Table
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Table}
 import com.intel.analytics.bigdl.dllib.utils.RandomGenerator._
-import org.apache.log4j.Logger
+import org.apache.logging.log4j.LogManager
 
 import scala.collection.mutable
 import scala.reflect.ClassTag
@@ -73,7 +73,7 @@ object Sbn {
 }
 
 object ResNet {
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 
   def shareGradInput(model: Module[Float]): Unit = {
     logger.info("Share gradients in ResNet")
@@ -109,7 +109,7 @@ object ResNet {
           val curModel = spatialShareConvolution.asInstanceOf[SpatialShareConvolution[Float]]
           curModel.fInput = Tensor[Float](cache.get("fInput").get)
           curModel.fGradInput = Tensor[Float](cache.get("fGradInput").get)
-        case _ => Unit
+        case _ => ()
       }
     }
     matchModels(model)
@@ -140,7 +140,7 @@ object ResNet {
           curModel.bias.apply1(_ => 0.0f)
         case linear if (linear.isInstanceOf[Linear[Float]]) =>
           linear.asInstanceOf[Linear[Float]].bias.apply1(_ => 0.0f)
-        case _ => Unit
+        case _ => ()
       }
     }
     initModules(model)
@@ -240,7 +240,7 @@ object ResNet {
           bottleneck: (Int, Int) => Module[Float])
       )
 
-      require(cfg.keySet.contains(depth), s"Invalid depth ${depth}")
+      Log4Error.invalidInputError(cfg.keySet.contains(depth), s"Invalid depth ${depth}")
 
       val (loopConfig, nFeatures, block) = cfg.get(depth).get
       iChannels = 64
@@ -259,7 +259,7 @@ object ResNet {
         .add(Linear(nFeatures, classNum, true, L2Regularizer(1e-4), L2Regularizer(1e-4))
           .setInitMethod(RandomNormal(0.0, 0.01), Zeros))
     } else if (dataSet == DatasetType.CIFAR10) {
-      require((depth - 2)%6 == 0,
+      Log4Error.invalidInputError((depth - 2)%6 == 0,
         "depth should be one of 20, 32, 44, 56, 110, 1202")
       val n = (depth-2)/6
       iChannels = 16
@@ -275,7 +275,8 @@ object ResNet {
       model.add(View(64).setNumInputDims(3))
       model.add(Linear(64, 10))
     } else {
-      throw new IllegalArgumentException(s"Invalid dataset ${dataSet}")
+      Log4Error.invalidInputError(false, s"Invalid dataset ${dataSet}",
+        "only support DatasetType.CIFAR10 as dataset")
     }
     model
   }
@@ -369,7 +370,7 @@ object ResNet {
           bottleneckFunc: (Int, Int, ModuleNode[Float]) => ModuleNode[Float])
       )
 
-      require(cfg.keySet.contains(depth), s"Invalid depth ${depth}")
+      Log4Error.invalidInputError(cfg.keySet.contains(depth), s"Invalid depth ${depth}")
 
       val (loopConfig, nFeatures, block) = cfg.get(depth).get
       iChannels = 64
@@ -391,7 +392,7 @@ object ResNet {
                .setInitMethod(RandomNormal(0.0, 0.01), Zeros).inputs(view)
       Graph(input, output)
     } else if (dataset == DatasetType.CIFAR10) {
-      require((depth - 2)%6 == 0,
+      Log4Error.invalidInputError((depth - 2)%6 == 0,
         "depth should be one of 20, 32, 44, 56, 110, 1202")
       val n = (depth-2)/6
       iChannels = 16
@@ -410,7 +411,9 @@ object ResNet {
       val output = Linear(64, 10).inputs(view)
       Graph(input, output)
     } else {
-      throw new IllegalArgumentException(s"Invalid dataset ${dataset}")
+      Log4Error.invalidInputError(false, s"Invalid dataset ${dataSet}",
+        "only support DatasetType.CIFAR10 as dataset")
+      null
     }
     model
   }

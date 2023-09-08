@@ -19,6 +19,7 @@ package com.intel.analytics.bigdl.dllib.feature.dataset.text
 import com.intel.analytics.bigdl.dllib.feature.dataset.Sentence
 import com.intel.analytics.bigdl.dllib.tensor.{DoubleType, FloatType}
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 import scala.reflect.ClassTag
 
@@ -72,23 +73,25 @@ class LabeledSentence[T: ClassTag](
         Array.copy(rawLabel
           .asInstanceOf[Array[Float]], 0, _label
           .asInstanceOf[Array[Float]], 0, _labelLength)
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"$t is not supported",
+          "only support DoubleType, FloatType")
     }
     this
   }
 
   def getData(index: Int): T = {
-    require(index >= 0 && index < _dataLength, "index out of boundary")
+    Log4Error.invalidOperationError(index >= 0 && index < _dataLength, "index out of boundary")
     _data(index)
   }
 
   def getLabel(index: Int): T = {
-    require(index >= 0 && index < _labelLength, "index out of boundary")
+    Log4Error.invalidOperationError(index >= 0 && index < _labelLength, "index out of boundary")
     _label(index)
   }
 
   def copyToData(storage: Array[T], offset: Int): Unit = {
-    require(_dataLength + offset <= storage.length)
+    Log4Error.invalidOperationError(_dataLength + offset <= storage.length, "index out of boundary")
     ev.getType() match {
       case DoubleType => Array.copy(_data
         .asInstanceOf[Array[Double]], 0, storage
@@ -96,12 +99,15 @@ class LabeledSentence[T: ClassTag](
       case FloatType => Array.copy(_data
         .asInstanceOf[Array[Float]], 0, storage
         .asInstanceOf[Array[Float]], offset, _dataLength)
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"$t is not supported",
+          "only support DoubleType, FloatType")
     }
   }
 
   def copyToLabel(storage: Array[T], offset: Int): Unit = {
-    require(_labelLength + offset <= storage.length)
+    Log4Error.invalidOperationError(_labelLength + offset <= storage.length,
+      "index out of boundary")
     ev.getType() match {
       case DoubleType => Array.copy(_label
         .asInstanceOf[Array[Double]], 0, storage
@@ -109,7 +115,9 @@ class LabeledSentence[T: ClassTag](
       case FloatType => Array.copy(_label
         .asInstanceOf[Array[Float]], 0, storage
         .asInstanceOf[Array[Float]], offset, _labelLength)
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"$t is not supported",
+          "only support DoubleType, FloatType")
     }
   }
 
@@ -135,7 +143,9 @@ class LabeledSentence[T: ClassTag](
         Array.copy(other._label
           .asInstanceOf[Array[Float]], 0, this._label
           .asInstanceOf[Array[Float]], 0, _labelLength)
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"$t is not supported",
+          "only support DoubleType, FloatType")
     }
     this
   }

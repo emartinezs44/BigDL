@@ -25,17 +25,17 @@ import com.intel.analytics.bigdl.dllib.utils.python.api.EvaluatedResult
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.tensor.{Tensor, DoubleType => TensorDouble, FloatType => TensorFloat}
 import com.intel.analytics.bigdl.dllib.utils.serializer.ModuleLoader
-import com.intel.analytics.bigdl.dllib.utils.{Engine, File, T}
+import com.intel.analytics.bigdl.dllib.utils.{Engine, File, Log4Error, T}
 import com.intel.analytics.bigdl.dllib.visualization.{TrainSummary, ValidationSummary}
 import com.intel.analytics.bigdl.{Criterion, DataSet, Module}
 import com.intel.analytics.bigdl.dllib.feature.{DRAM, FeatureSet, MemoryType}
 import com.intel.analytics.bigdl.dllib.feature.common.{Preprocessing, _}
+import org.apache.logging.log4j.LogManager
 // import com.intel.analytics.zoo.feature.pmem.{DRAM, MemoryType}
  import com.intel.analytics.bigdl.dllib.keras.Net
 // import com.intel.analytics.zoo.pipeline.api.keras.layers.utils.EngineRef
 import com.intel.analytics.bigdl.dllib.keras.models.InternalDistriOptimizer
 import org.apache.hadoop.fs.Path
-import org.apache.log4j.Logger
 import org.apache.spark.SparkContext
 import org.apache.spark.ml.adapter.{HasFeaturesCol, HasPredictionCol, SchemaUtils}
 import org.apache.spark.ml.param._
@@ -362,7 +362,8 @@ class NNEstimator[T: ClassTag] private[bigdl](
    * @return this estimator
    */
   def setCheckpoint(path: String, trigger: Trigger, isOverWrite: Boolean = true): this.type = {
-    require(path != null && trigger != null, "checkpoint path and trigger cannot be null")
+    Log4Error.invalidInputError(path != null && trigger != null,
+      "checkpoint path and trigger cannot be null")
     set(checkpointPath, path)
     set(checkpointTrigger, trigger)
     set(checkpointOverwrite, isOverWrite)
@@ -371,10 +372,10 @@ class NNEstimator[T: ClassTag] private[bigdl](
 
   protected def validateParams(schema: StructType): Unit = {
     if (isSet(endWhen) && isSet(maxEpoch)) {
-      throw new IllegalArgumentException(s"endWhen and maxEpoch cannot be both set")
+      Log4Error.invalidOperationError(false, s"endWhen and maxEpoch cannot be both set")
     }
     if (validationTrigger.isEmpty && validationSummary.isDefined) {
-      throw new IllegalArgumentException(
+      Log4Error.invalidOperationError(false,
         s"validationSummary is only valid if validation data is set.")
     }
   }
@@ -386,7 +387,11 @@ class NNEstimator[T: ClassTag] private[bigdl](
         SchemaUtils.appendColumn(schema, $(predictionCol), ArrayType(DoubleType, false))
       case TensorFloat =>
         SchemaUtils.appendColumn(schema, $(predictionCol), ArrayType(FloatType, false))
-      case _ => throw new Exception("Only support Double and Float for now")
+      case _ =>
+        Log4Error.invalidInputError(false,
+          s"NNEstimator: ${ev.getType()} is not supported",
+          "Only support Double and Float for now")
+        null
     }
   }
 
@@ -685,7 +690,7 @@ class NNModel[T: ClassTag] private[bigdl](
     with HasBatchSize with MLWritable {
 
   @transient
-  private val logger = Logger.getLogger(getClass)
+  private val logger = LogManager.getLogger(getClass)
 
   setDefault(this.batchSize, Engine.coreNumber() * Engine.nodeNumber() * 4)
 
@@ -750,8 +755,10 @@ class NNModel[T: ClassTag] private[bigdl](
           } else if (batchResult.size().length == 1) {
             Array(outputToPrediction(batchResult))
           } else {
-            throw new RuntimeException(
-              "unexpected batchResult dimension: " + batchResult.size().mkString(", "))
+            Log4Error.unKnowExceptionError(false,
+              s"unexpected batchResult dimension: ${batchResult.size().mkString(", ")}",
+            "expect batchResult size length is 1 or 2")
+            null
           }
         }
         rowBatch.toIterator.zip(predictions).map { case (row, predict) =>
@@ -774,7 +781,11 @@ class NNModel[T: ClassTag] private[bigdl](
         SchemaUtils.appendColumn(schema, $(predictionCol), ArrayType(DoubleType, false))
       case TensorFloat =>
         SchemaUtils.appendColumn(schema, $(predictionCol), ArrayType(FloatType, false))
-      case _ => throw new Exception("Only support Double and Float for now")
+      case _ =>
+        Log4Error.invalidInputError(false,
+          s"NNEstimator: ${ev.getType()} is not supported",
+          "Only support Double and Float for now")
+        null
     }
   }
 
@@ -866,7 +877,10 @@ object NNModel extends MLReadable[NNModel[_]] {
           new NNModel[Float](model.asInstanceOf[Module[Float]])
             .setSamplePreprocessing(feaTran.asInstanceOf[Preprocessing[Any, Sample[Float]]])
         case _ =>
-          throw new Exception("Only support float and double for now")
+          Log4Error.invalidInputError(false,
+            s"NNEstimator: ${typeTag} is not supported",
+            "Only support TensorDouble and TensorFloat for now")
+          null
       }
 
       DefaultParamsWriterWrapper.getAndSetParams(nnModel, meta)
@@ -888,7 +902,9 @@ object NNModel extends MLReadable[NNModel[_]] {
       case "TensorFloat" =>
         ModuleLoader.loadFromFile[Float](modulePath, weightPath)
       case _ =>
-        throw new Exception("Only support float and double for now")
+        Log4Error.invalidInputError(false,
+          s"NNEstimator: ${typeTag} is not supported",
+          "Only support TensorDouble and TensorFloat for now")
     }
 
     val featurePreprocessing =
@@ -926,7 +942,11 @@ object NNModel extends MLReadable[NNModel[_]] {
     val tensorDataType = ev.getType() match {
       case TensorDouble => "TensorDouble"
       case TensorFloat => "TensorFloat"
-      case _ => throw new Exception("Only support Double and Float for now")
+      case _ =>
+        Log4Error.invalidInputError(false,
+          s"NNEstimator: ${ev.getType()} is not supported",
+          "Only support TensorDouble and TensorFloat for now")
+        ""
     }
 
     val spCache = instance.getSamplePreprocessing

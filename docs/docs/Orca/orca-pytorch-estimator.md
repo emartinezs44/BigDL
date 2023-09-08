@@ -33,25 +33,23 @@ Estimator.from_torch(*,
                    training_operator_cls=TrainingOperator,
                    initialization_hook=None,
                    config=None,
-                   scheduler_step_freq="batch",
                    use_tqdm=False,
                    workers_per_node=1,
                    model_dir=None,
                    backend="bigdl"):
 ```
-* `model`: PyTorch model if `backend="bigdl"`, PyTorch model creator if `backend="horovod" or "torch_distributed"`
-* `optimizer`: Orca optimizer or PyTorch optimizer if `backend="bigdl"`, PyTorch optimizer creator if `backend="horovod" or "torch_distributed"`
-* `loss`: PyTorch loss if `backend="bigdl"`, PyTorch loss creator if `backend="horovod" or "torch_distributed"`
+* `model`: PyTorch model if `backend="bigdl"`, PyTorch model creator if `backend="horovod" or "ray"`
+* `optimizer`: Orca optimizer or PyTorch optimizer if `backend="bigdl"`, PyTorch optimizer creator if `backend="horovod" or "ray"`
+* `loss`: PyTorch loss if `backend="bigdl"`, PyTorch loss creator if `backend="horovod" or "ray"`
 * `metrics`: Orca validation methods for evaluate.
-* `scheduler_creator`: parameter for `horovod` and `torch_distributed` backends. a learning rate scheduler wrapping the optimizer. You will need to set ``scheduler_step_freq="epoch"`` for the scheduler to be incremented correctly.
-* `training_operator_cls`: parameter for `horovod` and `torch_distributed` backends. Custom training operator class that subclasses the TrainingOperator class. This class will be copied onto all remote workers and used to specify custom training and validation operations. Defaults to TrainingOperator.
-* `initialization_hook`: parameter for `horovod` and `torch_distributed` backends.
-* `config`: parameter for `horovod` and `torch_distributed` backends. Config dict to create model, optimizer loss and data.
-* `scheduler_step_freq`: parameter for `horovod` and `torch_distributed` backends. "batch", "epoch" or None. This will determine when ``scheduler.step`` is called. If "batch", ``step`` will be called after every optimizer step. If "epoch", ``step`` will be called after one pass of the DataLoader. If a scheduler is passed in, this value is expected to not be None.
-* `use_tqdm`: parameter for `horovod` and `torch_distributed` backends. You can monitor training progress if use_tqdm=True.
-* `workers_per_node`: parameter for `horovod` and `torch_distributed` backends. worker number on each node. default: 1.
+* `scheduler_creator`: parameter for `spark`, `ray` and `horovod` backends. a learning rate scheduler wrapping the optimizer. By default a scheduler will take effect automatically every epoch.
+* `training_operator_cls`: parameter for `horovod` and `ray` backends. Custom training operator class that subclasses the TrainingOperator class. This class will be copied onto all remote workers and used to specify custom training and validation operations. Defaults to TrainingOperator.
+* `initialization_hook`: parameter for `horovod` and `ray` backends.
+* `config`: parameter for `horovod` and `ray` backends. Config dict, CfgNode or any class that plays a role of configuration to create model, optimizer loss and data.
+* `use_tqdm`: parameter for `horovod` and `ray` backends. You can monitor training progress if use_tqdm=True.
+* `workers_per_node`: parameter for `horovod` and `ray` backends. worker number on each node. default: 1.
 * `model_dir`: parameter for `bigdl` backend. The path to save model. During the training, if checkpoint_trigger is defined and triggered, the model will be saved to model_dir.
-* `backend`: You can choose "horovod",  "torch_distributed" or "bigdl" as backend. Default: bigdl.
+* `backend`: You can choose "horovod",  "ray" or "bigdl" as backend. Default: bigdl.
 
 ### Use horovod Estimator
 #### **Train model**
@@ -59,7 +57,7 @@ After an Estimator is created, you can call estimator API to train PyTorch model
 ```
 fit(self, data, epochs=1, profile=False, reduce_results=True, info=None)
 ```
-* `data`: (callable) a funtion that takes a config dict and `batch_size` as input and return a data loader containing the training data.
+* `data`: (callable) a funtion that takes a config object and `batch_size` as input and return a data loader containing the training data.
 * `epochs`: (int) Number of epochs to train the model
 * `profile`: (bool) Returns time stats for the training procedure.
 * `reduce_results`: (bool) Whether to average all metrics across all workers into one dict. If a metric is a non-numerical value (or nested dictionaries), one value will be randomly selected among the workers. If False, returns a list of dicts.
@@ -70,7 +68,7 @@ After Training, you can call estimator API to evaluate PyTorch model:
 ```
 evaluate(self, data, num_steps=None, profile=False, info=None)
 ```
-* `data`: (callable) a funtion that takes a config dict and `batch_size` as input and return a data loader containing the validation data.
+* `data`: (callable) a funtion that takes a config object and `batch_size` as input and return a data loader containing the validation data.
 * `num_steps`: (int) Number of batches to compute update steps on. This corresponds also to the number of times ``TrainingOperator.validate_batch`` is called.
 * `profile`: (bool) Returns time stats for the evaluation procedure.
 * `info`: (dict) Optional dictionary passed to the training operator for `validate` and `validate_batch`.

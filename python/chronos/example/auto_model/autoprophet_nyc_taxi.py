@@ -45,7 +45,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--cpus_per_trial', type=int, default=1,
                         help="Int. Number of cpus for each trial")
-    parser.add_argument('--n_sampling', type=int, default=2,
+    parser.add_argument('--n_sampling', type=int, default=32,
                         help="Number of times to sample from the search_space.")
     parser.add_argument('--datadir', type=str,
                         help="Use local csv file by default.")
@@ -76,8 +76,11 @@ if __name__ == '__main__':
     autoprophet = AutoProphet(cpus_per_trial=args.cpus_per_trial)
     start_time = time.time()
     autoprophet.fit(df_train, cross_validation=True, n_sampling=args.n_sampling)
-    autoprophet_fit_time = time.time() - start_time
-    stop_orca_context()
+    autoprophet_fit_time = time.time() - start_time    
+
+    # save and load
+    autoprophet.save("autoprophet.ckpt")
+    autoprophet = AutoProphet(load_dir="autoprophet.ckpt")
 
     # evaluate
     auto_searched_mse = autoprophet.evaluate(df_test, metrics=['mse'])[0]
@@ -88,3 +91,5 @@ if __name__ == '__main__':
     print("nonauto_searched_mse:", nonauto_searched_mse)
     print("auto_searched_time:", autoprophet_fit_time)
     print("nonauto_searched_time:", prophet_fit_time)
+
+    stop_orca_context()

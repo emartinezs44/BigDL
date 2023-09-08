@@ -34,7 +34,9 @@ from bigdl.dllib.keras.models import Model as ZModel
 from bigdl.dllib.keras.optimizers import Adam as KAdam
 from bigdl.dllib.nnframes import *
 from bigdl.dllib.utils.tf import *
-
+from pyspark.sql.functions import array
+from pyspark.ml.linalg import DenseVector, VectorUDT
+from pyspark.sql.functions import udf, array
 
 class TestNNClassifer():
     def setup_method(self, method):
@@ -454,8 +456,8 @@ class TestNNClassifer():
         try:
             tmp_dir = tempfile.mkdtemp()
             modelPath = os.path.join(tmp_dir, "model")
-            nnModel.model.save(modelPath)
-            loaded_model = Model.load(modelPath)
+            nnModel.model.saveModel(modelPath)
+            loaded_model = Model.loadModel(modelPath)
             resultDF = NNModel(loaded_model).transform(df)
             assert resultDF.count() == 4
         finally:
@@ -735,8 +737,8 @@ class TestNNClassifer():
         try:
             tmp_dir = tempfile.mkdtemp()
             modelPath = os.path.join(tmp_dir, "model")
-            nnClassifierModel.model.save(modelPath)
-            loaded_model = Model.load(modelPath)
+            nnClassifierModel.model.saveModel(modelPath)
+            loaded_model = Model.loadModel(modelPath)
             resultDF = NNClassifierModel(loaded_model).transform(df)
             assert resultDF.count() == 4
         finally:
@@ -824,7 +826,7 @@ class TestNNClassifer():
         raised_error = False
         try:
             export_tf(sess, modelPath, inputs=[input1, input2], outputs=[output])
-        except ValueError as v:
+        except RuntimeError as v:
             assert (((str(v)).find((input2.name)[0:-2])) != -1)
             raised_error = True
         finally:
@@ -837,61 +839,5 @@ class TestNNClassifer():
         if not raised_error:
             raise ValueError("we do not find this error, test failed")
 
-    def test_XGBClassifierModel_predict(self):
-        from sys import platform
-        if platform in ("darwin", "win32"):
-            return
-
-        resource_path = os.path.join(os.path.split(__file__)[0], "../resources")
-        path = os.path.join(resource_path, "xgbclassifier/")
-        modelPath = path + "XGBClassifer.bin"
-        filePath = path + "test.csv"
-        model = XGBClassifierModel.loadModel(modelPath, 2)
-
-        from pyspark.sql import SparkSession
-
-        spark = SparkSession \
-            .builder \
-            .getOrCreate()
-        df = spark.read.csv(filePath, sep=",", inferSchema=True, header=True)
-        model.setFeaturesCol(["age", "gender", "jointime", "star"])
-        predict = model.transform(df)
-        predict.count()
-
-    def test_XGBRegressor(self):
-        from sys import platform
-        if platform in ("darwin", "win32"):
-            return
-
-        if self.sc.version.startswith("3.0") or self.sc.version.startswith("2.4"):
-            data = self.sc.parallelize([
-                (1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 2.0, 4.0, 8.0, 3.0, 116.3668),
-                (1.0, 3.0, 8.0, 6.0, 5.0, 9.0, 5.0, 6.0, 7.0, 4.0, 116.367),
-                (2.0, 1.0, 5.0, 7.0, 6.0, 7.0, 4.0, 1.0, 2.0, 3.0, 116.367),
-                (2.0, 1.0, 4.0, 3.0, 6.0, 1.0, 3.0, 2.0, 1.0, 3.0, 116.3668)
-            ])
-            columns = ["f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "label"]
-            df = data.toDF(columns)
-            from pyspark.ml.feature import VectorAssembler
-            vecasembler = VectorAssembler(inputCols=columns, outputCol="features")
-            assembledf = vecasembler.transform(df).select("features", "label").cache()
-            assembledf.printSchema()
-            testdf = vecasembler.transform(df).select("features", "label").cache()
-            xgbRf0 = XGBRegressor()
-            xgbRf0.setNthread(1)
-            xgbRf0.setNumRound(10)
-            xgbmodel = XGBRegressorModel(xgbRf0.fit(assembledf))
-            xgbmodel.save("/tmp/modelfile/")
-            xgbmodel.setFeaturesCol("features")
-            assembledf.show()
-            yxgb = xgbmodel.transform(assembledf)
-            model = xgbmodel.load("/tmp/modelfile/")
-            yxgb.show()
-            model.setFeaturesCol("features")
-            y0 = model.transform(assembledf)
-            y0.show()
-            assert (y0.subtract(yxgb).count() == 0)
-
-
 if __name__ == "__main__":
-    pytest.main()
+    pytest.main([__file__])

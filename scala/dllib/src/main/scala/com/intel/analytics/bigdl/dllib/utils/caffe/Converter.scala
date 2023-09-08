@@ -26,6 +26,7 @@ import com.intel.analytics.bigdl.dllib.nn._
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
+import com.intel.analytics.bigdl.dllib.utils.Log4Error
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -50,8 +51,10 @@ abstract class Converter[T: ClassTag](implicit ev: TensorNumeric[T]) {
   def registerCutomizedConverter(layerType : String,
     converter : (GeneratedMessage) => Seq[ModuleNode[T]])
     : Unit = {
-    require(!caffe2BigDL.contains(layerType), s"$layerType is already supported")
-    require(!customizedConverter.contains(layerType), s"$layerType is already customized")
+    Log4Error.invalidInputError(!caffe2BigDL.contains(layerType),
+      s"$layerType is already supported")
+    Log4Error.invalidInputError(!customizedConverter.contains(layerType),
+      s"$layerType is already customized")
     customizedConverter(layerType) = converter
   }
   /**
@@ -62,7 +65,8 @@ abstract class Converter[T: ClassTag](implicit ev: TensorNumeric[T]) {
     if (customizedConverter.contains(layerType)) {
       return customizedConverter(layerType)(layer)
     }
-    throw new CaffeConversionException(s"$layerType is not supported in BigDL for now")
+    Log4Error.invalidOperationError(false, s"$layerType is not supported in BigDL for now")
+    null
   }
 
   def convertLayerFromCaffe(layer : GeneratedMessage) : Seq[ModuleNode[T]] = {
@@ -327,7 +331,9 @@ abstract class Converter[T: ClassTag](implicit ev: TensorNumeric[T]) {
       case cadd : CAdd[_] => toCaffeEltWiseAdd(moduleNode, bottoms, nextSize)
       case csub : CSubTable[_] => toCaffeEltWiseSub(moduleNode, bottoms, nextSize)
       case sequantial : Sequential[_] => toCaffeSequential(moduleNode, bottoms, nextSize)
-      case _ => throw  new CaffeConversionException(s"${moduleNode} is not supported")
+      case _ =>
+        Log4Error.invalidOperationError(false, s"${moduleNode} is not supported")
+        null
     }
     model
   }
@@ -456,7 +462,8 @@ abstract class Converter[T: ClassTag](implicit ev: TensorNumeric[T]) {
     val map = new mutable.HashMap[String, Int]()
     val layer = classOf[SpatialFullConvolution[T]].cast(module)
     if (layer.adjW != 0 || layer.adjH != 0) {
-      throw new CaffeConversionException("Caffe doesn't support extra width/height amending")
+      Log4Error.invalidOperationError(false,
+        "Caffe doesn't support extra width/height amending")
     }
     val nInputPlane = layer.nOutputPlane
     val nOutputPlane = layer.nInputPlane
@@ -623,7 +630,8 @@ abstract class Converter[T: ClassTag](implicit ev: TensorNumeric[T]) {
     val name = getLayerName(layer)
     val tpe = getLayerType(layer)
     if (!blob.isDefined) {
-      throw new CaffeConversionException(s"$tpe : $name missing $blobInfo in binary file")
+      Log4Error.invalidOperationError(false,
+        s"$tpe : $name missing $blobInfo in binary file")
     }
   }
 

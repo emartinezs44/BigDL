@@ -21,15 +21,13 @@ import com.intel.analytics.bigdl.dllib.nn.ops.Operation
 import com.intel.analytics.bigdl.serialization.Bigdl.{AttrValue, BigDLModule}
 import com.intel.analytics.bigdl.dllib.tensor._
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.{NumericWildcard, TensorNumeric}
-import com.intel.analytics.bigdl.dllib.utils.Table
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, Table}
 import com.intel.analytics.bigdl.dllib.utils.serializer.{DeserializeContext, ModuleSerializable, SerializeContext}
 import com.intel.analytics.bigdl.dllib.utils.serializer.converters.DataConverter
 import com.intel.analytics.bigdl.dllib.utils.tf.TFTensorNumeric._
-
 import org.tensorflow.example.{Example, Feature}
 
 import scala.collection.JavaConverters._
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe
 
@@ -42,7 +40,8 @@ private[bigdl] class ParseExample[T: ClassTag](val nDense: Int,
   type StringType = ByteString
 
   override def updateOutput(input: Table): Table = {
-    require(input[Tensor[StringType]](1).size(1) == 1, "only support one example at a time")
+    Log4Error.invalidInputError(input[Tensor[StringType]](1).size(1) == 1,
+      "only support one example at a time")
     val serialized = input[Tensor[StringType]](1).valueAt(1)
     val denseKeys = Range(3, 3 + nDense).map(index => input(index).asInstanceOf[Tensor[StringType]])
       .map(_.value().toStringUtf8)
@@ -85,7 +84,10 @@ private[bigdl] class ParseExample[T: ClassTag](val nDense: Int,
       case StringType =>
         val values = feature.getBytesList.getValueList.asScala.toArray
         Tensor(values, tensorShape)
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"getTensorFromFeature: ${t} is not supported",
+          "only support FloatType LongType, StringType")
+        null
     }
   }
 }
@@ -135,7 +137,10 @@ private[bigdl] class ParseSingleExample[T: ClassTag](val tDense: Seq[TensorDataT
       case StringType =>
         val values = feature.getBytesList.getValueList.asScala.toArray
         Tensor(values, tensorShape)
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"getTensorFromFeature: ${t} is not supported",
+          "only support FloatType LongType, StringType")
+        null
     }
   }
 }
@@ -207,7 +212,10 @@ private[bigdl] object ParseExample extends ModuleSerializable {
       case LongType => "Long"
       case FloatType => "Float"
       case StringType => "String"
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"fromTensorType: ${t} is not supported",
+          "only support FloatType LongType, StringType")
+        null
     }
   }
 
@@ -302,7 +310,10 @@ private[bigdl] object ParseSingleExample extends ModuleSerializable {
       case LongType => "Long"
       case FloatType => "Float"
       case StringType => "String"
-      case t => throw new NotImplementedError(s"$t is not supported")
+      case t =>
+        Log4Error.invalidInputError(false, s"fromTensorType: ${t} is not supported",
+          "only support FloatType LongType, StringType")
+        null
     }
   }
 

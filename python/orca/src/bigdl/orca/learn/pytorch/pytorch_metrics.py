@@ -14,12 +14,14 @@
 # limitations under the License.
 #
 import torch
+from bigdl.dllib.utils.log4Error import invalidInputError
 from abc import ABC, abstractmethod
 
 
 def _unify_input_formats(preds, target):
     if not (preds.ndim == target.ndim or preds.ndim == target.ndim + 1):
-        raise ValueError("preds the same or one more dimensions than targets")
+        invalidInputError(False,
+                          "preds the same or one more dimensions than targets")
 
     if preds.ndim == target.ndim + 1:
         preds = torch.argmax(preds, dim=-1)
@@ -31,7 +33,8 @@ def _unify_input_formats(preds, target):
 
 def _check_same_shape(preds, targets):
     if preds.shape != targets.shape:
-        raise RuntimeError("preds and targets are expected to have the same shape")
+        invalidInputError(False,
+                          "preds and targets are expected to have the same shape")
 
 
 class PytorchMetric(ABC):
@@ -59,7 +62,7 @@ class Accuracy(PytorchMetric):
     ```python
     acc = Accuracy()
     acc(torch.tensor([0, 2, 3, 4]), torch.tensor([1, 2, 3, 4]))
-    assert acc.compute() == 0.75
+    acc.compute() == 0.75
     ```
     """
 
@@ -68,9 +71,9 @@ class Accuracy(PytorchMetric):
         self.total = torch.tensor(0)
 
     def __call__(self, preds, targets):
-        preds, target = _unify_input_formats(preds, targets)
+        preds, targets = _unify_input_formats(preds, targets)
         self.correct += torch.sum(torch.eq(preds, targets))
-        self.total += target.numel()
+        self.total += targets.numel()
 
     def compute(self):
         return self.correct.float() / self.total
@@ -90,7 +93,7 @@ class SparseCategoricalAccuracy(PytorchMetric):
     ```python
      acc = SparseCategoricalAccuracy()
      acc(torch.tensor([[0.1, 0.9, 0.8], [0.05, 0.95, 0]]), torch.tensor([[2], [1]]))
-     assert acc.compute() == 0.5
+     acc.compute() == 0.5
     ```
     """
 
@@ -159,7 +162,7 @@ class BinaryAccuracy(PytorchMetric):
     pred = torch.tensor([0.98, 1, 0, 0.6])
     bac = BinaryAccuracy()
     bac(pred, target)
-    assert bac.compute() == 0.75
+    bac.compute() == 0.75
     ```
     """
 
@@ -190,7 +193,7 @@ class Top5Accuracy(PytorchMetric):
       target = torch.tensor([2, 2])
       top5acc = Top5Accuracy()
       top5acc(pred, target)
-      assert top5acc.compute() == 0.5
+      top5acc.compute() == 0.5
       ```
     """
 
@@ -283,7 +286,7 @@ class BinaryCrossEntropy(PytorchMetric):
     target = torch.tensor([[0, 1], [0, 0]])
     entropy = BinaryCrossEntropy()
     entropy(pred, target)
-    assert abs(entropy.compute() - 0.81492424) < 1e-6
+    abs(entropy.compute() - 0.81492424) < 1e-6
     ```
     """
 
@@ -318,7 +321,7 @@ class CategoricalCrossEntropy(PytorchMetric):
     target = torch.tensor([[0, 1, 0], [0, 0, 1]])
     entropy = CategoricalCrossEntropy()
     entropy(pred, target)
-    assert abs(entropy.compute() - 1.1769392) < 1e-6
+    abs(entropy.compute() - 1.1769392) < 1e-6
     ```
     """
 
@@ -353,7 +356,7 @@ class SparseCategoricalCrossEntropy(PytorchMetric):
     target = torch.tensor([1, 2])
     entropy = SparseCategoricalCrossEntropy()
     entropy(pred, target)
-    assert abs(entropy.compute() - 1.1769392) < 1e-6
+    abs(entropy.compute() - 1.1769392) < 1e-6
     ```
     """
 
@@ -387,7 +390,7 @@ class KLDivergence(PytorchMetric):
     target = torch.tensor([[0, 1], [0, 0]])
     div = KLDivergence()
     div(pred, target)
-    assert abs(div.compute() - 0.45814306) < 1e-6
+    abs(div.compute() - 0.45814306) < 1e-6
     ```
     """
 
@@ -420,7 +423,7 @@ class Poisson(PytorchMetric):
     target = torch.tensor([[0, 1], [0, 0]])
     poisson = Poisson()
     poisson(pred, target)
-    assert abs(poisson.compute() - 0.49999997) < 1e-6
+    abs(poisson.compute() - 0.49999997) < 1e-6
     ```
     """
 
@@ -439,3 +442,169 @@ class Poisson(PytorchMetric):
 
     def compute(self):
         return self.poisson.float() / self.total
+
+
+class AUROC(PytorchMetric):
+    """Computes the AUROC metric between labels and
+    predictions.
+
+    Usage:
+
+    ```python
+    pred = torch.tensor([0.3, 0.4, 0.2, 0.5, 0.6, 0.7, 0.8])
+    target = torch.tensor([0, 1, 0, 1, 1, 1, 1.0])
+    auc = AUROC()
+    auc(pred, target)
+    (auc.compute() - 1.0) < 1e-6
+    ```
+    """
+    def __init__(self):
+        import torchmetrics
+        self.internal_auc = torchmetrics.AUROC()
+
+    def __call__(self, preds, targets):
+        self.internal_auc.update(preds, targets.to(torch.int64))
+
+    def compute(self):
+        return self.internal_auc.compute()
+
+
+class ROC(PytorchMetric):
+    """Computes the ROC metric between labels and
+    predictions.
+
+    Usage:
+
+   ```python
+    >>> pred = torch.tensor([0.3, 0.6, 0.7, 0.8])
+    >>> target = torch.tensor([0, 1, 1, 1.0])
+    >>> auc = ROC()
+    >>> auc(pred, target)
+    >>> fpr, tpr, thresholds = auc.compute()
+    >>> fpr
+    tensor([0., 0., 0., 0., 1.])
+    >>> tpr
+    tensor([0.0000, 0.3333, 0.6667, 1.0000, 1.0000])
+    >>> thresholds
+    tensor([1.8000, 0.8000, 0.7000, 0.6000, 0.3000])
+    '''
+
+    """
+    def __init__(self):
+        import torchmetrics
+        self.internal_roc = torchmetrics.ROC()
+
+    def __call__(self, preds, targets):
+        self.internal_roc.update(preds, targets.to(torch.int64))
+
+    def compute(self):
+        return self.internal_roc.compute()
+
+
+class F1Score(PytorchMetric):
+    """Computes the F1score metric between labels and
+    predictions.
+
+    Usage:
+
+   ```python
+    target = torch.tensor([0, 1, 2, 0, 1, 2])
+    preds = torch.tensor([0, 2, 1, 0, 0, 1])
+    f1 = F1Score()
+    f1(preds, target)
+    ```
+
+    """
+    def __init__(self):
+        import torchmetrics
+        self.internal_f1 = torchmetrics.F1Score()
+
+    def __call__(self, preds, targets):
+        self.internal_f1.update(preds, targets.to(torch.int64))
+
+    def compute(self):
+        return self.internal_f1.compute()
+
+
+class Precision(PytorchMetric):
+    """Computes the Precision metric between labels and
+    predictions.
+
+    Usage:
+
+   ```python
+    target = torch.tensor([0, 1, 1, 0, 1, 1])
+    preds = torch.tensor([0, 0.2, 1.0, 0.8, 0.6, 0.5])
+    precision = Precision()
+    precision(preds, target)
+    (precision.compute() - 0.75 < 10e-6)
+    ```
+
+    """
+    def __init__(self):
+        import torchmetrics
+        self.internal_precision = torchmetrics.Precision()
+
+    def __call__(self, preds, targets):
+        self.internal_precision.update(preds, targets.to(torch.int64))
+
+    def compute(self):
+        return self.internal_precision.compute()
+
+
+class Recall(PytorchMetric):
+    """Computes the Recall metric between labels and
+    predictions.
+
+    Usage:
+
+   ```python
+    target = torch.tensor([0, 1, 1, 0, 1, 1])
+    preds = torch.tensor([0, 0.2, 1.0, 0.8, 0.6, 0.5])
+    recall = Recall()
+    recall(preds, target)
+    (recall.compute() - 0.75 < 10e-6)
+    ```
+
+    """
+    def __init__(self):
+        import torchmetrics
+        self.internal_recall = torchmetrics.Recall()
+
+    def __call__(self, preds, targets):
+        self.internal_recall.update(preds, targets.to(torch.int64))
+
+    def compute(self):
+        return self.internal_recall.compute()
+
+
+class PrecisionRecallCurve(PytorchMetric):
+    """Computes the PrecisionRecallCurve metric between labels and
+    predictions.
+
+    Usage:
+
+   ```python
+    >>> target = torch.tensor([0, 1, 1, 0, 1, 1])
+    >>> preds = torch.tensor([0, 0.2, 1.0, 0.8, 0.6, 0.5])
+    >>> curve = PrecisionRecallCurve()
+    >>> curve(preds, target)
+    >>> precision, recall, thresholds = curve.compute()
+    >>> precision
+    (tensor([0.8000, 0.7500, 0.6667, 0.5000, 1.0000, 1.0000])
+    >>> recall
+    tensor([1.0000, 0.7500, 0.5000, 0.2500, 0.2500, 0.0000])
+    >>> thresholds
+    tensor([0.2000, 0.5000, 0.6000, 0.8000, 1.0000]))
+    '''
+
+    """
+    def __init__(self):
+        import torchmetrics
+        self.internal_curve = torchmetrics.PrecisionRecallCurve()
+
+    def __call__(self, preds, targets):
+        self.internal_curve.update(preds, targets.to(torch.int64))
+
+    def compute(self):
+        return self.internal_curve.compute()

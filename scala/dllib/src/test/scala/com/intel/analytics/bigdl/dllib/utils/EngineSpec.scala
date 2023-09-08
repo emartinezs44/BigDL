@@ -128,6 +128,17 @@
     nExecutor should be(1)
   }
 
+   "sparkExecutorAndCore" should "parse local[*,4]" in {
+     val conf = Engine.createSparkConf().setAppName("EngineSpecTest").setMaster("local[*,4]")
+     val (nExecutor, _) = Engine.parseExecutorAndCore(conf).get
+     nExecutor should be(1)
+   }
+
+   "sparkExecutorAndCore" should "parse local[4,2]" in {
+     val conf = Engine.createSparkConf().setAppName("EngineSpecTest").setMaster("local[4,2]")
+     Engine.parseExecutorAndCore(conf) should be(Some(1, 4))
+   }
+
   "readConf" should "be right" in {
     val conf = Engine.readConf
     val target = Map(
@@ -136,7 +147,8 @@
       "spark.scheduler.minRegisteredResourcesRatio" -> "1.0",
       "spark.speculation" -> "false",
       "spark.serializer" -> "org.apache.spark.serializer.JavaSerializer",
-      "spark.scheduler.maxRegisteredResourcesWaitingTime" -> "3600s"
+      "spark.scheduler.maxRegisteredResourcesWaitingTime" -> "3600s",
+      "spark.driver.extraJavaOptions" -> "-Dlog4j2.info"
     )
     conf.length should be(target.keys.size)
     conf.foreach(s => {
@@ -153,7 +165,8 @@
       "spark.scheduler.minRegisteredResourcesRatio" -> "1.0",
       "spark.speculation" -> "false",
       "spark.serializer" -> "org.apache.spark.serializer.JavaSerializer",
-      "spark.scheduler.maxRegisteredResourcesWaitingTime" -> "3600s"
+      "spark.scheduler.maxRegisteredResourcesWaitingTime" -> "3600s",
+      "spark.driver.extraJavaOptions" -> "-Dlog4j2.info"
     )
     conf.length should be(target.keys.size)
     conf.foreach(s => {

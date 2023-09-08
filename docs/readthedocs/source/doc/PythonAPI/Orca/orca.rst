@@ -1,4 +1,4 @@
-Orca API 
+Orca Learn
 =========
 
 orca.learn.bigdl.estimator
@@ -27,6 +27,29 @@ orca.learn.tf2.estimator
     :undoc-members:
     :show-inheritance:
 
+
+orca.learn.tf2.tf2_ray_estimator
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Orca TF2Estimator with backend of "horovod" or "ray".
+
+.. autoclass:: bigdl.orca.learn.tf2.ray_estimator.TensorFlow2Estimator
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+orca.learn.tf2.tf2_spark_estimator
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Orca TF2Estimator with backend of "spark".
+
+.. autoclass:: bigdl.orca.learn.tf2.pyspark_estimator.SparkTFEstimator
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 orca.learn.pytorch.estimator
 -----------------------------
 
@@ -39,7 +62,7 @@ orca.learn.pytorch.estimator
 orca.learn.pytorch.pytorch_ray_estimator
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Orca Pytorch Estimator with backend of "horovod" or "torch_distributed".
+Orca Pytorch Estimator with backend of "horovod" or "ray".
 
 .. autoclass:: bigdl.orca.learn.pytorch.pytorch_ray_estimator.PyTorchRayEstimator
     :members:
@@ -65,12 +88,3 @@ orca.learn.openvino.estimator
     :members:
     :undoc-members:
     :show-inheritance:
-
-
-AutoML
-------------------------------
-
-.. toctree::
-    :maxdepth: 2
-
-    automl.rst

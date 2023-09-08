@@ -18,9 +18,11 @@ import numpy as np
 import tempfile
 import os
 
-from bigdl.chronos.forecaster.arima_forecaster import ARIMAForecaster
+from bigdl.chronos.utils import LazyImport
+ARIMAForecaster = LazyImport('bigdl.chronos.forecaster.arima_forecaster.ARIMAForecaster')
 from unittest import TestCase
 import pytest
+from .. import op_diff_set_all
 
 
 def create_data():
@@ -31,6 +33,7 @@ def create_data():
     return data, validation_data
 
 
+@op_diff_set_all
 class TestChronosModelARIMAForecaster(TestCase):
 
     def setUp(self):
@@ -111,8 +114,8 @@ class TestChronosModelARIMAForecaster(TestCase):
                                      m=7
                                      )
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             forecaster.fit(data.reshape(-1, 1), validation_data)
 
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             forecaster.fit(data, validation_data.reshape(-1, 1))

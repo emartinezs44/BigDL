@@ -19,8 +19,8 @@ package com.intel.analytics.bigdl.dllib.feature.transform.vision.image
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.tensor.{Storage, Tensor}
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.opencv.OpenCVMat
-import com.intel.analytics.bigdl.dllib.utils.T
-import org.apache.log4j.Logger
+import com.intel.analytics.bigdl.dllib.utils.{Log4Error, T}
+import org.apache.logging.log4j.LogManager
 
 import scala.collection.{Set, mutable}
 import scala.reflect._
@@ -215,12 +215,15 @@ class ImageFeature extends Serializable {
   def copyTo[T: ClassTag](storage: Array[T], offset: Int, floatKey: String = ImageFeature.floats,
     toRGB: Boolean = true, greyToRGB: Boolean = false)(implicit ev: TensorNumeric[T]): Unit = {
     val channel = getChannel()
-    require(contains(floatKey), s"there should be ${floatKey} in ImageFeature")
+    Log4Error.invalidOperationError(contains(floatKey),
+      s"there should be ${floatKey} in ImageFeature")
     val data = floats(floatKey)
-    require(data.length >= getWidth() * getHeight() * channel,
+    Log4Error.invalidOperationError(data.length >= getWidth() * getHeight() * channel,
       s"float array length should be larger than $channel * ${getWidth()} * ${getHeight()}")
     val frameLength = getWidth() * getHeight()
-    require(frameLength * channel + offset <= storage.length)
+    Log4Error.invalidOperationError(frameLength * channel + offset <= storage.length,
+      s"tensor storage cannot hold the image data, frameLength($frameLength) * channel($channel)" +
+        s" + offset($offset) <= storage.length(${storage.length})")
     if (channel == 3) {
       copyBGR(storage, offset, toRGB, data, frameLength)
     } else if (!greyToRGB) {
@@ -300,7 +303,7 @@ class ImageFeature extends Serializable {
 
   private def copyGreyToRGB[T: ClassTag](storage: Array[T], offset: Int, data: Array[Float],
     frameLength: Int): Unit = {
-    require(offset + frameLength * 3 <= storage.length,
+    Log4Error.invalidOperationError(offset + frameLength * 3 <= storage.length,
       s"tensor storage cannot hold the whole image data, offset $offset " +
         s"data length ${data.length} storage lenght ${storage.length}")
     if (classTag[T] == classTag[Float]) {
@@ -315,7 +318,7 @@ class ImageFeature extends Serializable {
         c += 1
       }
     } else {
-      throw new IllegalArgumentException("Not support type")
+      Log4Error.invalidInputError(false, "Not support type", "only support Float")
     }
   }
 
@@ -418,5 +421,5 @@ object ImageFeature {
 
   def apply(): ImageFeature = new ImageFeature()
 
-  val logger = Logger.getLogger(getClass)
+  val logger = LogManager.getLogger(getClass)
 }

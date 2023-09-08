@@ -25,10 +25,11 @@ import com.intel.analytics.bigdl.dllib.nn._
 import com.intel.analytics.bigdl.dllib.optim.{DistriOptimizer, Trigger}
 import com.intel.analytics.bigdl.dllib.tensor.{Storage, Tensor}
 import com.intel.analytics.bigdl.dllib.utils._
-import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import com.intel.analytics.bigdl.numeric.NumericFloat
+import org.apache.logging.log4j.Level
+import org.apache.logging.log4j.core.config.Configurator
 import org.tensorflow.framework.{DataType, NodeDef, TensorProto, TensorShapeProto}
 
 import scala.collection.mutable
@@ -68,8 +69,8 @@ object TensorflowLoaderSpec {
 
 class TensorflowLoaderSpec extends TensorflowSpecHelper{
 
-  Logger.getLogger("org").setLevel(Level.WARN)
-  Logger.getLogger("akka").setLevel(Level.WARN)
+  Configurator.setLevel("org", Level.WARN)
+  Configurator.setLevel("akka", Level.WARN)
 
   import TensorflowLoaderSpec._
 
@@ -273,7 +274,8 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     tmpLocation.delete()
     tmpLocation.mkdir()
 
-    require(runPython(s"$modelScript $tmpLocation"), "error when run the model script")
+    TestUtils.conditionFailTest(runPython(s"$modelScript $tmpLocation"),
+      "error when run the model script")
 
     // Load the model and input/output tensors
     val modelFile = tmpLocation + s + "model.pb"
@@ -282,8 +284,8 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     val container = model.asInstanceOf[Graph[Float]]
     val l1 = container.modules(1).asInstanceOf[Linear[Float]]
     val l2 = container.modules(3).asInstanceOf[Linear[Float]]
-    assert(l1.weight eq l2.weight)
-    assert(l1.bias eq l2.bias)
+    TestUtils.conditionFailTest(l1.weight eq l2.weight)
+    TestUtils.conditionFailTest(l1.bias eq l2.bias)
   }
 
   "Shared weights" should "be the same after running optimizer" in {
@@ -299,7 +301,8 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     tmpLocation.delete()
     tmpLocation.mkdir()
 
-    require(runPython(s"$modelScript $tmpLocation"), "error when run the model script")
+    TestUtils.conditionFailTest(runPython(s"$modelScript $tmpLocation"),
+      "error when run the model script")
 
     // Load the model and input/output tensors
     val modelFile = tmpLocation + s + "model.pb"
@@ -314,8 +317,8 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
 
     val l1 = container.modules(1).asInstanceOf[Linear[Float]]
     val l2 = container.modules(3).asInstanceOf[Linear[Float]]
-    assert(l1.weight == l2.weight)
-    assert(l1.bias == l2.bias)
+    TestUtils.conditionFailTest(l1.weight == l2.weight)
+    TestUtils.conditionFailTest(l1.bias == l2.bias)
   }
 
   "static simple rnn " should "have the same result as tensorflow" in {
@@ -619,10 +622,12 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     tmpLocation.mkdir()
 
     if (backward) {
-      require(runPython(s"$modelScript $tmpLocation ${endPoints.mkString(",")} True"),
+      TestUtils.conditionFailTest(
+        runPython(s"$modelScript $tmpLocation ${endPoints.mkString(",")} True"),
         "error when run the model script")
     } else {
-      require(runPython(s"$modelScript $tmpLocation ${endPoints.mkString(",")} False"),
+      TestUtils.conditionFailTest(
+        runPython(s"$modelScript $tmpLocation ${endPoints.mkString(",")} False"),
         "error when run the model script")
     }
 
@@ -722,7 +727,7 @@ class TensorflowLoaderSpec extends TensorflowSpecHelper{
     }
 
     tmpLocation.deleteOnExit()
-    comparePair
+    comparePair.toSeq
   }
 
 

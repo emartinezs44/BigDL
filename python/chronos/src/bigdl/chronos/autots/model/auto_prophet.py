@@ -17,10 +17,9 @@
 #
 
 import pandas as pd
-
-from bigdl.orca.automl.auto_estimator import AutoEstimator
-import bigdl.orca.automl.hp as hp
-from bigdl.chronos.model.prophet import ProphetBuilder
+import warnings
+from bigdl.chronos.model.prophet import ProphetBuilder, ProphetModel
+from bigdl.chronos.autots.utils import recalculate_n_sampling
 
 
 # -
@@ -28,16 +27,18 @@ from bigdl.chronos.model.prophet import ProphetBuilder
 class AutoProphet:
 
     def __init__(self,
-                 changepoint_prior_scale=hp.grid_search([0.005, 0.05, 0.1, 0.5]),
-                 seasonality_prior_scale=hp.grid_search([0.01, 0.1, 1.0, 10.0]),
-                 holidays_prior_scale=hp.loguniform(0.01, 10),
-                 seasonality_mode=hp.choice(['additive', 'multiplicative']),
-                 changepoint_range=hp.uniform(0.8, 0.95),
+                 changepoint_prior_scale=None,
+                 seasonality_prior_scale=None,
+                 holidays_prior_scale=None,
+                 seasonality_mode=None,
+                 changepoint_range=None,
                  metric='mse',
+                 metric_mode=None,
                  logs_dir="/tmp/auto_prophet_logs",
                  cpus_per_trial=1,
                  name="auto_prophet",
                  remote_dir=None,
+                 load_dir=None,
                  **prophet_config
                  ):
         """
@@ -62,7 +63,14 @@ class AutoProphet:
         :param changepoint_range: hyperparameter changepoint_range for the
             Prophet model.
             e.g. hp.uniform(0.8, 0.95).
-        :param metric: String. The evaluation metric name to optimize. e.g. "mse"
+        :param metric: String or customized evaluation metric function.
+            If string, metric is the evaluation metric name to optimize, e.g. "mse".
+            If callable function, it signature should be func(y_true, y_pred), where y_true and
+            y_pred are numpy ndarray. The function should return a float value as evaluation result.
+        :param metric_mode: One of ["min", "max"]. "max" means greater metric value is better.
+            You have to specify metric_mode if you use a customized metric function.
+            You don't have to specify metric_mode if you use the built-in metric in
+            bigdl.orca.automl.metrics.Evaluator.
         :param logs_dir: Local directory to save logs and results. It defaults to
             "/tmp/auto_prophet_logs"
         :param cpus_per_trial: Int. Number of cpus for each trial. It defaults to 1.
@@ -70,24 +78,44 @@ class AutoProphet:
         :param remote_dir: String. Remote directory to sync training results and checkpoints. It
             defaults to None and doesn't take effects while running in local. While running in
             cluster, it defaults to "hdfs:///tmp/{name}".
+        :param load_dir: Load the ckpt from load_dir. The value defaults to None.
 
         :param prophet_config: Other Prophet hyperparameters.
         """
-        self.search_space = {
-            "changepoint_prior_scale": changepoint_prior_scale,
-            "seasonality_prior_scale": seasonality_prior_scale,
-            "holidays_prior_scale": holidays_prior_scale,
-            "seasonality_mode": seasonality_mode,
-            "changepoint_range": changepoint_range
-        }
-        self.search_space.update(prophet_config)  # update other configs
-        self.metric = metric
-        model_builder = ProphetBuilder()
-        self.auto_est = AutoEstimator(model_builder=model_builder,
-                                      logs_dir=logs_dir,
-                                      resources_per_trial={"cpu": cpus_per_trial},
-                                      remote_dir=remote_dir,
-                                      name=name)
+        if load_dir:
+            self.best_model = ProphetModel()
+            self.best_model.restore(load_dir)
+        try:
+            from bigdl.orca.automl.auto_estimator import AutoEstimator
+            import bigdl.orca.automl.hp as hp
+            self.search_space = {
+                "changepoint_prior_scale": hp.grid_search([0.005, 0.05, 0.1, 0.5])
+                if changepoint_prior_scale is None
+                else changepoint_prior_scale,
+                "seasonality_prior_scale": hp.grid_search([0.01, 0.1, 1.0, 10.0])
+                if seasonality_prior_scale is None
+                else seasonality_prior_scale,
+                "holidays_prior_scale": hp.loguniform(0.01, 10)
+                if holidays_prior_scale is None
+                else holidays_prior_scale,
+                "seasonality_mode": hp.choice(['additive', 'multiplicative'])
+                if seasonality_mode is None
+                else seasonality_mode,
+                "changepoint_range": hp.uniform(0.8, 0.95)
+                if changepoint_range is None
+                else changepoint_range
+            }
+            self.search_space.update(prophet_config)  # update other configs
+            self.metric = metric
+            self.metric_mode = metric_mode
+            model_builder = ProphetBuilder()
+            self.auto_est = AutoEstimator(model_builder=model_builder,
+                                          logs_dir=logs_dir,
+                                          resources_per_trial={"cpu": cpus_per_trial},
+                                          remote_dir=remote_dir,
+                                          name=name)
+        except ImportError:
+            warnings.warn("You need to install `bigdl-orca[automl]` to use `fit` function.")
 
     def fit(self,
             data,
@@ -95,7 +123,7 @@ class AutoProphet:
             expect_horizon=None,
             freq=None,
             metric_threshold=None,
-            n_sampling=50,
+            n_sampling=16,
             search_alg=None,
             search_alg_params=None,
             scheduler=None,
@@ -119,8 +147,9 @@ class AutoProphet:
                https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliasesDefaulted
                to None, where an unreliable frequency will be infer implicitly.
         :param metric_threshold: a trial will be terminated when metric threshold is met
-        :param n_sampling: Number of times to sample from the search_space. Defaults to 50.
-               If hp.grid_search is in search_space, the grid will be repeated n_sampling of times.
+        :param n_sampling: Number of trials to evaluate in total. Defaults to 16.
+               If hp.grid_search is in search_space, the grid will be run n_sampling of trials
+               and round up n_sampling according to hp.grid_search.
                If this is -1, (virtually) infinite samples are generated
                until a stopping condition is met.
         :param search_alg: str, all supported searcher provided by ray tune
@@ -132,12 +161,15 @@ class AutoProphet:
         :param scheduler: str, all supported scheduler provided by ray tune
         :param scheduler_params: parameters for scheduler
         """
+        from bigdl.nano.utils.log4Error import invalidInputError
         if expect_horizon is None:
             expect_horizon = int(0.1*len(data))
         if freq is None:
-            assert len(data) >= 2, "The training dataframe should contains more than 2 records."
-            assert pd.api.types.is_datetime64_any_dtype(data["ds"].dtypes), \
-                "The 'ds' col should be in datetime 64 type, or you need to set `freq` in fit."
+            invalidInputError(len(data) >= 2,
+                              "The training dataframe should contains more than 2 records.")
+            invalidInputError(pd.api.types.is_datetime64_any_dtype(data["ds"].dtypes),
+                              "The 'ds' col should be in datetime 64 type,"
+                              " or you need to set `freq` in fit.")
             self._freq = data["ds"].iloc[1] - data["ds"].iloc[0]
         else:
             self._freq = pd.Timedelta(freq)
@@ -146,9 +178,12 @@ class AutoProphet:
                                   "cross_validation": cross_validation})
         train_data = data if cross_validation else data[:len(data)-expect_horizon]
         validation_data = None if cross_validation else data[len(data)-expect_horizon:]
+        n_sampling = recalculate_n_sampling(self.search_space,
+                                            n_sampling) if n_sampling != -1 else -1
         self.auto_est.fit(data=train_data,
                           validation_data=validation_data,
                           metric=self.metric,
+                          metric_mode=self.metric_mode,
                           metric_threshold=metric_threshold,
                           n_sampling=n_sampling,
                           search_space=self.search_space,
@@ -171,9 +206,10 @@ class AutoProphet:
                https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
         :param ds_data: a dataframe that has 1 column 'ds' indicating date.
         """
+        from bigdl.nano.utils.log4Error import invalidInputError
         if self.best_model.model is None:
-            raise RuntimeError(
-                "You must call fit or restore first before calling predict!")
+            invalidInputError(False,
+                              "You must call fit or restore first before calling predict!")
         return self.best_model.predict(horizon=horizon, freq=freq, ds_data=ds_data)
 
     def evaluate(self, data, metrics=['mse']):
@@ -183,13 +219,17 @@ class AutoProphet:
         :param data: evaluation data, a pandas dataframe with Td rows,
             and 2 columns, with column 'ds' indicating date and column 'y' indicating value
             and Td is the time dimension
-        :param metrics: A list contains metrics for test/valid data.
+        :param metrics: list of string or callable. e.g. ['mse'] or [customized_metrics]
+               If callable function, it signature should be func(y_true, y_pred), where y_true and
+               y_pred are numpy ndarray. The function should return a float value as evaluation
+               result.
         """
+        from bigdl.nano.utils.log4Error import invalidInputError
         if data is None:
-            raise ValueError("Input invalid data of None")
+            invalidInputError(False, "Input invalid data of None")
         if self.best_model.model is None:
-            raise RuntimeError(
-                "You must call fit or restore first before calling evaluate!")
+            invalidInputError(False,
+                              "You must call fit or restore first before calling evaluate!")
         return self.best_model.evaluate(target=data,
                                         metrics=metrics)
 
@@ -199,9 +239,10 @@ class AutoProphet:
 
         :param checkpoint_file: The location you want to save the best model, should be a json file
         """
+        from bigdl.nano.utils.log4Error import invalidInputError
         if self.best_model.model is None:
-            raise RuntimeError(
-                "You must call fit or restore first before calling save!")
+            invalidInputError(False,
+                              "You must call fit or restore first before calling save!")
         self.best_model.save(checkpoint_file)
 
     def restore(self, checkpoint_file):

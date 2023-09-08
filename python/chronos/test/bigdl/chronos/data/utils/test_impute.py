@@ -18,10 +18,11 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from bigdl.orca.test_zoo_utils import ZooTestCase
+from unittest import TestCase
 from bigdl.chronos.data.utils.impute import impute_timeseries_dataframe, \
     _last_impute_timeseries_dataframe, _const_impute_timeseries_dataframe, \
     _linear_impute_timeseries_dataframe
+from ... import op_torch, op_tf2
 
 
 def get_ugly_ts_df():
@@ -38,7 +39,9 @@ def get_ugly_ts_df():
     return df
 
 
-class TestImputeTimeSeries(ZooTestCase):
+@op_torch
+@op_tf2
+class TestImputeTimeSeries(TestCase):
     def setup_method(self, method):
         self.df = get_ugly_ts_df()
 
@@ -46,12 +49,12 @@ class TestImputeTimeSeries(ZooTestCase):
         pass
 
     def test_impute_timeseries_dataframe(self):
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             impute_timeseries_dataframe(self.df, dt_col="z")
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             impute_timeseries_dataframe(
                 self.df, dt_col="datetime", mode="dummy")
-        with pytest.raises(AssertionError):
+        with pytest.raises(RuntimeError):
             impute_timeseries_dataframe(self.df, dt_col="a")
         last_res_df = impute_timeseries_dataframe(
             self.df, dt_col="datetime", mode="last")
@@ -82,8 +85,9 @@ class TestImputeTimeSeries(ZooTestCase):
         assert res_df['data'][2] == 1
 
     def test_linear_timeseries_dataframe(self):
-        data = {'data': [np.nan, 1, np.nan, 2, 3]}
+        data = {'data': [np.nan, 1, np.nan, 2, 3],
+                'datetime': pd.date_range('1/1/2019', periods=5)}
         df = pd.DataFrame(data)
-        res_df = _linear_impute_timeseries_dataframe(df)
+        res_df = _linear_impute_timeseries_dataframe(df, dt_col="datetime")
         assert res_df['data'][0] == 1
         assert res_df['data'][2] == 1.5

@@ -13,44 +13,57 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import warnings
 
+import logging
+import importlib
+from bigdl.chronos.utils import LazyImport
+# unset the KMP_INIT_AT_FORK
+# which will cause significant slow down in multiprocessing training
+import os
+if 'KMP_INIT_AT_FORK' in os.environ:
+    del os.environ['KMP_INIT_AT_FORK']
+
+class Disablelogging:
+    def __enter__(self):
+        logging.disable(logging.CRITICAL)
+
+    def __exit__(self, *args, **opts):
+        logging.disable(logging.NOTSET)
 
 # dependencies check
-torch_available = False
+torch_available = bool(importlib.util.find_spec('torch'))
 tf_available = False
+try:
+    tf = LazyImport('tensorflow')
+    tf_available = tf.__version__ > "2.0.0"
+except:
+    pass
+
+# Avoid printing redundant message
 prophet_available = False
-arima_available = False
 try:
-    import torch
-    torch_available = True
-except:
-    warnings.warn("Please install `torch` to use full collection of forecasters.")
-try:
-    import tensorflow as tf
-    tf_available = True
-except:
-    warnings.warn("Please install `tensorflow` to use full collection of forecasters.")
-try:
-    import prophet
+    with Disablelogging():
+        import prophet
     prophet_available = True
 except:
-    warnings.warn("Please install `prophet` to use full collection of forecasters.")
-try:
-    import pmdarima
-    arima_available = True
-except:
-    warnings.warn("Please install `pmdarima` to use full collection of forecasters.")
+    pass
+
+arima_available = bool(importlib.util.find_spec('pmdarima'))
+orca_available = bool(importlib.util.find_spec('bigdl.orca'))
 
 # import forecasters
+PREFIXNAME = 'bigdl.chronos.forecaster.'
 if torch_available:
-    from .lstm_forecaster import LSTMForecaster
-    from .tcn_forecaster import TCNForecaster
-    from .seq2seq_forecaster import Seq2SeqForecaster
-    from .tcmf_forecaster import TCMFForecaster
-if tf_available:
-    from .mtnet_forecaster import MTNetForecaster
+    LSTMForecaster = LazyImport(PREFIXNAME+'lstm_forecaster.LSTMForecaster')
+    TCNForecaster = LazyImport(PREFIXNAME+'tcn_forecaster.TCNForecaster')
+    Seq2SeqForecaster = LazyImport(PREFIXNAME+'seq2seq_forecaster.Seq2SeqForecaster')
+    NBeatsForecaster = LazyImport(PREFIXNAME+'nbeats_forecaster.NBeatsForecaster')
+    AutoformerForecaster = LazyImport(PREFIXNAME+'autoformer_forecaster.AutoformerForecaster')
+    if orca_available:
+        TCMFForecaster = LazyImport(PREFIXNAME+'tcmf_forecaster.TCMFForecaster')
+if tf_available and orca_available:
+    MTNetForecaster = LazyImport(PREFIXNAME+'tf.mtnet_forecaster.MTNetForecaster')
 if prophet_available:
-    from .prophet_forecaster import ProphetForecaster
+    ProphetForecaster = LazyImport(PREFIXNAME+'prophet_forecaster.ProphetForecaster')
 if arima_available:
-    from .arima_forecaster import ARIMAForecaster
+    ARIMAForecaster = LazyImport(PREFIXNAME+'arima_forecaster.ARIMAForecaster')

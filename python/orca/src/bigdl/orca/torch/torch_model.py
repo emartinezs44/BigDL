@@ -24,13 +24,14 @@ from bigdl.dllib.utils.file_utils import callZooFunc
 from bigdl.orca.torch.utils import trainable_param
 from bigdl.orca.torch import zoo_pickle_module
 from importlib.util import find_spec
+from bigdl.dllib.utils.log4Error import *
 
 if sys.version < '3.7':
     print("WARN: detect python < 3.7, if you meet zlib not available " +
           "exception on yarn, please update your python to 3.7")
 
 if find_spec('jep') is None:
-    raise Exception("jep not found, please install jep first.")
+    invalidInputError(False, "jep not found, please install jep first.")
 
 
 class TorchModel(Layer):
@@ -79,7 +80,8 @@ class TorchModel(Layer):
         :return: a pytorch model
         """
         new_weight = self.get_weights()
-        assert(len(new_weight) == 1, "TorchModel's weights should be one tensor")
+        invalidInputError(len(new_weight) == 1,
+                          "TorchModel's weights should be one tensor")
         # set weights
         m = torch.load(io.BytesIO(self.module_bytes), pickle_module=zoo_pickle_module)
         import types
@@ -97,3 +99,14 @@ class TorchModel(Layer):
                     torch.Tensor(new_extra_params[idx].to_ndarray()), named_buffer[1].size()))
                 idx += 1
         return m
+
+    def saveModel(self, path, over_write=False):
+        from bigdl.dllib.utils.common import callBigDlFunc
+        callBigDlFunc(self.bigdl_type, "modelSave", self.value, path,
+                      over_write)
+
+    @staticmethod
+    def loadModel(path, bigdl_type="float"):
+        from bigdl.dllib.utils.common import callBigDlFunc
+        jmodel = callBigDlFunc(bigdl_type, "loadBigDL", path)
+        return Layer.of(jmodel)

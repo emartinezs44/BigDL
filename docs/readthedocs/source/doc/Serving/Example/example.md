@@ -1,13 +1,18 @@
-# BigDL Cluster Serving Example
+# Cluster Serving Example
 
 There are some examples provided for new user or existing Tensorflow user.
+## Quick Start Example
+Following is the recommended quick start example to transfer a local Keras application to Cluster Serving.
+
+[keras-to-cluster-serving-example](https://github.com/intel-analytics/BigDL/blob/branch-2.0/docs/readthedocs/source/doc/Serving/Example/keras-to-cluster-serving-example.ipynb)
+
 ## End-to-end Example
 ### TFDataSet: 
-[l08c08_forecasting_with_lstm.py](https://github.com/intel-analytics/bigdl/tree/master/docs/docs/ClusterServingGuide/OtherFrameworkUsers/l08c08_forecasting_with_lstm.py)
+[l08c08_forecasting_with_lstm.py](https://github.com/intel-analytics/bigdl/blob/branch-2.0/docs/docs/ClusterServingGuide/OtherFrameworkUsers/l08c08_forecasting_with_lstm.py)
 ### Tokenizer: 
-[l10c03_nlp_constructing_text_generation_model.py](https://github.com/intel-analytics/bigdl/tree/master/docs/docs/ClusterServingGuide/OtherFrameworkUsers/l10c03_nlp_constructing_text_generation_model.py) 
+[l10c03_nlp_constructing_text_generation_model.py](https://github.com/intel-analytics/bigdl/tree/master/blob/branch-2.0/ClusterServingGuide/OtherFrameworkUsers/l10c03_nlp_constructing_text_generation_model.py) 
 ### ImageDataGenerator: 
-[transfer_learning.py](https://github.com/intel-analytics/bigdl/tree/master/docs/docs/ClusterServingGuide/OtherFrameworkUsers/transfer_learning.py)
+[transfer_learning.py](https://github.com/intel-analytics/bigdl/blob/branch-2.0/docs/docs/ClusterServingGuide/OtherFrameworkUsers/transfer_learning.py)
 
 ## Model/Data Convert Guide
 This guide is for users who:
@@ -93,7 +98,7 @@ model = tf.keras.models.load_model("./model.h5")
 tf.saved_model.save(model, "saved_model")
 ```
 ### Model - ckpt to Frozen Graph
-[freeze checkpoint example](https://github.com/intel-analytics/bigdl/tree/master/pyzoo/bigdl/examples/tensorflow/freeze_checkpoint)
+[freeze checkpoint example](https://github.com/intel-analytics/bigdl/tree/master/python/orca/example/freeze_checkpoint)
 ### Notes - Use SavedModel
 If model has single tensor input, then nothing to notice.
 

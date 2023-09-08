@@ -25,7 +25,8 @@ import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import io.grpc.netty.shaded.io.netty.handler.ssl.ClientAuth;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslContext;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslContextBuilder;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import javax.net.ssl.SSLException;
 import java.io.File;
@@ -39,7 +40,7 @@ import java.util.concurrent.TimeUnit;
  * This class could also be directly used for start a single service
  */
 public abstract class GrpcServerBase extends AbstractGrpcBase {
-    protected static final Logger logger = Logger.getLogger(GrpcServerBase.class.getName());
+    protected static final Logger logger = LogManager.getLogger(GrpcServerBase.class.getName());
     protected int port = 8980;
     protected Server server;
     protected LinkedList<BindableService> serverServices = new LinkedList<BindableService>();
@@ -47,9 +48,9 @@ public abstract class GrpcServerBase extends AbstractGrpcBase {
             new LinkedList<ServerServiceDefinition>();
 
     // TLS arguments
-    String certChainFilePath;
-    String privateKeyFilePath;
-    String trustCertCollectionFilePath;
+    protected String certChainFilePath;
+    protected String privateKeyFilePath;
+    protected String trustCertCollectionFilePath;
 
 
     /**
@@ -60,11 +61,15 @@ public abstract class GrpcServerBase extends AbstractGrpcBase {
         this.args = args;
     }
 
+    public void setPort(int port) {
+        this.port = port;
+    }
+    public int getPort() { return this.port; }
+
     public void parseConfig() throws Exception {}
 
     /** Entrypoint of GrpcServerBase */
     public void build() throws Exception {
-        parseConfig();
         ServerBuilder builder = ServerBuilder.forPort(port);
         for (BindableService bindableService : serverServices) {
             builder.addService(bindableService);
@@ -75,8 +80,7 @@ public abstract class GrpcServerBase extends AbstractGrpcBase {
         server = builder.maxInboundMessageSize(Integer.MAX_VALUE).build();
     }
 
-    void buildWithTls() throws Exception {
-        parseConfig();
+    public void buildWithTls() throws Exception {
         NettyServerBuilder serverBuilder = NettyServerBuilder.forPort(port);
         for (BindableService bindableService : serverServices) {
             serverBuilder.addService(bindableService);
@@ -87,7 +91,7 @@ public abstract class GrpcServerBase extends AbstractGrpcBase {
         if (certChainFilePath != null && privateKeyFilePath != null) {
             serverBuilder.sslContext(getSslContext());
         }
-        server = serverBuilder.build();
+        server = serverBuilder.maxInboundMessageSize(Integer.MAX_VALUE).build();
     }
 
     SslContext getSslContext() throws SSLException {

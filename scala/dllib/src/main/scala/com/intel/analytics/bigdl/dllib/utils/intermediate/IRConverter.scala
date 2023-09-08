@@ -60,17 +60,21 @@ private[bigdl] class IRConverter[T: ClassTag](IRgraph: IRGraph[T])(implicit ev: 
    */
   def toGraph() : Graph[T] = {
     if (Engine.getEngineType() == MklBlas) {
-      require(IRToBlas[T].convertingCheck(allNodes.toArray),
+      Log4Error.invalidInputError(IRToBlas[T].convertingCheck(allNodes.toArray),
         "IR graph can not be converted to Blas layer")
       toBlasGraph()
     } else if (Engine.getEngineType() == MklDnn) {
-      require(ev.getType() == FloatType, "Mkldnn engine only supports float data")
-      require(IRToDnn[Float].convertingCheck(
+      Log4Error.invalidInputError(ev.getType() == FloatType,
+        "Mkldnn engine only supports float data")
+      Log4Error.invalidInputError(IRToDnn[Float].convertingCheck(
         allNodes.toArray.asInstanceOf[Array[Node[IRElement[Float]]]]),
         "IR graph can not be converted to Dnn layer")
       toDnnGraph()
-    } else throw new UnsupportedOperationException(
-      s"Only support engineType mkldnn/mklblas, but get ${Engine.getEngineType()}")
+    } else {
+      Log4Error.invalidOperationError(false,
+        s"Only support engineType mkldnn/mklblas, but get ${Engine.getEngineType()}")
+      null
+    }
   }
 
   private def toDnnGraph(): Graph[T] = {
