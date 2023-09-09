@@ -60,15 +60,21 @@ class SoftMax[T: ClassTag]()(implicit ev: TensorNumeric[T])
   }
 
   override def updateGradInput(input: Tensor[T], gradOutput: Tensor[T]): Tensor[T] = {
-    val dim = input.dim()
+    /* val dim = input.dim()
     val sum = (output.clone().cmul(gradOutput)).sum(dim)
     gradInput = output.clone().cmul(gradOutput - sum.expand(input.size()))
+    gradInput */
+    val dim = input.dim()
+    val sum = (output.clone().cmul(gradOutput)).sum(dim)
+    val gradOutputAux = gradOutput.clone()
+    optimzedOperation(gradOutputAux, sum/*.expand(input.size())*/, "-")
+    gradInput = output.clone().cmul(gradOutputAux)
     gradInput
   }
 
   private def optimzedOperation(input1: Tensor[T], input2: Tensor[T], operation: String) = {
     val dim = input1.dim()
-    val kk = Array.fill[Int](dim-1)(1)
+    val kk = Array.fill[Int](dim - 1)(1)
     var m = 0
     var cnt = 0
 
@@ -76,28 +82,34 @@ class SoftMax[T: ClassTag]()(implicit ev: TensorNumeric[T])
       cnt += 1
       if (cnt < input1.dim() - 1) {
         m = 1
-        while (m<kk.size) {
+        while (m < kk.size) {
           kk(m) = 1
           m += 1
         }
         while (kk(1) < input1.size(2) + 1) {
           cnt += 1
-          if (cnt<input1.dim() - 1) {
+          if (cnt < input1.dim() - 1) {
             m = 2
-            while(m<kk.size) {
+            while (m < kk.size) {
               kk(m) = 1
               m += 1
             }
             while (kk(2) < input1.size(3) + 1) {
               cnt += 1
-              if (cnt<input1.dim() - 1) {}
+              if (cnt < input1.dim() - 1) {}
               else {
                 if (operation == "-") {
                   input1.narrow(1, kk(0), 1).narrow(2, kk(1), 1).narrow(3, kk(2), 1)
                     .sub(input2.valueAt(kk(0), kk(1), kk(2), 1))
-                } else {
+                } else if (operation == "/") {
                   input1.narrow(1, kk(0), 1).narrow(2, kk(1), 1).narrow(3, kk(2), 1)
                     .div(input2.valueAt(kk(0), kk(1), kk(2), 1))
+                } else if (operation == "+") {
+                  input1.narrow(1, kk(0), 1).narrow(2, kk(1), 1).narrow(3, kk(2), 1)
+                    .add(input2.valueAt(kk(0), kk(1), kk(2), 1))
+                } else {
+                  input1.narrow(1, kk(0), 1).narrow(2, kk(1), 1).narrow(3, kk(2), 1)
+                    .mul(input2.valueAt(kk(0), kk(1), kk(2), 1))
                 }
               }
               kk(2) += 1
@@ -106,10 +118,13 @@ class SoftMax[T: ClassTag]()(implicit ev: TensorNumeric[T])
           } else {
             if (operation == "-") {
               input1.narrow(1, kk(0), 1).narrow(2, kk(1), 1).sub(input2.valueAt(kk(0), kk(1), 1))
-            } else {
+            } else if (operation == "/") {
               input1.narrow(1, kk(0), 1).narrow(2, kk(1), 1).div(input2.valueAt(kk(0), kk(1), 1))
+            } else if (operation == "+") {
+              input1.narrow(1, kk(0), 1).narrow(2, kk(1), 1).add(input2.valueAt(kk(0), kk(1), 1))
+            } else {
+              input1.narrow(1, kk(0), 1).narrow(2, kk(1), 1).mul(input2.valueAt(kk(0), kk(1), 1))
             }
-
           }
           kk(1) += 1
           cnt = 1
@@ -117,8 +132,12 @@ class SoftMax[T: ClassTag]()(implicit ev: TensorNumeric[T])
       } else {
         if (operation == "-") {
           input1.narrow(1, kk(0), 1).sub(input2.valueAt(kk(0), 1))
-        } else {
+        } else if (operation == "/") {
           input1.narrow(1, kk(0), 1).div(input2.valueAt(kk(0), 1))
+        } else if (operation == "+") {
+          input1.narrow(1, kk(0), 1).add(input2.valueAt(kk(0), 1))
+        } else {
+          input1.narrow(1, kk(0), 1).mul(input2.valueAt(kk(0), 1))
         }
       }
       kk(0) += 1
@@ -133,7 +152,7 @@ class SoftMax[T: ClassTag]()(implicit ev: TensorNumeric[T])
 
 object SoftMax{
   def apply[@specialized(Float, Double) T: ClassTag]()
-    (implicit ev: TensorNumeric[T]) : SoftMax[T] = {
+      (implicit ev: TensorNumeric[T]) : SoftMax[T] = {
     new SoftMax[T]()
   }
 }

@@ -184,7 +184,7 @@
         <scopt.version>3.5.0</scopt.version>
         <spark-scope>provided</spark-scope>
         <bigdl.basedir>${project.basedir}</bigdl.basedir>
-	    <bigdl-core-all-scope>compile</bigdl-core-all-scope>
+        <bigdl-core-all-scope>compile</bigdl-core-all-scope>
         <data-store-url>http://download.tensorflow.org</data-store-url>
         <lightgbm.scope>provided</lightgbm.scope>
         <grpc.version>1.48.1</grpc.version>
@@ -194,12 +194,12 @@
     <modules>
         <module>common/spark-version</module>
         <module>dllib</module>
-        <module>orca</module>
-        <module>friesian</module>
+        <!-- <module>orca</module> -->
+        <!-- <module>friesian</module> -->
         <module>grpc</module>
-        <module>serving</module>
-        <module>ppml</module>
-        <module>assembly</module>
+        <!-- <module>serving</module> -->
+        <!-- <module>ppml</module> -->
+        <!-- <module>assembly</module> -->
     </modules>
 
     <distributionManagement>
@@ -584,13 +584,13 @@
                     </args>
                     <!-- The following plugin is required to use quasiquotes in Scala 2.10 and is used
                          by Spark SQL for code generation. -->
-<!--                    <compilerPlugins>-->
-<!--                        <compilerPlugin>-->
-<!--                            <groupId>org.scalamacros</groupId>-->
-<!--                            <artifactId>paradise_${scala.version}</artifactId>-->
-<!--                            <version>${scala.macros.version}</version>-->
-<!--                        </compilerPlugin>-->
-<!--                    </compilerPlugins>-->
+                    <!--                    <compilerPlugins>-->
+                    <!--                        <compilerPlugin>-->
+                    <!--                            <groupId>org.scalamacros</groupId>-->
+                    <!--                            <artifactId>paradise_${scala.version}</artifactId>-->
+                    <!--                            <version>${scala.macros.version}</version>-->
+                    <!--                        </compilerPlugin>-->
+                    <!--                    </compilerPlugins>-->
                 </configuration>
             </plugin>
             <plugin>
@@ -778,13 +778,13 @@
                             </args>
                             <!-- The following plugin is required to use quasiquotes in Scala 2.10 and is used
                                  by Spark SQL for code generation. -->
-<!--                            <compilerPlugins>-->
-<!--                                <compilerPlugin>-->
-<!--                                    <groupId>org.scalamacros</groupId>-->
-<!--                                    <artifactId>paradise_${scala.version}</artifactId>-->
-<!--                                    <version>${scala.macros.version}</version>-->
-<!--                                </compilerPlugin>-->
-<!--                            </compilerPlugins>-->
+                            <!--                            <compilerPlugins>-->
+                            <!--                                <compilerPlugin>-->
+                            <!--                                    <groupId>org.scalamacros</groupId>-->
+                            <!--                                    <artifactId>paradise_${scala.version}</artifactId>-->
+                            <!--                                    <version>${scala.macros.version}</version>-->
+                            <!--                                </compilerPlugin>-->
+                            <!--                            </compilerPlugins>-->
                         </configuration>
                     </plugin>
                 </plugins>
@@ -861,13 +861,13 @@
                             </args>
                             <!-- The following plugin is required to use quasiquotes in Scala 2.10 and is used
                                  by Spark SQL for code generation. -->
-<!--                            <compilerPlugins>-->
-<!--                                <compilerPlugin>-->
-<!--                                    <groupId>org.scalamacros</groupId>-->
-<!--                                    <artifactId>paradise_${scala.version}</artifactId>-->
-<!--                                    <version>${scala.macros.version}</version>-->
-<!--                                </compilerPlugin>-->
-<!--                            </compilerPlugins>-->
+                            <!--                            <compilerPlugins>-->
+                            <!--                                <compilerPlugin>-->
+                            <!--                                    <groupId>org.scalamacros</groupId>-->
+                            <!--                                    <artifactId>paradise_${scala.version}</artifactId>-->
+                            <!--                                    <version>${scala.macros.version}</version>-->
+                            <!--                                </compilerPlugin>-->
+                            <!--                            </compilerPlugins>-->
                         </configuration>
                     </plugin>
                 </plugins>
@@ -877,7 +877,7 @@
             <id>scala_2.13</id>
             <properties>
                 <scala.major.version>2.13</scala.major.version>
-                <scala.version>2.13.5</scala.version>
+                <scala.version>2.13.11</scala.version>
                 <scala.macros.version>2.1.0</scala.macros.version>
                 <breeze.version>1.2</breeze.version>
                 <scopt.version>3.7.1</scopt.version>

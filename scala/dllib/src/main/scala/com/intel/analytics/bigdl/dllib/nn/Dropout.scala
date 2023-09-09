@@ -16,11 +16,12 @@
 package com.intel.analytics.bigdl.dllib.nn
 
 import com.intel.analytics.bigdl.dllib.nn.abstractnn.{IdentityOutputShape, TensorModule}
-import com.intel.analytics.bigdl.dllib.tensor.{Storage, Tensor}
+import com.intel.analytics.bigdl.dllib.tensor.{DenseTensorApply, DoubleType, FloatType, Storage, Tensor, TensorFunc2}
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
 import com.intel.analytics.bigdl.dllib.utils.{Engine, Log4Error, Shape}
 import com.intel.analytics.bigdl.dllib.utils.RandomGenerator._
 
+import java.util.concurrent.ThreadLocalRandom
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.reflect.ClassTag
@@ -41,12 +42,75 @@ import scala.reflect.ClassTag
  * @param inplace whether to make `input` and `output` share the same storage
  * @param scale whether to scale the output by a factor of `1 / (1 - p)`
  */
+
+object ExtraTensorOps {
+
+  implicit class extraTensorOps[T: ClassTag](in: Tensor[T])(implicit ev: TensorNumeric[T]
+  ) {
+    def bernoulli2(p: Double): Tensor[T] = {
+      if (in.isContiguous()) {
+        var i = 0
+        val total = in.nElement()
+        val data = in.storage().array()
+        val offset = in.storageOffset() - 1
+        in.getType() match {
+          case FloatType =>
+            val floatData = data.asInstanceOf[Array[Float]]
+            while (i < total) {
+              floatData(offset + i) =
+                if (ThreadLocalRandom.current().nextFloat() <= p) {
+                  1
+                } else {
+                  0
+                }
+              i += 1
+            }
+          case DoubleType =>
+            val doubleData = data.asInstanceOf[Array[Double]]
+            while (i < total) {
+              doubleData(offset + i) =
+                if (ThreadLocalRandom.current().nextFloat() <= p) {
+                  1
+                } else {
+                  0
+                }
+              i += 1
+            }
+          case _ =>
+            while (i < total) {
+              data(offset + i) = if (RNG.bernoulli(p)) {
+                ev.fromType[Int](1)
+              } else {
+                ev.fromType[Int](0)
+              }
+              i += 1
+            }
+        }
+      } else {
+        val func = new TensorFunc2[T] {
+          override def apply(data: Array[T], index: Int): Unit = {
+            data(index) = if (RNG.bernoulli(p)) {
+              ev.fromType[Int](1)
+            } else {
+              ev.fromType[Int](0)
+            }
+          }
+        }
+        DenseTensorApply.apply1[T](in, func)
+      }
+      in
+    }
+  }
+}
+
+import ExtraTensorOps._
+
 @SerialVersionUID(- 4636332259181125718L)
 class Dropout[T: ClassTag](
-  val initP: Double = 0.5,
-  val inplace: Boolean = false,
-  var scale: Boolean = true)(
-  implicit ev: TensorNumeric[T]) extends TensorModule[T] {
+                            val initP: Double = 0.5,
+                            val inplace: Boolean = false,
+                            var scale: Boolean = true)(
+                            implicit ev: TensorNumeric[T]) extends TensorModule[T] {
   private var p = initP
   var noise = Tensor[T]()
   var isResampling = true
@@ -62,6 +126,7 @@ class Dropout[T: ClassTag](
     return ev.fromType[Double](p)
   }
 
+
   override def updateOutput(input: Tensor[T]): Tensor[T] = {
     if (inplace) {
       this.output = input
@@ -69,66 +134,16 @@ class Dropout[T: ClassTag](
       this.output.resizeAs(input).copy(input)
     }
 
-    if (results == null) {
-      results = new Array[Future[Unit]](Engine.model.getPoolSize)
-    }
     if (train) {
       noise.resizeAs(input)
-      if (input.isContiguous()) {
-        if (isResampling) {
-          val noiseData = noise.storage().array()
-          var taskSize = noise.nElement() / Engine.model.getPoolSize
-          var extraTask = noise.nElement() % Engine.model.getPoolSize
-          var allocated = 0
-          val offset = this.output.storageOffset() - 1
-          val data = this.output.storage.array()
-          var i = 0
-          while (allocated < noise.nElement()) {
-            val start = allocated
-            allocated += taskSize
-            if (extraTask > 0) {
-              allocated += 1
-              extraTask -= 1
-            }
-            val end = allocated
-            results(i) = Engine.model.invoke(() => {
-              var k = start
-              while (k < end) {
-                noiseData(k) = if (RNG.bernoulli(1 - p)) {
-                  if (scale) {
-                    data(offset + k) = ev.divide(data(offset + k), ev.fromType[Double](1 - p))
-                    ev.fromType[Double](1.0 / (1 - p))
-                  } else {
-                    ev.fromType[Int](1)
-                  }
-                } else {
-                  data(offset + k) = ev.fromType[Int](0)
-                  ev.fromType[Int](0)
-                }
-
-                k += 1
-              }
-            })
-            i += 1
-
-          }
-
-          Engine.model.sync(results)
-        } else {
-          this.output.cmul(noise)
+      if (isResampling) {
+        noise.bernoulli2(1 - p)
+        if (scale) {
+          noise.div(ev.fromType[Double](1 - p))
         }
-        this.output
-      } else {
-        if (isResampling) {
-          noise.bernoulli(1 - p)
-
-          if (scale) {
-            noise.div(ev.fromType[Double](1 - p))
-          }
-        }
-
-        this.output.cmul(noise)
       }
+
+      this.output.cmul(noise)
     } else if (!scale) {
       this.output.mul(ev.fromType[Double](1 - p))
     } else {
@@ -137,9 +152,9 @@ class Dropout[T: ClassTag](
   }
 
   override def updateGradInput(input: Tensor[T], gradOutput: Tensor[T]): Tensor[T] = {
-    if (results == null) {
+    /* if (results == null) {
       results = new Array[Future[Unit]](Engine.model.getPoolSize)
-    }
+    } */
     if (train) {
       if (inplace) {
         this.gradInput = gradOutput
@@ -148,7 +163,10 @@ class Dropout[T: ClassTag](
       }
 
       if (gradInput.isContiguous()) {
-        val noiseData = noise.storage().array()
+        val noiseData = noise
+        val gradInputData = gradInput
+        gradInput = gradInputData.cmul(noiseData)
+        /*
         var taskSize = noise.nElement() / Engine.model.getPoolSize
         var extraTask = noise.nElement() % Engine.model.getPoolSize
         val gradInputData = gradInput.storage().array()
@@ -176,7 +194,7 @@ class Dropout[T: ClassTag](
 
         Engine.model.sync(results)
 
-        this.gradInput
+        this.gradInput */
       } else {
         this.gradInput.cmul(noise)
       }

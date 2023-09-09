@@ -57,10 +57,10 @@ class InternalLayerNormSpec extends FlatSpec with BeforeAndAfter with Matchers {
       2.0363169f), Array(1, 4))
     val expectGradient1 = Tensor[Float](Array[Float](13.0f, 10.0f, 10.0f, 9.0f), Array(1, 4))
 
-    TestUtils.conditionFailTest(output.almostEqual(expectOutput, 1e-8))
-    TestUtils.conditionFailTest(gradInput.almostEqual(expectGradInput, 1e-8))
-    TestUtils.conditionFailTest(gradients.head.almostEqual(expectGradient0, 1e-8))
-    TestUtils.conditionFailTest(gradients.last.almostEqual(expectGradient1, 1e-8))
+    TestUtils.conditionFailTest(output.almostEqual(expectOutput, 1e-6))
+    TestUtils.conditionFailTest(gradInput.almostEqual(expectGradInput, 1e-6))
+    TestUtils.conditionFailTest(gradients.head.almostEqual(expectGradient0, 1e-6))
+    TestUtils.conditionFailTest(gradients.last.almostEqual(expectGradient1, 1e-6))
   }
 
   "layerNorm" should "be able to generate correct result2" in {

@@ -558,7 +558,10 @@ object Optimizer {
   private[bigdl] def saveModel[T](model: Module[T], checkpointPath : Option[String],
     overWrite : Boolean, postfix: String = ""): Unit = {
     if (checkpointPath.isDefined) {
-      model.save(s"${checkpointPath.get}/model$postfix", overWrite = overWrite)
+      model.saveModule(s"${checkpointPath.get}/model$postfix",
+        s"${checkpointPath.get}/weights$postfix")
+      // This issued is reported but no changes in the main branch
+      // model.save(s"${checkpointPath.get}/model$postfix", overWrite = overWrite)
     }
   }
 

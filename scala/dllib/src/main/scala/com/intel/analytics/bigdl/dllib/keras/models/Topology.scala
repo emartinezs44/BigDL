@@ -19,7 +19,6 @@ package com.intel.analytics.bigdl.dllib.keras.models
 import java.io.{File, FilenameFilter}
 import java.text.SimpleDateFormat
 import java.util.Calendar
-
 import com.intel.analytics.bigdl.{Criterion, DataSet, Module}
 import com.intel.analytics.bigdl.mkl.MKL
 import com.intel.analytics.bigdl.dllib.feature.dataset.{MiniBatch, _}
@@ -28,7 +27,7 @@ import com.intel.analytics.bigdl.dllib.feature.dataset.DataSet
 import com.intel.analytics.bigdl.dllib.optim
 import com.intel.analytics.bigdl.dllib._
 import com.intel.analytics.bigdl.dllib.nn.Graph._
-import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity}
+import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractCriterion, AbstractModule, Activity}
 import com.intel.analytics.bigdl.dllib.nn.internal.{KerasLayer, KerasLayerSerializable}
 import com.intel.analytics.bigdl.dllib.nn.mkldnn.MklDnnModule
 import com.intel.analytics.bigdl.dllib.nn.{Container, Graph, Module, StaticGraph, Sequential => TSequential}
@@ -53,7 +52,7 @@ import com.intel.analytics.bigdl.dllib.keras.layers.Input
 import com.intel.analytics.bigdl.dllib.keras.layers.utils._
 import com.intel.analytics.bigdl.dllib.keras.Model
 import com.intel.analytics.bigdl.dllib.net.NetUtils
-import com.intel.analytics.bigdl.dllib.estimator.{AbstractEstimator}
+import com.intel.analytics.bigdl.dllib.estimator.AbstractEstimator
 import com.intel.analytics.bigdl.dllib.feature.common._
 import com.intel.analytics.bigdl.dllib.feature.transform.vision.image.ImageFeature
 import com.intel.analytics.bigdl.dllib.nnframes.NNImageSchema
@@ -146,10 +145,49 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * @param loss Criterion to be used.
    * @param metrics Validation method(s) to be used. Default is null if no validation is needed.
    */
-  def compile(
+  /*def compile(
       optimizer: OptimMethod[T],
       loss: Criterion[T],
       metrics: List[ValidationMethod[T]] = null)(implicit ev: TensorNumeric[T]): Unit = {
+    LoggerFilter.redirectSparkInfoLogs()
+    this.optimMethod = optimizer
+    this.criterion = loss
+
+    val lossArray: Array[ValidationMethod[T]] = Array(new Loss(this.criterion))
+
+    if (metrics == null) {
+      this.vMethods = lossArray
+    }
+    else {
+      val metricsArray = metrics.toArray
+      this.vMethods = lossArray ++ metricsArray
+    }
+  }*/
+
+
+  def compile(
+               optimizer: OptimMethod[T],
+               loss: AbstractCriterion[Activity, Activity, T],
+               metrics: List[ValidationMethod[T]] = null)(implicit ev: TensorNumeric[T]): Unit = {
+    LoggerFilter.redirectSparkInfoLogs()
+    this.optimMethod = optimizer
+    this.criterion = loss
+
+    val lossArray: Array[ValidationMethod[T]] = Array(new Loss(this.criterion))
+
+    if (metrics == null) {
+      this.vMethods = lossArray
+    }
+    else {
+      val metricsArray = metrics.toArray
+      this.vMethods = lossArray ++ metricsArray
+    }
+  }
+
+  def compileCompat(
+                     optimizer: OptimMethod[T],
+                     loss: AbstractCriterion[Tensor[T], Tensor[T], T],
+                     metrics: List[ValidationMethod[T]] = null)(implicit ev: TensorNumeric[T]): Unit = {
     LoggerFilter.redirectSparkInfoLogs()
     this.optimMethod = optimizer
     this.criterion = loss
@@ -172,17 +210,17 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * For example: optimizer = "sgd", loss = "mse", metrics = List("accuracy")
    */
   def compile(
-      optimizer: String,
-      loss: String,
-      metrics: List[String])(implicit ev: TensorNumeric[T]): Unit = {
+               optimizer: String,
+               loss: String,
+               metrics: List[String])(implicit ev: TensorNumeric[T]): Unit = {
     this.compile(KerasUtils.toBigDLOptimMethod[T](optimizer),
       KerasUtils.toBigDLCriterion[T](loss),
       KerasUtils.toBigDLMetrics[T](metrics, loss))
   }
 
   def compile(
-      optimizer: String,
-      loss: String)(implicit ev: TensorNumeric[T]): Unit = {
+               optimizer: String,
+               loss: String)(implicit ev: TensorNumeric[T]): Unit = {
     this.compile(optimizer, loss, null)
   }
 
@@ -190,17 +228,17 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * You can also use custom loss function during compile.
    */
   def compile(
-      optimizer: OptimMethod[T],
-      loss: (Variable[T], Variable[T]) => Variable[T],
-      metrics: List[ValidationMethod[T]])(implicit ev: TensorNumeric[T]): Unit = {
+               optimizer: OptimMethod[T],
+               loss: (Variable[T], Variable[T]) => Variable[T],
+               metrics: List[ValidationMethod[T]])(implicit ev: TensorNumeric[T]): Unit = {
     LoggerFilter.redirectSparkInfoLogs()
     val customLoss = CustomLoss[T](loss, KerasUtils.removeBatch(this.getOutputShape()))
     this.compile(optimizer, customLoss, metrics)
   }
 
   def compile(
-      optimizer: OptimMethod[T],
-      loss: (Variable[T], Variable[T]) => Variable[T])(implicit ev: TensorNumeric[T]): Unit = {
+               optimizer: OptimMethod[T],
+               loss: (Variable[T], Variable[T]) => Variable[T])(implicit ev: TensorNumeric[T]): Unit = {
     this.compile(optimizer, loss, null)
   }
 
@@ -241,9 +279,9 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    *
    * @param tag The string variable represents the parameter you want to return
    *            supported tags are 'AUC', 'Accuracy', 'BinaryAccuracy', 'CategoricalAccuracy',
-    *           'HitRatio', 'Loss', 'MAE', 'NDCG', 'SparseCategoricalAccuracy',
-    *           'TFValidationMethod', 'Top1Accuracy',
-    *           'Top5Accuracy', 'TreeNNAccuracy'.
+   *           'HitRatio', 'Loss', 'MAE', 'NDCG', 'SparseCategoricalAccuracy',
+   *           'TFValidationMethod', 'Top1Accuracy',
+   *           'Top5Accuracy', 'TreeNNAccuracy'.
    */
   def getValidationSummary(tag: String): Array[(Long, Float, Double)] = {
     this.validationSummary.readScalar(tag)
@@ -315,10 +353,10 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * Convert RDD of Sample to DataSet of MiniBatch.
    */
   private def toDataSet(x: RDD[Sample[T]], batchSize: Int,
-    featurePaddingParam: PaddingParam[T] = null,
-    labelPaddingParam: PaddingParam[T] = null,
-    shuffleData: Boolean = true,
-    groupSize: Int = 1): DataSet[MiniBatch[T]] = {
+                        featurePaddingParam: PaddingParam[T] = null,
+                        labelPaddingParam: PaddingParam[T] = null,
+                        shuffleData: Boolean = true,
+                        groupSize: Int = 1): DataSet[MiniBatch[T]] = {
     val _featurePaddingParam = if (featurePaddingParam != null) {
       Some(featurePaddingParam)
     } else None
@@ -357,9 +395,9 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * @param validationData Dataset for validation, or null if validation is not configured.
    */
   def fit(
-      x: DataSet[MiniBatch[T]],
-      nbEpoch: Int,
-      validationData: DataSet[MiniBatch[T]])(implicit ev: TensorNumeric[T]): Unit = {
+           x: DataSet[MiniBatch[T]],
+           nbEpoch: Int,
+           validationData: DataSet[MiniBatch[T]])(implicit ev: TensorNumeric[T]): Unit = {
     Log4Error.invalidInputError(this.optimMethod != null && this.criterion != null,
       "compile must be called before fit")
     this.internalOptimizer = this.getOrCreateOptimizer(x)
@@ -407,8 +445,8 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
   }
 
   def fit(
-      x: DataSet[MiniBatch[T]],
-      nbEpoch: Int)(implicit ev: TensorNumeric[T]): Unit = {
+           x: DataSet[MiniBatch[T]],
+           nbEpoch: Int)(implicit ev: TensorNumeric[T]): Unit = {
     this.fit(x, nbEpoch, null)
   }
 
@@ -437,14 +475,14 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * @param validationData RDD of Sample, or null if validation is not configured. Default is null.
    */
   def fit(
-      x: RDD[Sample[T]],
-      batchSize: Int = 32,
-      nbEpoch: Int = 10,
-      validationData: RDD[Sample[T]] = null,
-      featurePaddingParam: PaddingParam[T] = null,
-      labelPaddingParam: PaddingParam[T] = null,
-      shuffleData: Boolean = true,
-      groupSize: Int = 1)(implicit ev: TensorNumeric[T]): Unit = {
+           x: RDD[Sample[T]],
+           batchSize: Int = 32,
+           nbEpoch: Int = 10,
+           validationData: RDD[Sample[T]] = null,
+           featurePaddingParam: PaddingParam[T] = null,
+           labelPaddingParam: PaddingParam[T] = null,
+           shuffleData: Boolean = true,
+           groupSize: Int = 1)(implicit ev: TensorNumeric[T]): Unit = {
     KerasUtils.validateBatchSize(batchSize)
     val trainData = toDataSet(x, batchSize, featurePaddingParam, labelPaddingParam,
       shuffleData, groupSize)
@@ -464,10 +502,10 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * @param validationData ImageSet, or null if validation is not configured.
    */
   def fit(
-      x: ImageSet,
-      batchSize: Int,
-      nbEpoch: Int,
-      validationData: ImageSet)(implicit ev: TensorNumeric[T]): Unit = {
+           x: ImageSet,
+           batchSize: Int,
+           nbEpoch: Int,
+           validationData: ImageSet)(implicit ev: TensorNumeric[T]): Unit = {
     KerasUtils.validateBatchSize(batchSize)
     val trainData = toDataSet(x, batchSize)
     val valData = toDataSet(validationData, batchSize)
@@ -477,17 +515,17 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
   }
 
   def fit(
-      x: ImageSet,
-      batchSize: Int,
-      nbEpoch: Int)(implicit ev: TensorNumeric[T]): Unit = {
+           x: ImageSet,
+           batchSize: Int,
+           nbEpoch: Int)(implicit ev: TensorNumeric[T]): Unit = {
     this.fit(x, batchSize, nbEpoch, null)
   }
 
   private def getDataSet(
-      dataFrame: DataFrame,
-      batchSize: Int,
-      featureCols: Array[String],
-      labelCols: Array[String]): FeatureSet[MiniBatch[T]] = {
+                          dataFrame: DataFrame,
+                          batchSize: Int,
+                          featureCols: Array[String],
+                          labelCols: Array[String]): FeatureSet[MiniBatch[T]] = {
     val featureColIndexs = featureCols.map {f => dataFrame.schema.fieldIndex(f)}
     val labelColIndexs = labelCols.map {f => dataFrame.schema.fieldIndex(f)}
     var featureSizes: Array[Array[Int]] = null
@@ -551,12 +589,12 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
   }
 
   def fit(
-      x: DataFrame,
-      batchSize: Int,
-      nbEpoch: Int,
-      featureCols: Array[String],
-      labelCols: Array[String],
-      valX: DataFrame)(implicit ev: TensorNumeric[T]): Unit = {
+           x: DataFrame,
+           batchSize: Int,
+           nbEpoch: Int,
+           featureCols: Array[String],
+           labelCols: Array[String],
+           valX: DataFrame)(implicit ev: TensorNumeric[T]): Unit = {
     val trainingData = getDataSet(x, batchSize, featureCols, labelCols).toDataSet()
     val valData = if (valX != null) {
       getDataSet(valX, batchSize, featureCols, labelCols).toDataSet()
@@ -566,21 +604,21 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
   }
 
   def fit(
-      x: DataFrame,
-      batchSize: Int,
-      nbEpoch: Int,
-      featureCols: Array[String],
-      labelCols: Array[String])(implicit ev: TensorNumeric[T]): Unit = {
+           x: DataFrame,
+           batchSize: Int,
+           nbEpoch: Int,
+           featureCols: Array[String],
+           labelCols: Array[String])(implicit ev: TensorNumeric[T]): Unit = {
     this.fit(x, batchSize, nbEpoch, featureCols, labelCols, null)
   }
 
   def fit(
-   x: DataFrame,
-   batchSize: Int,
-   nbEpoch: Int,
-   labelCols: Array[String],
-   transform: ImageProcessing,
-   valX: DataFrame)(implicit ev: TensorNumeric[T]): Unit = {
+           x: DataFrame,
+           batchSize: Int,
+           nbEpoch: Int,
+           labelCols: Array[String],
+           transform: ImageProcessing,
+           valX: DataFrame)(implicit ev: TensorNumeric[T]): Unit = {
     val trainData = df2ImageSet(x, labelCols, transform)
     val targetKeys = if (labelCols.length > 1) {
       (0 until labelCols.size).toList.map("l" + _).toArray
@@ -603,11 +641,11 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
   }
 
   def fit(
-     x: DataFrame,
-     batchSize: Int,
-     nbEpoch: Int,
-     labelCols: Array[String],
-     transform: ImageProcessing)(implicit ev: TensorNumeric[T]): Unit = {
+           x: DataFrame,
+           batchSize: Int,
+           nbEpoch: Int,
+           labelCols: Array[String],
+           transform: ImageProcessing)(implicit ev: TensorNumeric[T]): Unit = {
     this.fit(x, batchSize, nbEpoch, labelCols, transform, null)
   }
 
@@ -620,10 +658,10 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * @param validationData TextSet, or null if validation is not configured.
    */
   def fit(
-      x: TextSet,
-      batchSize: Int,
-      nbEpoch: Int,
-      validationData: TextSet)(implicit ev: TensorNumeric[T]): Unit = {
+           x: TextSet,
+           batchSize: Int,
+           nbEpoch: Int,
+           validationData: TextSet)(implicit ev: TensorNumeric[T]): Unit = {
     KerasUtils.validateBatchSize(batchSize)
     val dataset = x.toDataSet
     this.fit((dataset -> SampleToMiniBatch[Float](batchSize)).asInstanceOf[DataSet[MiniBatch[T]]],
@@ -634,9 +672,9 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
   }
 
   def fit(
-      x: TextSet,
-      batchSize: Int,
-      nbEpoch: Int)(implicit ev: TensorNumeric[T]): Unit = {
+           x: TextSet,
+           batchSize: Int,
+           nbEpoch: Int)(implicit ev: TensorNumeric[T]): Unit = {
     this.fit(x, batchSize, nbEpoch, null)
   }
 
@@ -647,9 +685,9 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * @param batchSize Number of samples per batch.
    */
   def evaluate(
-      x: RDD[Sample[T]],
-      batchSize: Int)
-      (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
+                x: RDD[Sample[T]],
+                batchSize: Int)
+              (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
     Log4Error.invalidInputError(this.vMethods != null,
       "Evaluation metrics haven't been set yet")
     this.evaluate(x, this.vMethods, Some(batchSize))
@@ -661,7 +699,7 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * @param x Evaluation dataset, LocalDataSet.
    */
   def evaluate(x: LocalDataSet[MiniBatch[T]])
-      (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
+              (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
     Log4Error.invalidInputError(this.vMethods != null,
       "Evaluation metrics haven't been set yet")
     this.evaluate(x, this.vMethods)
@@ -674,20 +712,20 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * @param batchSize Number of samples per batch.
    */
   def evaluate(
-      x: ImageSet,
-      batchSize: Int)
-      (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
+                x: ImageSet,
+                batchSize: Int)
+              (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
     Log4Error.invalidInputError(this.vMethods != null,
       "Evaluation metrics haven't been set yet")
     evaluateImage(x.toImageFrame(), this.vMethods, Some(batchSize))
   }
 
   def evaluate(
-    x: DataFrame,
-    labelCols: Array[String],
-    transform: ImageProcessing,
-    batchSize: Int)
-  (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
+                x: DataFrame,
+                labelCols: Array[String],
+                transform: ImageProcessing,
+                batchSize: Int)
+              (implicit ev: TensorNumeric[T]): Array[(ValidationResult, ValidationMethod[T])] = {
     val rdd = df2ImageSet(x, labelCols, transform)
     val targetKeys = if (labelCols.length > 1) {
       (0 until labelCols.size).toList.map("l" + _).toArray
@@ -708,8 +746,8 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    * @param batchSize Number of samples per batch.
    */
   def evaluate(
-      x: TextSet,
-      batchSize: Int): Array[(ValidationResult, ValidationMethod[T])] = {
+                x: TextSet,
+                batchSize: Int): Array[(ValidationResult, ValidationMethod[T])] = {
     Log4Error.invalidInputError(this.vMethods != null,
 
       "Evaluation metrics haven't been set yet")
@@ -724,10 +762,10 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
   }
 
   def evaluate(
-     x: DataFrame,
-     batchSize: Int,
-     featureCols: Array[String],
-     labelCols: Array[String]): Array[(ValidationResult, ValidationMethod[T])] = {
+                x: DataFrame,
+                batchSize: Int,
+                featureCols: Array[String],
+                labelCols: Array[String]): Array[(ValidationResult, ValidationMethod[T])] = {
     Log4Error.invalidInputError(this.vMethods != null,
       "Evaluation metrics haven't been set yet")
     val valX = getDataSet(x, batchSize, featureCols, labelCols).toDataSet()
@@ -737,28 +775,28 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
 
   def toModel(): keras.Model[T]
 
-// uncomment when migrating TFNet
-//  /**
-//   * Save model to keras2 h5 file. Only for inference
-//   * @param filePath path to save model.
-//   * @param python python path, need analytics-zoo and tensorflow installed.
-//   */
-//  def saveToKeras2[T: ClassTag](
-//        filePath: String,
-//        python: String = "python")(implicit ev: TensorNumeric[T]): Unit = {
-//    Net.saveToKeras2[T](this, filePath, python)
-//  }
-//
-//  /**
-//   * Save model to tensorflow protobuf. Only for inference.
-//   * @param dir directory to save model.
-//   * @param python python path, need analytics-zoo and tensorflow installed.
-//   */
-//  def saveToTf[T: ClassTag](
-//        dir: String,
-//        python: String = "python")(implicit ev: TensorNumeric[T]): Unit = {
-//    Net.saveToTf[T](this, dir, python)
-//  }
+  // uncomment when migrating TFNet
+  //  /**
+  //   * Save model to keras2 h5 file. Only for inference
+  //   * @param filePath path to save model.
+  //   * @param python python path, need analytics-zoo and tensorflow installed.
+  //   */
+  //  def saveToKeras2[T: ClassTag](
+  //        filePath: String,
+  //        python: String = "python")(implicit ev: TensorNumeric[T]): Unit = {
+  //    Net.saveToKeras2[T](this, filePath, python)
+  //  }
+  //
+  //  /**
+  //   * Save model to tensorflow protobuf. Only for inference.
+  //   * @param dir directory to save model.
+  //   * @param python python path, need analytics-zoo and tensorflow installed.
+  //   */
+  //  def saveToTf[T: ClassTag](
+  //        dir: String,
+  //        python: String = "python")(implicit ev: TensorNumeric[T]): Unit = {
+  //    Net.saveToTf[T](this, dir, python)
+  //  }
 
   /**
    * Print out the summary information of an Analytics Zoo Keras Model.
@@ -784,17 +822,17 @@ abstract class KerasNet[T](implicit val tag: ClassTag[T], implicit val ev: Tenso
    *                  If the field has a smaller length, the remaining part will be white spaces.
    */
   def summary(
-      lineLength: Int = 120,
-      positions: Array[Double] = Array(.33, .55, .67, 1),
-      needPrint: Boolean = true): String
+               lineLength: Int = 120,
+               positions: Array[Double] = Array(.33, .55, .67, 1),
+               needPrint: Boolean = true): String
 }
 
 object InternalOptimizer {
   def apply[T: ClassTag](
-    model: Module[T],
-    dataset: DistributedDataSet[MiniBatch[T]],
-    criterion: Criterion[T]
-  )(implicit ev: TensorNumeric[T]): Optimizer[T, MiniBatch[T]] = {
+                          model: Module[T],
+                          dataset: DistributedDataSet[MiniBatch[T]],
+                          criterion: Criterion[T]
+                        )(implicit ev: TensorNumeric[T]): Optimizer[T, MiniBatch[T]] = {
     EngineRef.getOptimizerVersion() match {
       case OptimizerV1 =>
         new InternalDistriOptimizer[T](
@@ -821,7 +859,7 @@ private[bigdl] object InternalOptimizerUtil {
   }
 
   def getModelCacheFromOptimizer[T: ClassTag](
-        optimizer: Optimizer[T, MiniBatch[T]]): RDD[Cache[T]] = {
+                                               optimizer: Optimizer[T, MiniBatch[T]]): RDD[Cache[T]] = {
     val field = classOf[DistriOptimizer[T]].getDeclaredField("models")
     field.setAccessible(true)
     val models = field.get(optimizer).asInstanceOf[RDD[Cache[T]]]
@@ -861,77 +899,77 @@ private[bigdl] object InternalOptimizerUtil {
   }
 
   def initThreadModels[T: ClassTag](
-      args: Object*)(
-      implicit ev: TensorNumeric[T]): (RDD[DistriOptimizer.CacheV1[T]], ModelBroadcast[T]) = {
+                                     args: Object*)(
+                                     implicit ev: TensorNumeric[T]): (RDD[DistriOptimizer.CacheV1[T]], ModelBroadcast[T]) = {
     KerasUtils.invokeMethodWithEv(DistriOptimizer,
       "com$intel$analytics$bigdl$dllib$optim$DistriOptimizer$$initThreadModels",
       args: _*).asInstanceOf[(RDD[DistriOptimizer.CacheV1[T]], ModelBroadcast[T])]
   }
 
   def clearState[T: ClassTag](
-        models: RDD[DistriOptimizer.CacheV1[T]]): Unit = {
+                               models: RDD[DistriOptimizer.CacheV1[T]]): Unit = {
     KerasUtils.invokeMethod(DistriOptimizer,
       "clearState", models, implicitly[reflect.ClassTag[T]])
   }
 
   def clearStateV2[T: ClassTag](
-        models: RDD[CacheV2[T]]): Unit = {
+                                 models: RDD[CacheV2[T]]): Unit = {
     KerasUtils.invokeMethod(DistriOptimizerV2,
       "clearState", models, implicitly[reflect.ClassTag[T]])
   }
 
   def optimizeModels[T: ClassTag](
-      args: Object*
-      )(implicit ev: TensorNumeric[T]): Unit = {
+                                   args: Object*
+                                 )(implicit ev: TensorNumeric[T]): Unit = {
     KerasUtils.invokeMethodWithEv(DistriOptimizer, "optimize",
       args: _*)
   }
 
   def getModel[T: ClassTag](
-      args: Object*)(implicit ev: TensorNumeric[T]): Unit = {
+                             args: Object*)(implicit ev: TensorNumeric[T]): Unit = {
     KerasUtils.invokeMethodWithEv(DistriOptimizer, "getModel",
       args: _*)
   }
 
-// uncomment when torch net migrate
-//  // TODO: Delete this when switch to Bigdl 0.11.0.
-//  def getTorchModel[T: ClassTag](
-//      models: RDD[CacheV1[T]],
-//      parameters: AllReduceParameter[T],
-//      trainingModel: TorchModel)(implicit ev: TensorNumeric[T]): TorchModel = {
-//    val partitionNum = models.partitions.length
-//    val extraState = models.map(_.localModels.head.getExtraParameter()).first()
-//    trainingModel.setExtraParam(extraState.asInstanceOf[Array[Tensor[Float]]])
-//    val (weights, gradients) = models.mapPartitions(iter => {
-//      val cached = iter.next()
-//      val curPartitionId = TaskContext.getPartitionId()
-//      Iterator.single((Map(curPartitionId -> parameters.weightPartition),
-//        Map(curPartitionId -> parameters.gradientPartition)))
-//    }).reduce((a, b) => (a._1 ++ b._1, a._2 ++ b._2))
-//
-//    val parameterArray = trainingModel.parameters()
-//    (0 until parameterArray._2.length).foreach(i =>
-//      parameterArray._2(i).resizeAs(parameterArray._1(i))
-//    )
-//    val (parameter, gradientParameter) = getParametersFromModel(trainingModel)
-//    val parameterLength = parameter.nElement()
-//    val taskSize = parameterLength / partitionNum
-//    require(taskSize != 0, "parameter length should not less than partition number")
-//    val extraSize = parameterLength % partitionNum
-//
-//    (0 until partitionNum).map(pid => {
-//      val start = pid * taskSize + math.min(pid, extraSize)
-//      val length = taskSize + (if (pid < extraSize) 1 else 0)
-//      parameter.narrow(1, start + 1, length).copy(weights(pid).asInstanceOf[Tensor[Float]])
-//      gradientParameter.narrow(1, start + 1, length)
-//        .copy(gradients(pid).asInstanceOf[Tensor[Float]])
-//    })
-//
-//    trainingModel
-//  }
+  // uncomment when torch net migrate
+  //  // TODO: Delete this when switch to Bigdl 0.11.0.
+  //  def getTorchModel[T: ClassTag](
+  //      models: RDD[CacheV1[T]],
+  //      parameters: AllReduceParameter[T],
+  //      trainingModel: TorchModel)(implicit ev: TensorNumeric[T]): TorchModel = {
+  //    val partitionNum = models.partitions.length
+  //    val extraState = models.map(_.localModels.head.getExtraParameter()).first()
+  //    trainingModel.setExtraParam(extraState.asInstanceOf[Array[Tensor[Float]]])
+  //    val (weights, gradients) = models.mapPartitions(iter => {
+  //      val cached = iter.next()
+  //      val curPartitionId = TaskContext.getPartitionId()
+  //      Iterator.single((Map(curPartitionId -> parameters.weightPartition),
+  //        Map(curPartitionId -> parameters.gradientPartition)))
+  //    }).reduce((a, b) => (a._1 ++ b._1, a._2 ++ b._2))
+  //
+  //    val parameterArray = trainingModel.parameters()
+  //    (0 until parameterArray._2.length).foreach(i =>
+  //      parameterArray._2(i).resizeAs(parameterArray._1(i))
+  //    )
+  //    val (parameter, gradientParameter) = getParametersFromModel(trainingModel)
+  //    val parameterLength = parameter.nElement()
+  //    val taskSize = parameterLength / partitionNum
+  //    require(taskSize != 0, "parameter length should not less than partition number")
+  //    val extraSize = parameterLength % partitionNum
+  //
+  //    (0 until partitionNum).map(pid => {
+  //      val start = pid * taskSize + math.min(pid, extraSize)
+  //      val length = taskSize + (if (pid < extraSize) 1 else 0)
+  //      parameter.narrow(1, start + 1, length).copy(weights(pid).asInstanceOf[Tensor[Float]])
+  //      gradientParameter.narrow(1, start + 1, length)
+  //        .copy(gradients(pid).asInstanceOf[Tensor[Float]])
+  //    })
+  //
+  //    trainingModel
+  //  }
 
   def releaseBroadcast[T: ClassTag](
-        uuid: String)(implicit ev: TensorNumeric[T]): Unit = {
+                                     uuid: String)(implicit ev: TensorNumeric[T]): Unit = {
     KerasUtils.invokeMethodWithEv(
       "com.intel.analytics.bigdl.dllib.models.utils.CachedModels",
       "deleteKey",
@@ -940,17 +978,17 @@ private[bigdl] object InternalOptimizerUtil {
 
 
   def getLocalPartitionRangeFromParameters[T: ClassTag](
-       parameters: AllReduceParameter[T]): (Int, Int) = {
+                                                         parameters: AllReduceParameter[T]): (Int, Int) = {
     KerasUtils.invokeMethod(parameters, "localPartitionRange").asInstanceOf[(Int, Int)]
   }
 
 }
 
 private[bigdl] class InternalLocalOptimizer[T: ClassTag] (
-    model: Module[T],
-    ds: LocalDataSet[MiniBatch[T]],
-    criterion: Criterion[T])
-  (implicit ev: TensorNumeric[T]) extends LocalOptimizer[T](model, ds, criterion) {
+                                                           model: Module[T],
+                                                           ds: LocalDataSet[MiniBatch[T]],
+                                                           criterion: Criterion[T])
+                                                         (implicit ev: TensorNumeric[T]) extends LocalOptimizer[T](model, ds, criterion) {
 
   def setTrainData(trainingDataSet: DataSet[MiniBatch[T]]): this.type = {
     this.dataset = trainingDataSet
@@ -967,10 +1005,10 @@ private[bigdl] class InternalLocalOptimizer[T: ClassTag] (
 }
 
 private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
-    _model: Module[T],
-    _dataset: DistributedDataSet[MiniBatch[T]],
-    _criterion: Criterion[T])
-  (implicit ev: TensorNumeric[T]) extends DistriOptimizer[T](_model, _dataset, _criterion)
+                                                            _model: Module[T],
+                                                            _dataset: DistributedDataSet[MiniBatch[T]],
+                                                            _criterion: Criterion[T])
+                                                          (implicit ev: TensorNumeric[T]) extends DistriOptimizer[T](_model, _dataset, _criterion)
   with AbstractEstimator[T]{
   import InternalDistriOptimizer._
   protected var checkpointDir: Option[String] = None
@@ -1055,12 +1093,12 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
       }
 
       // TODO: Enable LarsSGD
-//      LarsSGD.containsLarsSGD(optimMethods).foreach(weightDecay =>
-//        parameterProcessors.append(new LarsProcessor(parameterSplits, weightDecay))
-//      )
-//      if (torchOptimize) {
-//        InternalOptimizerUtil.setExecutorMklThread(distDataset.originRDD())
-//      }
+      //      LarsSGD.containsLarsSGD(optimMethods).foreach(weightDecay =>
+      //        parameterProcessors.append(new LarsProcessor(parameterSplits, weightDecay))
+      //      )
+      //      if (torchOptimize) {
+      //        InternalOptimizerUtil.setExecutorMklThread(distDataset.originRDD())
+      //      }
       val modelsAndBroadcast = InternalOptimizerUtil.initThreadModels[T](
         trainingModel, distDataset, criterion, state,
         Int.box(nodeNumber), Int.box(modelPerExecutor), Boolean.box(checkSingleton),
@@ -1111,7 +1149,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
         case e: IllegalArgumentException =>
           Log4Error.invalidOperationError(false, e.getMessage, cause = e)
         case t: Throwable =>
-//          DistriOptimizer.logger.error("Error: " + ExceptionUtils.getStackTrace(t))
+          //          DistriOptimizer.logger.error("Error: " + ExceptionUtils.getStackTrace(t))
           if (checkpointPath.isDefined) {
             /* To avoid retry number is used up by first few exceptions, we count time here.
              * If exception exceeds maxRetry times in maxRetry*retryTimeInterval seconds,
@@ -1231,12 +1269,12 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
   }
 
   override def train(
-        trainSet: FeatureSet[MiniBatch[T]],
-        criterion: Criterion[T],
-        endTrigger: Option[Trigger] = None,
-        checkPointTrigger: Option[Trigger] = None,
-        validationSet: FeatureSet[MiniBatch[T]] = null,
-        validationMethod: Array[ValidationMethod[T]] = null): this.type = {
+                      trainSet: FeatureSet[MiniBatch[T]],
+                      criterion: Criterion[T],
+                      endTrigger: Option[Trigger] = None,
+                      checkPointTrigger: Option[Trigger] = None,
+                      validationSet: FeatureSet[MiniBatch[T]] = null,
+                      validationMethod: Array[ValidationMethod[T]] = null): this.type = {
     this.dataset = trainSet.toDataSet()
     val endWhen = if (endTrigger.isDefined) {
       endTrigger.get
@@ -1269,7 +1307,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
         } else {
           Log4Error.invalidInputError(false,
             s"Excepted com.intel.analytics.bigdl.dllib.common.ZooTrigger." +
-            s" Please change your trigger to an instance of ZooTrigger.")
+              s" Please change your trigger to an instance of ZooTrigger.")
         }
       }
       if (!state.contains("numSlice")) {
@@ -1305,9 +1343,9 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
   }
 
   override def evaluate(
-        validationSet: FeatureSet[MiniBatch[T]],
-        validationMethod: Array[ValidationMethod[T]]
-      ): Map[ValidationMethod[T], ValidationResult] = {
+                         validationSet: FeatureSet[MiniBatch[T]],
+                         validationMethod: Array[ValidationMethod[T]]
+                       ): Map[ValidationMethod[T], ValidationResult] = {
     val validateRDD = validationSet.toDistributed().data(train = false)
     val sc = validateRDD.sparkContext
 
@@ -1322,7 +1360,7 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
       case _ =>
         Log4Error.invalidInputError(false,
           s"got unsupported engine type ${EngineRef.getEngineType()}",
-        "only expect MklBlas, MklDnn")
+          "only expect MklBlas, MklDnn")
         1
     }
 
@@ -1381,10 +1419,10 @@ private[bigdl] class InternalDistriOptimizer[T: ClassTag] (
 }
 
 private[bigdl] class InternalDistriOptimizerV2[T: ClassTag] (
-    _model: Module[T],
-    _dataset: DistributedDataSet[MiniBatch[T]],
-    _criterion: Criterion[T])
-  (implicit ev: TensorNumeric[T]) extends DistriOptimizerV2[T](_model, _dataset, _criterion)
+                                                              _model: Module[T],
+                                                              _dataset: DistributedDataSet[MiniBatch[T]],
+                                                              _criterion: Criterion[T])
+                                                            (implicit ev: TensorNumeric[T]) extends DistriOptimizerV2[T](_model, _dataset, _criterion)
   with AbstractEstimator[T]{
   import InternalDistriOptimizerV2._
   protected var checkpointDir: Option[String] = None
@@ -1441,12 +1479,12 @@ private[bigdl] class InternalDistriOptimizerV2[T: ClassTag] (
 
 
   override def train(
-        trainSet: FeatureSet[MiniBatch[T]],
-        criterion: Criterion[T],
-        endTrigger: Option[Trigger] = None,
-        checkPointTrigger: Option[Trigger] = None,
-        validationSet: FeatureSet[MiniBatch[T]] = null,
-        validationMethod: Array[ValidationMethod[T]] = null): this.type = {
+                      trainSet: FeatureSet[MiniBatch[T]],
+                      criterion: Criterion[T],
+                      endTrigger: Option[Trigger] = None,
+                      checkPointTrigger: Option[Trigger] = None,
+                      validationSet: FeatureSet[MiniBatch[T]] = null,
+                      validationMethod: Array[ValidationMethod[T]] = null): this.type = {
     this.dataset = trainSet.toDataSet()
     val endWhen = if (endTrigger.isDefined) {
       endTrigger.get
@@ -1476,7 +1514,7 @@ private[bigdl] class InternalDistriOptimizerV2[T: ClassTag] (
         } else {
           Log4Error.invalidInputError(false,
             s"Excepted com.intel.analytics.bigdl.dllib.common.ZooTrigger." +
-            s" Please change your trigger to an instance of ZooTrigger.")
+              s" Please change your trigger to an instance of ZooTrigger.")
         }
       }
       if (!state.contains("numSlice")) {
@@ -1512,9 +1550,9 @@ private[bigdl] class InternalDistriOptimizerV2[T: ClassTag] (
   }
 
   override def evaluate(
-        validationSet: FeatureSet[MiniBatch[T]],
-        validationMethod: Array[ValidationMethod[T]]
-      ): Map[ValidationMethod[T], ValidationResult] = {
+                         validationSet: FeatureSet[MiniBatch[T]],
+                         validationMethod: Array[ValidationMethod[T]]
+                       ): Map[ValidationMethod[T], ValidationResult] = {
     val validateRDD = validationSet.toDistributed().data(train = false)
 
     val models = this.cachedModels
@@ -1581,10 +1619,10 @@ object InternalDistriOptimizer {
           })
         })
       }).reduce((left, right) => {
-        left.zip(right).map { case (l, r) =>
-          l + r
-        }
-      }).zip(vMethods)
+      left.zip(right).map { case (l, r) =>
+        l + r
+      }
+    }).zip(vMethods)
     results.foreach(r => {
       // TODO:
       DistriOptimizer.logger.info(s"${r._2} is ${r._1}")
@@ -1620,7 +1658,7 @@ object InternalDistriOptimizer {
   }
 
   def unpersistCachedModel[T: ClassTag](
-      models: RDD[DistriOptimizer.CacheV1[T]] ): Unit = {
+                                         models: RDD[DistriOptimizer.CacheV1[T]] ): Unit = {
     models.mapPartitions { iter =>
       iter.foreach { arrayModels =>
         arrayModels.localModels.foreach(_.release())
@@ -1670,7 +1708,7 @@ object InternalDistriOptimizer {
         // different code section from regular getModel
         // section start
         val (offset, size) =
-          InternalOptimizerUtil.getLocalPartitionRangeFromParameters(parameters)
+        InternalOptimizerUtil.getLocalPartitionRangeFromParameters(parameters)
         val weightTensor = Tensor[T](size)
         weightTensor.copy(cached.modelWeights.head.narrow(1, offset, size))
         Iterator.single((Map(curPartitionId -> weightTensor),
@@ -1739,10 +1777,10 @@ object InternalDistriOptimizerV2 {
           })
         })
       }).reduce((left, right) => {
-        left.zip(right).map { case (l, r) =>
-          l + r
-        }
-      }).zip(vMethods)
+      left.zip(right).map { case (l, r) =>
+        l + r
+      }
+    }).zip(vMethods)
     results.foreach(r => {
       // TODO:
       DistriOptimizerV2.logger.info(s"${r._2} is ${r._1}")
@@ -1759,8 +1797,8 @@ object InternalDistriOptimizerV2 {
   }
 
   def unpersistCachedModel[T: ClassTag](
-      models: RDD[CacheV2[T]] ): Unit = {
-      models.mapPartitions { iter =>
+                                         models: RDD[CacheV2[T]] ): Unit = {
+    models.mapPartitions { iter =>
       iter.foreach { arrayModels =>
         arrayModels.localModels.foreach(_.release())
       }
@@ -1785,8 +1823,8 @@ object Model {
    * @return A graph container.
    */
   def apply[T: ClassTag](
-    input : Array[ModuleNode[T]],
-    output : Array[ModuleNode[T]])(implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+                          input : Array[ModuleNode[T]],
+                          output : Array[ModuleNode[T]])(implicit ev: TensorNumeric[T]) : keras.Model[T] = {
     keras.Model[T](input, output)
   }
 
@@ -1797,7 +1835,7 @@ object Model {
    * @return A graph container.
    */
   def apply[T: ClassTag](input : ModuleNode[T], output : Array[ModuleNode[T]])
-    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+                        (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
     keras.Model[T](Array(input), output)
   }
 
@@ -1808,7 +1846,7 @@ object Model {
    * @return A graph container.
    */
   def apply[T: ClassTag](input : Array[ModuleNode[T]], output : ModuleNode[T])
-    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+                        (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
     keras.Model[T](input, Array(output))
   }
 
@@ -1819,7 +1857,7 @@ object Model {
    * @return A graph container.
    */
   def apply[T: ClassTag](input : ModuleNode[T], output : ModuleNode[T])
-    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+                        (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
     keras.Model[T](Array(input), Array(output))
   }
 
@@ -1831,8 +1869,8 @@ object Model {
    * @return A graph container.
    */
   def apply[T: ClassTag](
-    input : Array[Variable[T]],
-    output : Array[Variable[T]])(implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+                          input : Array[Variable[T]],
+                          output : Array[Variable[T]])(implicit ev: TensorNumeric[T]) : keras.Model[T] = {
     keras.Model[T](input.map(_.node), output.map(_.node))
   }
 
@@ -1843,7 +1881,7 @@ object Model {
    * @return A graph container.
    */
   def apply[T: ClassTag](input : Variable[T], output : Array[Variable[T]])
-    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+                        (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
     keras.Model[T](Array(input.node), output.map(_.node))
   }
 
@@ -1854,7 +1892,7 @@ object Model {
    * @return A graph container.
    */
   def apply[T: ClassTag](input : Array[Variable[T]], output : Variable[T])
-    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+                        (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
     keras.Model[T](input.map(_.node), Array(output.node))
   }
 
@@ -1865,14 +1903,14 @@ object Model {
    * @return A graph container.
    */
   def apply[T: ClassTag](input : Variable[T], output : Variable[T])
-    (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
+                        (implicit ev: TensorNumeric[T]) : keras.Model[T] = {
     keras.Model[T](Array(input.node), Array(output.node))
   }
 }
 
 object Sequential {
   def apply[@specialized(Float, Double) T: ClassTag]()
-    (implicit ev: TensorNumeric[T]) : keras.Sequential[T] = {
+                                                    (implicit ev: TensorNumeric[T]) : keras.Sequential[T] = {
     keras.Sequential[T]()
   }
 }

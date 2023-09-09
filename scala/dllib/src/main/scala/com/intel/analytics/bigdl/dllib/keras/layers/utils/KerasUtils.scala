@@ -20,7 +20,7 @@ import com.intel.analytics.bigdl.Criterion
 import com.intel.analytics.bigdl.dllib.nn.Graph.ModuleNode
 import com.intel.analytics.bigdl.dllib.nn._
 import com.intel.analytics.bigdl.dllib.nn.internal.{KerasIdentityWrapper, KerasLayer, KerasLayerWrapper, Sequential => KSequential, SoftMax => KSoftMax}
-import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractModule, Activity, DataFormat, TensorModule}
+import com.intel.analytics.bigdl.dllib.nn.abstractnn.{AbstractCriterion, AbstractModule, Activity, DataFormat, TensorModule}
 import com.intel.analytics.bigdl.dllib.optim._
 import com.intel.analytics.bigdl.dllib.tensor.Tensor
 import com.intel.analytics.bigdl.dllib.tensor.TensorNumericMath.TensorNumeric
@@ -36,7 +36,7 @@ import scala.reflect.ClassTag
 
 object KerasUtils {
   def getPadsFromBorderMode(borderMode: String = "valid",
-      paddings: Array[Int] = null): (Int, Int) = {
+                            paddings: Array[Int] = null): (Int, Int) = {
     if (paddings != null && !paddings.isEmpty) {
       Log4Error.invalidOperationError(paddings.length == 2,
         s"expect paddings length is 2, but got ${paddings.length}")
@@ -69,13 +69,13 @@ object KerasUtils {
         }
       case _ =>
         Log4Error.invalidInputError(false, s"Unsupported initialization method: " +
-        s"${init.toLowerCase()}", "only support glorot_uniform, one, zero, uniform, normal")
+          s"${init.toLowerCase()}", "only support glorot_uniform, one, zero, uniform, normal")
         null
     }
   }
 
   def getKerasActivation[T : ClassTag] (activation: String)
-    (implicit ev: TensorNumeric[T]): KerasLayer[Tensor[T], Tensor[T], T] = {
+                                       (implicit ev: TensorNumeric[T]): KerasLayer[Tensor[T], Tensor[T], T] = {
     if (activation == null) { return null }
     if (activation.toLowerCase() == "softmax") {
       com.intel.analytics.bigdl.dllib.keras.layers.SoftMax[T]()
@@ -115,38 +115,38 @@ object KerasUtils {
   }
 
   def getTorchActivation[T : ClassTag] (activation: String)
-    (implicit ev: TensorNumeric[T]): AbstractModule[Tensor[T], Tensor[T], T] = {
+                                       (implicit ev: TensorNumeric[T]): AbstractModule[Activity, Activity, T] = {
     if (activation == null) null
     else {
       activation.toLowerCase() match {
-          case "tanh" => Tanh[T]()
-          case "sigmoid" => Sigmoid[T]()
-          case "relu" => ReLU[T]()
-          case "softmax" =>
-                com.intel.analytics.bigdl.dllib.nn.SoftMax[T]()
-          case "softplus" => SoftPlus[T]()
-          case "softsign" => SoftSign[T]()
-          case "hard_sigmoid" => HardSigmoid[T]()
-          case "relu6" => ReLU6[T]()
-          case "tanh_shrink" => TanhShrink[T]()
-          case "softmin" => SoftMin[T]()
-          case "log_sigmoid" => LogSigmoid[T]()
-          case "log_softmax" => LogSoftMax[T]()
-          case "linear" => Identity[T]().asInstanceOf[AbstractModule[Tensor[T], Tensor[T], T]]
-          case _ =>
-            Log4Error.invalidInputError(false, s"Invalid activation: " +
+        case "tanh" => Tanh[T]()
+        case "sigmoid" => Sigmoid[T]()
+        case "relu" => ReLU[T]()
+        case "softmax" =>
+          com.intel.analytics.bigdl.dllib.nn.SoftMax[T]()
+        case "softplus" => SoftPlus[T]()
+        case "softsign" => SoftSign[T]()
+        case "hard_sigmoid" => HardSigmoid[T]()
+        case "relu6" => ReLU6[T]()
+        case "tanh_shrink" => TanhShrink[T]()
+        case "softmin" => SoftMin[T]()
+        case "log_sigmoid" => LogSigmoid[T]()
+        case "log_softmax" => LogSoftMax[T]()
+        case "linear" => Identity[T]().asInstanceOf[AbstractModule[Tensor[T], Tensor[T], T]]
+        case _ =>
+          Log4Error.invalidInputError(false, s"Invalid activation: " +
             s"${activation.toLowerCase}. Only simple activations can be constructed using string")
-            null.asInstanceOf[AbstractModule[Tensor[T], Tensor[T], T]]
+          null.asInstanceOf[AbstractModule[Tensor[T], Tensor[T], T]]
       }
     }
   }
 
   def computeConvOutputLength(
-    inputLength: Int,
-    filterSize: Int,
-    borderMode: String,
-    stride: Int,
-    dilation: Int = 1): Int = {
+                               inputLength: Int,
+                               filterSize: Int,
+                               borderMode: String,
+                               stride: Int,
+                               dilation: Int = 1): Int = {
     val dilatedFilterSize = filterSize + (filterSize - 1) * (dilation - 1)
     val outputLength = borderMode match {
       case "valid" => inputLength - dilatedFilterSize + 1
@@ -156,7 +156,7 @@ object KerasUtils {
   }
 
   def getPadsFromBorderMode3D(
-    borderMode: String = "valid"): (Int, Int, Int) = {
+                               borderMode: String = "valid"): (Int, Int, Int) = {
     if (borderMode == "same") {
       // padT, padH, padW
       (-1, -1, -1)
@@ -187,7 +187,7 @@ object KerasUtils {
   }
 
   def toBigDLCriterion[T : ClassTag](loss: String)
-    (implicit ev: TensorNumeric[T]): Criterion[T] = {
+                                    (implicit ev: TensorNumeric[T]): AbstractCriterion[Activity, Activity, T] = {
     loss.toLowerCase() match {
       case "binary_crossentropy" => BinaryCrossEntropy[T]()
       case "categorical_crossentropy" =>
@@ -215,7 +215,7 @@ object KerasUtils {
   }
 
   def toBigDLOptimMethod[T: ClassTag](optimMethod: String)
-    (implicit ev: TensorNumeric[T]): OptimMethod[T] = {
+                                     (implicit ev: TensorNumeric[T]): OptimMethod[T] = {
     optimMethod.toLowerCase() match {
       case "sgd" => new SGD[T](learningRate = 0.01)
       case "rmsprop" => new RMSprop[T](learningRate = 0.001, decayRate = 0.9)
@@ -240,7 +240,7 @@ object KerasUtils {
   }
 
   def toBigDLMetrics[T: ClassTag](metrics: List[String], loss: String)
-    (implicit ev: TensorNumeric[T]): List[ValidationMethod[T]] = {
+                                 (implicit ev: TensorNumeric[T]): List[ValidationMethod[T]] = {
     if (metrics == null) {
       null
     } else {
@@ -285,10 +285,10 @@ object KerasUtils {
   }
 
   def fuse[T: ClassTag](
-      torchLayer: AbstractModule[Activity, Activity, T],
-      kerasActivation: KerasLayer[Tensor[T], Tensor[T], T],
-      batchInputShape: Shape)
-      (implicit ev: TensorNumeric[T]): AbstractModule[Activity, Activity, T] = {
+                         torchLayer: AbstractModule[Activity, Activity, T],
+                         kerasActivation: KerasLayer[Tensor[T], Tensor[T], T],
+                         batchInputShape: Shape)
+                       (implicit ev: TensorNumeric[T]): AbstractModule[Activity, Activity, T] = {
     if (kerasActivation == null) {
       torchLayer
     } else {
@@ -306,21 +306,21 @@ object KerasUtils {
     val clazz = obj.getClass()
     val method =
       try {
-      clazz.getMethod(methodName, args.map(_.getClass): _*)
-    } catch {
+        clazz.getMethod(methodName, args.map(_.getClass): _*)
+      } catch {
         case t: Throwable =>
           val methods = clazz.getMethods().filter(_.getName() == methodName)
           Log4Error.invalidOperationError(methods.length == 1,
             s"We should only found one result, but got ${methodName}: ${methods.length}")
           methods(0)
-    }
+      }
     method.invoke(obj, args: _*)
   }
 
   private[bigdl] def invokeMethodWithEv[T: ClassTag](
-        obj: String,
-        methodName: String,
-        args: Object*)(implicit ev: TensorNumeric[T]): Object = {
+                                                      obj: String,
+                                                      methodName: String,
+                                                      args: Object*)(implicit ev: TensorNumeric[T]): Object = {
     val clazz = Class.forName(obj)
     val method =
       try {
@@ -337,9 +337,9 @@ object KerasUtils {
   }
 
   private[bigdl] def invokeMethodWithEv[T: ClassTag](
-        obj: Object,
-        methodName: String,
-        args: Object*)(implicit ev: TensorNumeric[T]): Object = {
+                                                      obj: Object,
+                                                      methodName: String,
+                                                      args: Object*)(implicit ev: TensorNumeric[T]): Object = {
     val argsWithTag = args ++ Seq(implicitly[reflect.ClassTag[T]], ev)
     invokeMethod(obj, methodName, argsWithTag: _*)
   }
@@ -406,10 +406,10 @@ object KerasUtils {
    * Return a tuple (total params #, trainable params #) of this node.
    */
   def printNodeSummary[T: ClassTag](
-      node: ModuleNode[T],
-      lineLength: Int = 120,
-      positions: Array[Double] = Array(.33, .55, .67, 1),
-      summaryBuf: ArrayBuffer[String] = null): (Int, Int) = {
+                                     node: ModuleNode[T],
+                                     lineLength: Int = 120,
+                                     positions: Array[Double] = Array(.33, .55, .67, 1),
+                                     summaryBuf: ArrayBuffer[String] = null): (Int, Int) = {
     printRow(getNodeSummary(node), lineLength, positions, summaryBuf = summaryBuf)
     countParams(node.element.asInstanceOf[KerasLayer[Activity, Activity, T]])
   }
@@ -431,12 +431,12 @@ object KerasUtils {
    * @param splitChar The character to compose the split line.
    */
   def printRow(
-      fields: Array[String],
-      lineLength: Int = 120,
-      positions: Array[Double] = Array(.33, .55, .67, 1),
-      includeSplitLine: Boolean = true,
-      splitChar: Char = '_',
-      summaryBuf: ArrayBuffer[String] = null): Unit = {
+                fields: Array[String],
+                lineLength: Int = 120,
+                positions: Array[Double] = Array(.33, .55, .67, 1),
+                includeSplitLine: Boolean = true,
+                splitChar: Char = '_',
+                summaryBuf: ArrayBuffer[String] = null): Unit = {
     val fieldLengths = ArrayBuffer[Int]()
     for (i <- positions.indices) {
       if (i > 0) {
@@ -516,8 +516,8 @@ object KerasUtils {
    * Otherwise, just return classes itself.
    */
   def toZeroBasedLabel(
-      zeroBasedLabel: Boolean = true,
-      classes: RDD[Int]): RDD[Int] = {
+    zeroBasedLabel: Boolean = true,
+    classes: RDD[Int]): RDD[Int] = {
     if (zeroBasedLabel) {
       classes.map(_ - 1)
     }
